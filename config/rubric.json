@@ -1,0 +1,74 @@
+{
+  "version": "0.1.0",
+  "purpose": "Architect role scoring and guardrails",
+  "weights": {
+    "file_structure": 0.32,
+    "file_size": 0.22,
+    "code_style": 0.08,
+    "encapsulation": 0.2,
+    "complexity": 0.18
+  },
+  "thresholds": {
+    "line_length": {
+      "soft": 90,
+      "hard": 110
+    },
+    "module_lines": {
+      "soft": 200,
+      "hard": 450
+    },
+    "cyclomatic_complexity": {
+      "soft": 8,
+      "hard": 12
+    },
+    "class_public_methods": {
+      "soft": 12
+    },
+    "class_instance_attributes": {
+      "soft": 6
+    }
+  },
+  "exclude_dirs": [
+    ".git",
+    ".hippocampus",
+    ".ccb",
+    ".hippo-smoke",
+    ".venv",
+    "venv",
+    "vendor",
+    "snapshots",
+    "node_modules",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".pytest_cache",
+    "__pycache__"
+  ],
+  "exclude_suffixes": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".lock",
+    ".mp3",
+    ".mp4",
+    ".db",
+    ".db-shm",
+    ".db-wal",
+    ".bak"
+  ],
+  "layer_contracts": [
+    {
+      "from_prefix": "core/",
+      "allowed_to_prefixes": [
+        "core/",
+        "shared/"
+      ],
+      "severity": "warning"
+    }
+  ]
+}

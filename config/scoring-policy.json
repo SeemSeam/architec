@@ -1,0 +1,83 @@
+{
+  "version": "1.0",
+  "grade_bands": [
+    {
+      "grade": "A",
+      "min": 85
+    },
+    {
+      "grade": "B",
+      "min": 70
+    },
+    {
+      "grade": "C",
+      "min": 55
+    },
+    {
+      "grade": "D",
+      "min": 40
+    },
+    {
+      "grade": "E",
+      "min": 0
+    }
+  ],
+  "full": {
+    "pass_min": 78,
+    "warn_min": 62,
+    "critical_hard_limit": 120,
+    "base_score": {
+      "mode": "fixed_100",
+      "fixed": 100
+    },
+    "adaptive_thresholds": {
+      "enabled": true,
+      "pass_relief_per_penalty": 0.12,
+      "warn_relief_per_penalty": 0.08,
+      "max_pass_relief": 8,
+      "max_warn_relief": 6,
+      "pass_floor": 72,
+      "warn_floor": 58,
+      "min_pass_warn_gap": 5
+    },
+    "severity_penalty": {
+      "per_critical": 0.45,
+      "per_warning": 0.08,
+      "per_info": 0.01,
+      "max_critical": 50,
+      "max_warning": 24,
+      "max_info": 8
+    }
+  },
+  "incremental": {
+    "pass_min": 80,
+    "warn_min": 60,
+    "weight_by": "churn_capped",
+    "churn_weight_cap": 24,
+    "score_floor_per_component": 40,
+    "critical_per_component_hard_limit": 3,
+    "critical_total_hard_limit": 6,
+    "blocked_component_limit": 2,
+    "critical_penalty": {
+      "per_critical": 2,
+      "max_total": 12
+    },
+    "macro_progress_bonus": {
+      "enabled": true,
+      "trend_up_per_component": 1.5,
+      "max_total": 7
+    }
+  },
+  "overall": {
+    "weights": {
+      "full": 0.62,
+      "incremental": 0.38
+    },
+    "pass_min": 75,
+    "warn_min": 60,
+    "escalate_when_incremental_blocked": true,
+    "incremental_block_escalation_min_blocked_components": 2,
+    "incremental_block_escalation_min_critical_total": 3,
+    "escalate_when_full_blocked": false
+  }
+}

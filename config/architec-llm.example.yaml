@@ -1,0 +1,38 @@
+version: 1
+common_system_prompt: ""
+task_prompt_prefixes: {}
+failover:
+  transport_failures_before_switch: 2
+  parse_failures_before_switch: 1
+  cooldown_sec: 180
+providers:
+  main:
+    provider_type: glm
+    api_style: openai_responses
+    base_url: ${architec_llm_main_url}
+    api_key: ${architec_llm_main_api_key}
+    headers:
+      anthropic-version: "2023-06-01"
+    model_map:
+      gpt-5.3-codex high: gpt-5.3-codex
+      gpt-5.3-codex-medium: gpt-5.3-codex
+      claude-sonnet-4-5-20250929: gpt-5.3-codex
+      claude-sonnet-4-20250514: gpt-5.3-codex
+tiers:
+  strong:
+    candidates:
+      - provider: main
+        model: gpt-5.3-codex high
+  small:
+    candidates:
+      - provider: main
+        model: gpt-5.3-codex-medium
+tasks:
+  architect_history:
+    tier: strong
+  architect_feature:
+    tier: strong
+  architect_component_scoring:
+    tier: small
+  architec_summary:
+    tier: strong
