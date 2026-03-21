@@ -252,7 +252,7 @@ architec --help
 - `archi status --json` 与 `archi whoami --json` 会把当前 CLI 版本带到 portal 的状态查询
 - 本地租约刷新也会携带 CLI 版本，便于 portal 强制最低版本
 
-如果 portal 配置了最低支持版本，例如 `ARCHITEC_CLOUD_CLI_MIN_VERSION=0.1.0`：
+如果 portal 配置了最低支持版本，例如 `ARCHITEC_CLOUD_CLI_MIN_VERSION=0.2.0`：
 
 - 旧版本 CLI 会在浏览器授权页被阻止
 - 即使跳过页面，`exchange` 和 `refresh` 也会被 portal 拒绝

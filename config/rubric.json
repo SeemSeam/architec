@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "purpose": "Architect role scoring and guardrails",
   "weights": {
     "file_structure": 0.32,

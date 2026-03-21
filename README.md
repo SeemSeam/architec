@@ -57,7 +57,7 @@ For end users installing the compiled Linux build from GitHub Releases:
 The installer now supports explicit release selection and checksum verification:
 
 ```bash
-bash tools/install_prod.sh --version v0.1.0
+bash tools/install_prod.sh --version v0.2.0
 bash tools/install_prod.sh --skip-checksum
 ```
 

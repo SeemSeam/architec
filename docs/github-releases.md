@@ -179,7 +179,7 @@ pnpm test:e2e
 
 - `bash -n tools/install_prod.sh`
 - `bash tools/install_prod.sh --help`
-- `bash tools/install_prod.sh --version v0.1.0`
+- `bash tools/install_prod.sh --version v0.2.0`
 - 安装完成后验证 `/tmp/.../archi --help` 与 `/tmp/.../archi login --help`
 
 ## 4. 网站配置
@@ -193,7 +193,7 @@ ARCHITEC_CLOUD_GITHUB_LATEST_RELEASE_URL=https://github.com/bfly123/architec-rel
 ARCHITEC_CLOUD_GITHUB_LATEST_LINUX_X64_URL=https://github.com/bfly123/architec-releases/releases/latest/download/archi-linux-x86_64.tar.gz
 ARCHITEC_CLOUD_GITHUB_LATEST_INSTALL_SCRIPT_URL=https://github.com/bfly123/architec-releases/releases/latest/download/install_prod.sh
 ARCHITEC_CLOUD_GITHUB_LATEST_CHECKSUMS_URL=https://github.com/bfly123/architec-releases/releases/latest/download/SHA256SUMS.txt
-ARCHITEC_CLOUD_CLI_MIN_VERSION=0.1.0
+ARCHITEC_CLOUD_CLI_MIN_VERSION=0.2.0
 ```
 
 下载页当前推荐顺序：
@@ -234,7 +234,7 @@ bash install_prod.sh
 指定版本安装：
 
 ```bash
-bash install_prod.sh --version v0.1.0
+bash install_prod.sh --version v0.2.0
 ```
 
 如果你明确要跳过校验：

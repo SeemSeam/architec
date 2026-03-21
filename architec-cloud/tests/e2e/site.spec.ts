@@ -23,7 +23,7 @@ test("public pages render and protected account redirects to login", async ({ pa
     })
   ).toBeVisible();
   await expect(page.getByText("Billing still local stub")).toBeVisible();
-  await expect(page.getByText("Minimum supported CLI version: 0.1.0")).toBeVisible();
+  await expect(page.getByText("Minimum supported CLI version: 0.2.0")).toBeVisible();
 
   await page.goto("/legal/privacy");
   await expect(page.getByRole("heading", { name: "Privacy policy" })).toBeVisible();

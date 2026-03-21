@@ -19,7 +19,7 @@ async function approveCliInstallInBrowser(
     deviceName,
     state,
     redirectUri,
-    appVersion = "0.1.0",
+    appVersion = "0.2.0",
     register = false
   }: {
     email: string;
@@ -77,7 +77,7 @@ async function exchangeCliCode(
   {
     code,
     installId,
-    appVersion = "0.1.0"
+    appVersion = "0.2.0"
   }: {
     code: string;
     installId: string;
@@ -100,7 +100,7 @@ async function fetchCliStatus(
   {
     refreshToken,
     installId,
-    appVersion = "0.1.0"
+    appVersion = "0.2.0"
   }: {
     refreshToken: string;
     installId: string;
@@ -123,7 +123,7 @@ async function authorizeCliInstall(
     deviceName,
     state,
     redirectUri,
-    appVersion = "0.1.0",
+    appVersion = "0.2.0",
     register = false
   }: {
     email: string;
@@ -159,8 +159,8 @@ async function authorizeCliInstall(
   expect(exchangeJson.lease.install_id).toBe(installId);
   expect(exchangeJson.lease.device_id).toBeTruthy();
   expect(exchangeJson.lease.signature).toBeTruthy();
-  expect(exchangeJson.cli_min_version).toBe("0.1.0");
-  expect(exchangeJson.client_version).toBe("0.1.0");
+  expect(exchangeJson.cli_min_version).toBe("0.2.0");
+  expect(exchangeJson.client_version).toBe("0.2.0");
   expect(exchangeJson.upgrade_required).toBe(false);
 
   const status = await fetchCliStatus(request, baseURL, {
@@ -174,8 +174,8 @@ async function authorizeCliInstall(
   expect(statusJson.install_id).toBe(installId);
   expect(statusJson.device_name).toBe(deviceName);
   expect(statusJson.device_revoked).toBe(false);
-  expect(statusJson.cli_min_version).toBe("0.1.0");
-  expect(statusJson.client_version).toBe("0.1.0");
+  expect(statusJson.cli_min_version).toBe("0.2.0");
+  expect(statusJson.client_version).toBe("0.2.0");
   expect(statusJson.upgrade_required).toBe(false);
 
   return {
@@ -328,9 +328,9 @@ test("outdated CLI version is blocked until the install is upgraded", async ({ p
   );
 
   await expect(page.locator(".status-pill", { hasText: "CLI: 0.0.9" })).toBeVisible();
-  await expect(page.locator(".status-pill", { hasText: "Min: 0.1.0" })).toBeVisible();
+  await expect(page.locator(".status-pill", { hasText: "Min: 0.2.0" })).toBeVisible();
   await expect(
-    page.getByText("CLI 0.0.9 is below minimum supported version 0.1.0. Upgrade required.")
+    page.getByText("CLI 0.0.9 is below minimum supported version 0.2.0. Upgrade required.")
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Authorize this install" })).toBeDisabled();
 
@@ -341,7 +341,7 @@ test("outdated CLI version is blocked until the install is upgraded", async ({ p
     deviceName,
     state,
     redirectUri,
-    appVersion: "0.1.0",
+    appVersion: "0.2.0",
     register: false
   });
 
@@ -352,7 +352,7 @@ test("outdated CLI version is blocked until the install is upgraded", async ({ p
   });
   expect(outdatedExchange.status()).toBe(426);
   expect(await outdatedExchange.json()).toMatchObject({
-    cli_min_version: "0.1.0",
+    cli_min_version: "0.2.0",
     client_version: "0.0.9",
     upgrade_required: true,
     latest_release_url: "https://github.com/bfly123/architec-releases/releases/latest",
@@ -363,7 +363,7 @@ test("outdated CLI version is blocked until the install is upgraded", async ({ p
   const exchange = await exchangeCliCode(request, String(baseURL), {
     code: browserApproval.code,
     installId,
-    appVersion: "0.1.0"
+    appVersion: "0.2.0"
   });
   expect(exchange.ok()).toBeTruthy();
   const exchangeJson = await exchange.json();
@@ -376,7 +376,7 @@ test("outdated CLI version is blocked until the install is upgraded", async ({ p
   });
   expect(status.ok()).toBeTruthy();
   expect(await status.json()).toMatchObject({
-    cli_min_version: "0.1.0",
+    cli_min_version: "0.2.0",
     client_version: "0.0.9",
     upgrade_required: true,
     latest_release_url: "https://github.com/bfly123/architec-releases/releases/latest",
