@@ -7,7 +7,11 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 BUILD_ROOT="${ARCHITEC_BUILD_ROOT:-$ROOT_DIR/build/nuitka}"
 DIST_DIR="${ARCHITEC_DIST_DIR:-$ROOT_DIR/dist}"
 ENTRYPOINT="${ROOT_DIR}/tools/archi_entry.py"
-LLMGATEWAY_SRC="${ARCHITEC_LLMGATEWAY_SRC:-$ROOT_DIR/../llmgateway/src}"
+DEFAULT_LLMGATEWAY_SRC="$ROOT_DIR/vendor/llmgateway/src"
+if [[ ! -d "${DEFAULT_LLMGATEWAY_SRC}/llmgateway" && -d "$ROOT_DIR/../llmgateway/src/llmgateway" ]]; then
+  DEFAULT_LLMGATEWAY_SRC="$ROOT_DIR/../llmgateway/src"
+fi
+LLMGATEWAY_SRC="${ARCHITEC_LLMGATEWAY_SRC:-$DEFAULT_LLMGATEWAY_SRC}"
 VERSION="$("${PYTHON_BIN}" - <<'PY'
 import tomllib
 from pathlib import Path
