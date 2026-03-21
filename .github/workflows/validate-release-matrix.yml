@@ -1,5 +1,8 @@
 name: Validate Release Matrix
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 on:
   workflow_dispatch:
   push:
@@ -38,12 +41,12 @@ jobs:
       ARCHITEC_TARGET_ARCH: ${{ matrix.target_arch }}
     steps:
       - name: Checkout architec
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: architec
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -65,7 +68,7 @@ jobs:
         run: bash tools/build_nuitka.sh
 
       - name: Upload compiled artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_name }}
           path: |
