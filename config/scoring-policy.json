@@ -41,12 +41,15 @@
       "min_pass_warn_gap": 5
     },
     "severity_penalty": {
-      "per_critical": 0.45,
-      "per_warning": 0.08,
-      "per_info": 0.01,
-      "max_critical": 50,
+      "grace_critical": 5,
+      "grace_warning": 20,
+      "grace_info": 25,
+      "per_critical": 0.5,
+      "per_warning": 0.06,
+      "per_info": 0.005,
+      "max_critical": 45,
       "max_warning": 24,
-      "max_info": 8
+      "max_info": 6
     }
   },
   "incremental": {

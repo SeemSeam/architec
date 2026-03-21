@@ -1,0 +1,35 @@
+version: 1
+common_system_prompt: ""
+task_prompt_prefixes:
+  architect_component_qa: prompt:component-qa.md
+  architect_component_scoring: prompt:component-scoring.md
+  architect_feature: prompt:feature-architecture.md
+  architect_folder_naming: prompt:folder-naming-judge.md
+  architect_topology_review: prompt:topology-review-judge.md
+  architect_full_report_md: prompt:full-report.md
+  architect_history: prompt:history-remediation.md
+  architect_orchestrator: prompt:orchestrator-program.md
+  architec_summary: prompt:summary.md
+failover:
+  transport_failures_before_switch: 2
+  parse_failures_before_switch: 1
+  cooldown_sec: 180
+tasks:
+  architect_history:
+    tier: strong
+  architect_feature:
+    tier: strong
+  architect_component_scoring:
+    tier: weak
+  architect_component_qa:
+    tier: strong
+  architect_folder_naming:
+    tier: weak
+  architect_topology_review:
+    tier: weak
+  architect_full_report_md:
+    tier: strong
+  architect_orchestrator:
+    tier: strong
+  architec_summary:
+    tier: strong

@@ -30,6 +30,7 @@
   },
   "exclude_dirs": [
     ".git",
+    ".architec",
     ".hippocampus",
     ".ccb",
     ".hippo-smoke",

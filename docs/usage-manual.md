@@ -49,24 +49,27 @@ python3 --version
 ./install.sh
 ```
 
-安装脚本会在安装阶段直接要求配置以下两项：
+安装脚本会优先读取现有全局配置；只有缺项时才会要求配置以下两项：
 
 - `architec_llm_main_url`
 - `architec_llm_main_api_key`
 
-如果当前 shell 是交互式终端，脚本会提示你输入；如果是非交互式环境，则必须提前通过环境变量传入。
+如果当前 shell 是交互式终端，脚本会只提示输入缺失项；如果是非交互式环境，则必须提前通过环境变量传入缺失项。
 
 安装脚本完成的动作包括：
 
 - 执行 `python3 -m pip install -e .`
-- 收集 LLM URL 和 API Key
+- 读取已有 LLM URL 和 API Key，或补齐缺失项
+- 生成用户级全局网关配置 `~/.llmgateway/config.yaml`
 - 初始化全局 `rubric.json` 和 `scoring-policy.json`
-- 生成用户级全局配置 `~/.architec/architec-llm.yaml`
+- 生成用户级 Architec 配置 `~/.architec/config.yaml`
+- 安装 4 个 Codex skills 到 `~/.codex/skills`
+- 安装 4 个 Claude skills 到 `~/.claude/skills`
 - 执行一次后端 LLM 预检查
 
 如果设置了 `ARCHITEC_USER_CONFIG_DIR`，则会写到该目录下的：
 
-- `architec-llm.yaml`
+- `config.yaml`
 
 非交互式安装示例：
 
@@ -82,6 +85,61 @@ architec_llm_main_api_key=your_api_key \
 architec --help
 ```
 
+## 3.1 Skills
+
+安装脚本会同步安装以下 4 个 skills：
+
+- `archi-full`
+- `archi-diff`
+- `archi-goal`
+- `archi-advice`
+
+职责划分：
+
+- `archi-full`
+  全量架构分析基线，对应 `archi .`
+- `archi-diff`
+  基于当前 `git diff` 的增量架构分析，对应 `archi --diff .`
+- `archi-goal`
+  围绕具体目标的架构落点分析，对应 `archi --goal "<goal>" .`
+- `archi-advice`
+  结合全量分析基线，再按需叠加 `goal` 或 `diff`，形成分阶段的架构改进建议
+
+推荐顺序：
+
+1. 先用 `archi-full` 建立当前结构基线
+2. 有活动改动时再用 `archi-diff`
+3. 有明确目标时再用 `archi-goal`
+4. 最后用 `archi-advice` 产出具体的改造计划
+
+误用边界：
+
+- 不要用 `archi-diff` 代替全量基线分析
+- 不要在没有明确目标时使用 `archi-goal`
+- 不要脱离 `archi-full` 单独使用 `archi-advice`
+
+最小示例 prompt：
+
+- `archi-full`
+  "Analyze this repo's overall architecture and summarize the main structural problems."
+- `archi-diff`
+  "Review the current git diff from an architecture perspective."
+- `archi-goal`
+  "Use the goal 'stabilize service boundaries' and identify the right target components."
+- `archi-advice`
+  "Based on the current architecture, give me a phased architecture improvement plan."
+
+建议输出模板：
+
+- `archi-full`
+  `Score -> Problems -> Improvements`
+- `archi-diff`
+  `Verdict -> Impacted Areas -> Required Changes`
+- `archi-goal`
+  `Goal -> Recommended Placement -> Risks -> Next Moves`
+- `archi-advice`
+  `Current Position -> Immediate -> Next -> Later`
+
 ## 4. LLM 配置
 
 `architec` 的分析依赖后端 LLM。默认推荐通过安装脚本完成首次配置。
@@ -90,9 +148,10 @@ architec --help
 
 安装脚本默认会把配置写到：
 
-- `~/.architec/architec-llm.yaml`
+- `~/.llmgateway/config.yaml`
+- `~/.architec/config.yaml`
 
-这就是当前默认的全局生效位置。
+前者负责 provider / api_key / base_url / max_concurrent，以及 strong / weak 两档具体模型和推理强度；后者只负责 Architec 各任务映射到 `strong` 或 `weak` tier。
 
 如果你希望临时改目录，可以使用 `ARCHITEC_USER_CONFIG_DIR`。
 
@@ -115,22 +174,24 @@ architec --check .
 
 运行时默认查找：
 
-- `~/.architec/architec-llm.yaml`
+- `~/.llmgateway/config.yaml`
+- `~/.architec/config.yaml`
 
 如果你显式在项目里放了下面这个文件，它会覆盖全局配置：
 
-- `.architec/architec-llm.yaml`
+- `.architec/config.yaml`
 
 项目内同时提供了模板文件：
 
-- `config/architec-llm.example.yaml`
-- `config/architec-llm.yaml`
+- `config/config.example.yaml`
+- `config/config.default.yaml`
 
 注意：
 
-- `config/architec-llm.yaml` 现在更适合作为模板参考，不建议把它当作运行时主配置位置
-- 推荐直接维护全局文件 `~/.architec/architec-llm.yaml`
-- 只有确实需要单项目覆盖时，再使用 `.architec/architec-llm.yaml`
+- `config/config.default.yaml` 现在更适合作为模板参考，不建议把它当作运行时主配置位置
+- 推荐把源配置和 strong / weak 具体模型维护在 `~/.llmgateway/config.yaml`
+- 推荐把 Architec 任务 tier 策略维护在 `~/.architec/config.yaml`
+- 只有确实需要单项目覆盖时，再使用 `.architec/config.yaml`
 
 ### 4.4 其他默认配置
 
@@ -182,6 +243,23 @@ architec --refresh-from-hippo --check .
 ```bash
 architec --help
 ```
+
+### 6.1.1 本地授权与版本门槛
+
+当前本地 CLI 已接入浏览器授权与版本上报链路：
+
+- `archi login` 会把本地 CLI 版本附带到浏览器授权 URL 和后续 `auth code exchange`
+- `archi status --json` 与 `archi whoami --json` 会把当前 CLI 版本带到 portal 的状态查询
+- 本地租约刷新也会携带 CLI 版本，便于 portal 强制最低版本
+
+如果 portal 配置了最低支持版本，例如 `ARCHITEC_CLOUD_CLI_MIN_VERSION=0.1.0`：
+
+- 旧版本 CLI 会在浏览器授权页被阻止
+- 即使跳过页面，`exchange` 和 `refresh` 也会被 portal 拒绝
+- CLI 错误输出会优先展示 GitHub Releases 升级地址，而不是只给一个泛化的认证失败提示
+- `archi status --json` 和 `archi whoami --json` 会额外返回 `action_required`、升级链接和 `recommended_upgrade_command`
+- 如果你要给 skill、脚本或外部包装器消费，优先读取稳定的 `upgrade` 对象：
+  `required`、`minimum_version`、`install_script_url`、`command`
 
 ### 6.2 全量分析
 
@@ -342,14 +420,16 @@ architec --refresh-from-hippo .
 
 原因：
 
-- 没有配置 LLM 候选
-- `~/.architec/architec-llm.yaml` 格式无效
-- 或项目覆盖文件 `.architec/architec-llm.yaml` 格式无效
+- `~/.llmgateway/config.yaml` 缺 provider、API 路由或 strong / weak 模型配置
+- `~/.architec/config.yaml` 缺任务 tier 映射或格式无效
+- 或项目覆盖文件 `.architec/config.yaml` 格式无效
 
 处理方式：
 
-- 检查 `~/.architec/architec-llm.yaml`
-- 如果项目里存在 `.architec/architec-llm.yaml`，也要一起检查
+- 检查 `~/.llmgateway/config.yaml`
+- 检查 `~/.architec/config.yaml`
+- 如果项目里存在 `.architec/config.yaml`，也要一起检查
+- 重点确认 `settings.strong_model` 和 `settings.weak_model` 已配置
 - 检查 `architec_llm_main_api_key`
 - 检查 `architec_llm_main_url`
 - 重新执行 `architec --check .`
@@ -363,7 +443,7 @@ architec --refresh-from-hippo .
 处理方式：
 
 - 补齐环境变量
-- 或补齐全局 `architec-llm.yaml` 中对应 provider 的 `api_key` 和 `base_url`
+- 或补齐 `~/.llmgateway/config.yaml` 中 provider 的 `api_key` 和 `base_url`
 
 ### 11.4 报错：Hippo CLI not found
 

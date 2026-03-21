@@ -1,0 +1,8 @@
+.next
+node_modules
+.data
+.data-e2e
+.env.local
+.tmp-browser-test
+playwright-report
+test-results
