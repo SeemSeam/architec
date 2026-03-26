@@ -1,0 +1,4 @@
+interface:
+  display_name: "Archi Goal"
+  short_description: "Run goal-driven architecture analysis for a target change"
+  default_prompt: "Run archi --goal for the requested objective, read .architec artifacts, and answer with target components, placement advice, and boundary risks."

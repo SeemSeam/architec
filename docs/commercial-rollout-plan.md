@@ -5,16 +5,18 @@
 当前仓库基于实际实现补了一份上线审计：
 
 - [docs/launch-readiness-audit.md](/home/bfly/workspace/architec/docs/launch-readiness-audit.md)
-- [docs/launch-ops-runbook.md](/home/bfly/workspace/architec/docs/launch-ops-runbook.md)
+- [launch-ops-runbook.md](/home/bfly/workspace/architec-cloud/docs/launch-ops-runbook.md)
 
 基于当前工作区，已有一套本地可运行的首版实现：
 
 - `architec-cloud/` 已提供注册、登录、账户页、下载页、设备页、管理页与 CLI 授权 API 原型
 - 下载分发已切换到独立 GitHub Releases 仓库：`bfly123/architec-releases`
 - 已产出并验证 Linux 编译包：`archi-linux-x86_64.tar.gz`
-- 已提供直连安装脚本：`tools/install_prod.sh`
+- 已提供公开安装脚本：`https://www.architec.top/downloads/latest/install_prod.sh`
 - 网站当前角色是“控制面”，不承担安装包托管职责
 - 本地验证已通过 `pnpm build` 与 `pnpm test:e2e`
+- 当前还补了一条真实安装回归命令：`bash ../architec-release/tools/release_install_smoke.sh`
+- 当前本地联调还支持由 `architec-cloud` 直接托管 `/downloads/latest/*`，避免本地测试时打 GitHub API rate limit
 
 ## 1. 当前状态与目标
 
@@ -24,14 +26,13 @@
 
 - 本地安装 Python 包
 - 通过 `archi` 命令运行分析
-- 通过 `install.sh` 写入用户级配置并安装 Codex / Claude skills
+- 通过网站安装器初始化用户级配置并同步 Codex / Claude skills
 - 主要入口在 `src/architec/cli.py`
 - 当前对外分发方式仍偏开发态，核心代码以 Python 源码形式暴露
 
 当前仓库里与后续改造直接相关的入口包括：
 
 - `pyproject.toml`
-- `install.sh`
 - `src/architec/cli.py`
 - `src/architec/integration/resource_paths.py`
 - `codex_skills/`
@@ -162,6 +163,30 @@
 - 一开始就改成纯云端分析
 
 ## 5. 注册站实施方案
+
+### 5.0 当前本地回归入口
+
+为了避免“网站能打开，但真实安装链路没跑过”，当前工作区应固定保留下列回归命令：
+
+```bash
+bash ../architec-release/tools/release_install_smoke.sh
+```
+
+这条命令会自动完成：
+
+- 启动本地 `architec-cloud`
+- 运行网站公开页与注册登录 smoke
+- 从本地 `architec-cloud` 提供的 `/downloads/latest` 下载真实发布包
+- 模拟已登录用户调用 `/api/cli/authorize`
+- 用真实安装出来的 `archi` 执行 `login`、`whoami --json`、`status --json`、`devices --json`、`logout`
+
+上线前要求不是“有人手工点过一次”，而是这条链路可以稳定重复执行。
+
+补充说明：
+
+- `../architec-release/tools/install_prod.sh` 已支持 `--base-url`
+- 本地 smoke 会自动把 `ARCHITEC_CLOUD_DOWNLOAD_BASE_URL` 指向 `http://127.0.0.1:3100/downloads/latest`
+- 这样既保留真实安装包回归，又不依赖 GitHub Releases API 元数据查询
 
 ### 5.1 新建站点仓库
 
@@ -571,9 +596,9 @@ skill 只是使用入口，不是安全边界。
 
 ### 10.3 Skill 安装建议
 
-当前 `install.sh` 会直接安装 skill。生产版建议改成：
+当前网站安装器会直接安装 skill。生产版建议改成：
 
-- 开发态：保留 `install.sh`
+- 开发态：本地源码调试继续使用 `python3 -m pip install -e .`
 - 生产态：改为 `archi skill install codex`
 - 生产态：改为 `archi skill install claude`
 
@@ -593,12 +618,11 @@ skill 只是使用入口，不是安全边界。
 
 - 保留源码开发方式
 - 可以继续使用 `python3 -m pip install -e .`
-- 可以继续使用当前 `install.sh`
 
 生产态：
 
 - 不再分发源码安装方式
-- 不再要求用户进入仓库执行 `install.sh`
+- 不再要求用户进入仓库执行本地安装脚本
 - 分发编译后的安装包或二进制包
 
 ### 11.2 编译方案
@@ -860,17 +884,19 @@ skill 只是使用入口，不是安全边界。
 
 - `docs/commercial-rollout-plan.md`
 - `src/architec/auth/`
-- `tools/build_release.py`
-- `tools/build_nuitka.sh`
-- `tools/install_prod.sh`
 
 建议调整：
 
 - `src/architec/cli.py`
-- `install.sh`
 - `README.md`
 - `codex_skills/*/SKILL.md`
 - `claude_skills/*/SKILL.md`
+
+发布相关脚本现在应由独立仓库 `architec-release` 维护：
+
+- `../architec-release/tools/build_release.py`
+- `../architec-release/tools/build_nuitka.sh`
+- `../architec-release/tools/install_prod.sh`
 
 ### 15.2 新仓库 `architec-cloud`
 

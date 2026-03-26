@@ -1,0 +1,4 @@
+interface:
+  display_name: "Archi Full"
+  short_description: "Run full architecture analysis and summarize the result"
+  default_prompt: "Run archi . for full architecture analysis, read .architec artifacts, and answer with the overall score, main structural problems, and top improvements."

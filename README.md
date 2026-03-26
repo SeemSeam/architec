@@ -8,60 +8,38 @@ It consumes Hippo bundle inputs from `.hippocampus/`, runs architecture analysis
 
 ## Install
 
+For end users, use the production installer:
+
 ```bash
-./install.sh
+curl -fsSL https://www.architec.top/downloads/latest/install_prod.sh -o install_prod.sh
+bash install_prod.sh
 ```
 
-`install.sh` will:
+This is the only recommended public install path. It installs the compiled Architec
+build, pulls the bundled open-source dependency wheels when available, performs
+basic environment checks, and leaves you with a working `archi` command.
 
-- install the package in editable mode
-- reuse provider settings from existing `~/.llmgateway/config.yaml` when already configured
-- prompt for missing provider URL and API key when running interactively
-- seed `rubric.json` and `scoring-policy.json` into `~/.architec/`
-- write provider route, concurrency, and strong/weak model settings to `~/.llmgateway/config.yaml`
-- write Architec task-to-tier mapping to `~/.architec/config.yaml`
-- install bundled Codex skills to `~/.codex/skills`
-- install bundled Claude skills to `~/.claude/skills`
-- run backend LLM preflight before finishing
+The production installer supports explicit release selection and checksum
+verification:
 
-For commercial distribution, prefer a compiled release artifact from GitHub Releases over editable source installs.
+```bash
+bash install_prod.sh --version v0.1.1
+bash install_prod.sh --skip-checksum
+```
+
+Default behavior is to fetch `SHA256SUMS.txt` from the selected GitHub release and verify the downloaded archive before installation.
 
 You can override the target directory with `ARCHITEC_USER_CONFIG_DIR`.
-
-For non-interactive installs, provide the values up front:
-
-```bash
-architec_llm_main_url=https://your-llm-endpoint \
-architec_llm_main_api_key=your_api_key \
-./install.sh
-```
-
-If you want to install with pip manually, you still need to create LLM config yourself:
-
-```bash
-python3 -m pip install -e .
-```
 
 For compiled release packaging:
 
 ```bash
-python3 tools/build_release.py --with-nuitka
+python3 ../architec-release/tools/build_release.py --with-nuitka
 ```
 
-For end users installing the compiled Linux build from GitHub Releases:
-
-```bash
-./tools/install_prod.sh
-```
-
-The installer now supports explicit release selection and checksum verification:
-
-```bash
-bash tools/install_prod.sh --version v0.2.0
-bash tools/install_prod.sh --skip-checksum
-```
-
-Default behavior is to fetch `SHA256SUMS.txt` from the selected GitHub release and verify the downloaded archive before installation.
+The production installer also ensures the open-source `hippocampus` and
+`llmgateway` Python packages are installed from bundled release wheels when
+available, then falls back to their public Git sources.
 
 Minimal runtime config split:
 
@@ -116,7 +94,7 @@ Bundled skill source trees live in:
 - `codex_skills/`
 - `claude_skills/`
 
-`install.sh` syncs them into:
+The website installer syncs them into:
 
 - `~/.codex/skills`
 - `~/.claude/skills`
@@ -141,8 +119,25 @@ Detailed manual:
 
 - `docs/usage-manual.md`
 - `docs/commercial-rollout-plan.md`
-- `docs/local-auth-portal-mvp.md`
-- `architec-cloud/README.md`
+- `../architec-cloud/docs/local-auth-portal-mvp.md`
+- `../architec-cloud/README.md`
+- `../architec-release/docs/release-sop.md`
+
+Real release-install regression:
+
+```bash
+bash ../architec-release/tools/release_install_smoke.sh
+```
+
+This starts the sibling `architec-cloud` portal, runs the website smoke, installs the public GitHub Release build, authorizes it through `/api/cli/authorize`, and verifies `archi login`, `archi whoami --json`, `archi status --json`, `archi devices --json`, and `archi logout`.
+
+Release cut helper:
+
+```bash
+bash ../architec-release/tools/cut_release.sh
+```
+
+This runs the core release checks across the sibling source, website, and release-management repos, creates the `v<version>` tag from the source repo `pyproject.toml`, and then uses the release-management tooling to publish into `bfly123/architec-releases`.
 
 Local auth commands:
 

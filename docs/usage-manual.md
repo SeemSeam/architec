@@ -43,51 +43,79 @@ python3 --version
 
 ## 3. 安装
 
-在项目根目录执行：
+普通用户请只使用发布安装器：
 
 ```bash
-./install.sh
+curl -fsSL https://www.architec.top/downloads/latest/install_prod.sh -o install_prod.sh
+bash install_prod.sh
 ```
 
-安装脚本会优先读取现有全局配置；只有缺项时才会要求配置以下两项：
+更多高级功能请查看 `archi --help`。
 
-- `architec_llm_main_url`
-- `architec_llm_main_api_key`
+当前发布安装器会先做一次本机环境检查，并尽量自动补齐这些系统依赖：
 
-如果当前 shell 是交互式终端，脚本会只提示输入缺失项；如果是非交互式环境，则必须提前通过环境变量传入缺失项。
+- `python3` 和 `pip`
+- `curl`
+- `git`
+- `tar` 或 `unzip`
 
-安装脚本完成的动作包括：
+如果脚本检测到系统里缺这些依赖，会优先尝试通过常见包管理器自动安装：
 
-- 执行 `python3 -m pip install -e .`
-- 读取已有 LLM URL 和 API Key，或补齐缺失项
-- 生成用户级全局网关配置 `~/.llmgateway/config.yaml`
-- 初始化全局 `rubric.json` 和 `scoring-policy.json`
-- 生成用户级 Architec 配置 `~/.architec/config.yaml`
-- 安装 4 个 Codex skills 到 `~/.codex/skills`
-- 安装 4 个 Claude skills 到 `~/.claude/skills`
-- 执行一次后端 LLM 预检查
+- `apt-get`
+- `dnf`
+- `yum`
+- `pacman`
+- `apk`
+- `brew`
 
-如果设置了 `ARCHITEC_USER_CONFIG_DIR`，则会写到该目录下的：
+如果自动安装失败，脚本会直接告诉用户下一步该手动安装什么。
 
-- `config.yaml`
+当前发布安装器会自动安装以下两个开源依赖，并在安装时明确提醒用户来源：
 
-非交互式安装示例：
+- `hippocampus`
+- `llmgateway`
 
-```bash
-architec_llm_main_url=https://your-llm-endpoint \
-architec_llm_main_api_key=your_api_key \
-./install.sh
-```
+优先顺序是：
+
+- 先使用 release 中随安装器一起发布的 wheel
+- 如果 release 没带 wheel，则回退到公开 Git 源
+
+发布安装完成后，安装器会继续处理用户级配置：
+
+- 初始化 `~/.architec/config.yaml`
+- 初始化 `~/.architec/rubric.json`
+- 初始化 `~/.architec/scoring-policy.json`
+- 引导用户配置 `~/.llmgateway/config.yaml`
+
+如果当前终端是交互式终端，安装器会询问是否现在配置 `llmgateway`，并提示输入：
+
+- `provider_type`
+- `api_style`
+- `base_url`
+- `api_key`
+- `strong_model`
+- `weak_model`
+
+如果用户暂时不想输入 API 信息，也可以直接跳过。此时安装器会创建一个可编辑的
+`~/.llmgateway/config.yaml` 模板，后续补齐配置即可。
+
+关于安装包体积，需要提前说明一点：
+
+- 当前发布包不是纯源码压缩包，而是独立可运行的编译分发包
+- 发布包内会同时包含 `archi` 可执行文件、嵌入式 Python 运行时，以及首启所需的原生动态库
+- 因此发布包体积会明显大于普通脚本型 CLI，这是当前发布策略下的正常现象，不代表安装器异常
+- 这样做的目的，是尽量减少用户本机环境差异带来的问题，让首次安装和后续运行更稳定
+- 对普通用户来说，不需要手动准备一套完全匹配的 Python 运行时再去拼装 CLI
 
 安装完成后可验证命令是否可用：
 
 ```bash
-architec --help
+archi --help
 ```
 
 ## 3.1 Skills
 
-安装脚本会同步安装以下 4 个 skills：
+网站安装脚本会同步安装以下 4 个 skills：
 
 - `archi-full`
 - `archi-diff`
@@ -217,7 +245,7 @@ architec --check .
 注意：
 
 - 这条命令仍然要求当前项目已经具备 `.hippocampus/` 输入
-- 如果你只是想验证 LLM 配置，直接运行 `./install.sh` 即可，安装脚本内部已经包含独立的 LLM 预检查
+- 如果你只是想验证 LLM 配置，重新执行网站安装命令即可，安装流程内部已经包含独立的 LLM 预检查
 
 如果还想顺便刷新 Hippo 输入后再检查：
 
@@ -241,7 +269,7 @@ architec --refresh-from-hippo --check .
 ### 6.1 查看帮助
 
 ```bash
-architec --help
+archi --help
 ```
 
 ### 6.1.1 本地授权与版本门槛
@@ -252,7 +280,7 @@ architec --help
 - `archi status --json` 与 `archi whoami --json` 会把当前 CLI 版本带到 portal 的状态查询
 - 本地租约刷新也会携带 CLI 版本，便于 portal 强制最低版本
 
-如果 portal 配置了最低支持版本，例如 `ARCHITEC_CLOUD_CLI_MIN_VERSION=0.2.0`：
+如果 portal 配置了最低支持版本，例如 `ARCHITEC_CLOUD_CLI_MIN_VERSION=0.1.0`：
 
 - 旧版本 CLI 会在浏览器授权页被阻止
 - 即使跳过页面，`exchange` 和 `refresh` 也会被 portal 拒绝
