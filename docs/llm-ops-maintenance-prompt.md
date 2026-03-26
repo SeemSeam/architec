@@ -31,27 +31,22 @@
 
 ## 3. 当前仓库与角色边界
 
-主开发仓库：
+当前工作区现在拆成三个同级仓库：
 
-- 根目录：`/home/bfly/workspace/architec`
-
-当前仓库同时包含两部分：
-
-- `src/architec/`
+- `/home/bfly/workspace/architec`
   负责 CLI、本地分析、授权会话、本地 skill 工作流
-- `architec-cloud/`
+- `/home/bfly/workspace/architec-cloud`
   负责网站、注册、登录、设备授权、控制面页面、CLI 授权 API
+- `/home/bfly/workspace/architec-release`
+  负责 release 资产、安装器、打包与发布流程
 
 发布与分发边界：
 
 - 网站负责注册、登录、授权、下载入口、账户管理
-- 安装包主分发仓库：`bfly123/architec-releases`
-- 网站目前也提供 `/downloads/latest/*` 入口，主要用于安装脚本与镜像式下载入口
+- `architec-release` 负责构建和管理安装包、校验值、安装脚本
+- 网站提供 `/downloads/latest/*` 对外分发入口
 
-不要混淆两个角色：
-
-- `architec` 开发仓库：源码与构建逻辑
-- `architec-releases`：发布制品仓库
+不要再把 `architec-cloud` 或 `architec-release` 当成 `architec` 仓库内的子目录。
 
 ## 4. 当前线上事实
 
@@ -212,7 +207,7 @@ archi status --json
 ### 10.3 本地 release smoke
 
 ```bash
-cd /home/bfly/workspace/architec
+cd /home/bfly/workspace/architec-release
 bash tools/release_install_smoke.sh
 ```
 
@@ -221,7 +216,7 @@ bash tools/release_install_smoke.sh
 ### 10.4 网站本地 build
 
 ```bash
-cd /home/bfly/workspace/architec/architec-cloud
+cd /home/bfly/workspace/architec-cloud
 pnpm build
 ```
 
@@ -230,7 +225,7 @@ pnpm build
 当前推荐直接使用：
 
 ```bash
-cd /home/bfly/workspace/architec
+cd /home/bfly/workspace/architec-cloud
 ARCHITEC_CLOUD_REMOTE='root@38.71.116.190' \
 ARCHITEC_CLOUD_SSH_PORT=20208 \
 bash tools/deploy_architec_cloud_remote.sh
@@ -248,6 +243,7 @@ bash tools/deploy_architec_cloud_remote.sh
 如果明确不想自动重启：
 
 ```bash
+cd /home/bfly/workspace/architec-cloud
 ARCHITEC_CLOUD_REMOTE='root@38.71.116.190' \
 ARCHITEC_CLOUD_SSH_PORT=20208 \
 ARCHITEC_CLOUD_RESTART_SERVICE=0 \
@@ -272,21 +268,21 @@ CLI 授权主逻辑：
 
 网站账户页与控制面：
 
-- [architec-cloud/src/app/account/page.tsx](/home/bfly/workspace/architec/architec-cloud/src/app/account/page.tsx)
-- [architec-cloud/src/app/account/account-dashboard-client.tsx](/home/bfly/workspace/architec/architec-cloud/src/app/account/account-dashboard-client.tsx)
-- [architec-cloud/src/app/cli/login/page.tsx](/home/bfly/workspace/architec/architec-cloud/src/app/cli/login/page.tsx)
-- [architec-cloud/src/app/api/cli/authorize/route.ts](/home/bfly/workspace/architec/architec-cloud/src/app/api/cli/authorize/route.ts)
+- [account/page.tsx](/home/bfly/workspace/architec-cloud/src/app/account/page.tsx)
+- [account-dashboard-client.tsx](/home/bfly/workspace/architec-cloud/src/app/account/account-dashboard-client.tsx)
+- [login/page.tsx](/home/bfly/workspace/architec-cloud/src/app/cli/login/page.tsx)
+- [authorize/route.ts](/home/bfly/workspace/architec-cloud/src/app/api/cli/authorize/route.ts)
 
 网站运行配置：
 
-- [architec-cloud/src/lib/config.ts](/home/bfly/workspace/architec/architec-cloud/src/lib/config.ts)
-- [architec-cloud/deploy/systemd/architec-cloud.service](/home/bfly/workspace/architec/architec-cloud/deploy/systemd/architec-cloud.service)
-- [tools/deploy_architec_cloud_remote.sh](/home/bfly/workspace/architec/tools/deploy_architec_cloud_remote.sh)
+- [config.ts](/home/bfly/workspace/architec-cloud/src/lib/config.ts)
+- [architec-cloud.service](/home/bfly/workspace/architec-cloud/deploy/systemd/architec-cloud.service)
+- [deploy_architec_cloud_remote.sh](/home/bfly/workspace/architec-cloud/tools/deploy_architec_cloud_remote.sh)
 
 发布与安装：
 
-- [tools/install_prod.sh](/home/bfly/workspace/architec/tools/install_prod.sh)
-- [docs/release-sop.md](/home/bfly/workspace/architec/docs/release-sop.md)
+- [install_prod.sh](/home/bfly/workspace/architec-release/tools/install_prod.sh)
+- [release-sop.md](/home/bfly/workspace/architec-release/docs/release-sop.md)
 - [docs/github-releases.md](/home/bfly/workspace/architec/docs/github-releases.md)
 
 ## 12. 当前网站定位
