@@ -1,6 +1,0 @@
-Metadata-Version: 2.4
-Name: architec
-Version: 0.1.0
-Summary: Architecture analysis CLI powered by Hippo bundles and backend LLMs.
-Requires-Python: >=3.11
-Requires-Dist: PyYAML>=6.0
