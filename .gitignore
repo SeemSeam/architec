@@ -12,3 +12,8 @@ build/
 dist/
 .mypy_cache/
 .ruff_cache/
+.local_auth_portal/
+.tmp-v2raya/
+.venv-auth-portal/
+local-test-env/
+nuitka-crash-report.xml

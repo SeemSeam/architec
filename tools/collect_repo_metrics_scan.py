@@ -4,13 +4,22 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_EXCLUDE_DIRS = {
+    ".architec",
+    ".hippocampus",
+    ".git",
+    "__pycache__",
+}
+
+
 def iter_files(root: Path, exclude_dirs: set[str], exclude_suffixes: set[str]) -> list[Path]:
+    effective_exclude_dirs = set(exclude_dirs) | DEFAULT_EXCLUDE_DIRS
     out: list[Path] = []
     for path in root.rglob("*"):
         if not path.is_file():
             continue
         rel = path.relative_to(root)
-        if any(part in exclude_dirs for part in rel.parts):
+        if any(part in effective_exclude_dirs for part in rel.parts):
             continue
         if path.suffix.lower() in exclude_suffixes:
             continue
@@ -119,4 +128,3 @@ def line_length_summary(*, rel: str, lines: list[str], thr) -> dict[str, Any]:
         "hard_hits": hard_hits,
         "longest": longest,
     }
-

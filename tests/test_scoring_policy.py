@@ -20,7 +20,7 @@ def test_full_score_uses_fixed_100_baseline_and_penalty() -> None:
 
     assert full["mode"] == "full"
     assert 0.0 <= float(full["score"]) <= 100.0
-    assert float(full["score"]) == 87.7
+    assert float(full["score"]) == 91.3
     assert full["grade"] in {"A", "B", "C", "D", "E"}
     assert "signals" in full
     assert full["signals"]["base_score"] == 100.0
@@ -38,7 +38,7 @@ def test_full_score_supports_legacy_baseline_mode() -> None:
 
     assert full["signals"]["base_score"] == 80.0
     assert full["signals"]["base_score_source"] == "baseline_scores.overall"
-    assert float(full["score"]) == 67.7
+    assert float(full["score"]) == 71.3
 
 
 def test_full_score_adaptive_thresholds_relax_with_penalty_pressure() -> None:
@@ -55,6 +55,18 @@ def test_full_score_adaptive_thresholds_relax_with_penalty_pressure() -> None:
     assert round(float(thresholds["pass_min"]), 2) == 72.0
     assert round(float(thresholds["warn_min"]), 2) == 58.0
     assert full["recommendation"] == "block"
+
+
+def test_full_score_ignores_grace_band_before_penalty() -> None:
+    policy = load_scoring_policy(".")
+    full = evaluate_full_score(
+        summary={"by_severity": {"critical": 5, "warning": 20, "info": 25}},
+        baseline_scores={"overall": 8.0},
+        policy=policy,
+    )
+
+    assert float(full["signals"]["penalty"]["total"]) == 0.0
+    assert float(full["score"]) == 100.0
 
 
 def test_full_score_can_disable_adaptive_thresholds() -> None:
