@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from architec.hotspot_digest import HOTSPOT_DIGEST_PATH, build_hotspot_digest
-from architec.io_utils import read_json
+from architec.analysis.hotspot_digest import HOTSPOT_DIGEST_PATH, build_hotspot_digest
+from architec.support.io_utils import read_json
 
 
 def test_build_hotspot_digest_writes_topk_file(tmp_path: Path) -> None:

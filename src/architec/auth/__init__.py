@@ -1,10 +1,15 @@
 __all__ = [
+    "auto_login",
     "handle_auth_command",
     "require_authorized_session",
 ]
 
 
 def __getattr__(name: str):
+    if name == "auto_login":
+        from .commands import auto_login
+
+        return auto_login
     if name == "handle_auth_command":
         from .commands import handle_auth_command
 

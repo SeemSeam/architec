@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from architec.version import current_cli_version
 
 
-DEFAULT_AUTH_BASE_URL = "http://127.0.0.1:8787"
+DEFAULT_AUTH_BASE_URL = "https://www.architec.top"
 
 
 class ArchitecAuthClientError(RuntimeError):
@@ -19,6 +19,11 @@ class ArchitecAuthClientError(RuntimeError):
 
 def auth_base_url() -> str:
     return str(os.environ.get("ARCHITEC_AUTH_BASE_URL", DEFAULT_AUTH_BASE_URL) or DEFAULT_AUTH_BASE_URL).strip().rstrip("/")
+
+
+def auth_api_base_url() -> str:
+    override = str(os.environ.get("ARCHITEC_AUTH_API_BASE_URL", "") or "").strip().rstrip("/")
+    return override or auth_base_url()
 
 
 def build_browser_login_url(
@@ -88,14 +93,14 @@ def _json_request(url: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 def exchange_code(*, code: str, install_id: str, app_version: str | None = None) -> dict[str, Any]:
     return _json_request(
-        f"{auth_base_url()}/api/cli/login/exchange",
+        f"{auth_api_base_url()}/api/cli/login/exchange",
         {"code": code, "install_id": install_id, "app_version": str(app_version or current_cli_version()).strip()},
     )
 
 
 def refresh_lease(*, refresh_token: str, install_id: str, app_version: str | None = None) -> dict[str, Any]:
     return _json_request(
-        f"{auth_base_url()}/api/cli/lease/refresh",
+        f"{auth_api_base_url()}/api/cli/lease/refresh",
         {
             "refresh_token": refresh_token,
             "install_id": install_id,
@@ -113,7 +118,7 @@ def remote_status(*, refresh_token: str, install_id: str, app_version: str | Non
         }
     )
     try:
-        with urlopen(f"{auth_base_url()}/api/cli/status?{params}", timeout=15.0) as response:
+        with urlopen(f"{auth_api_base_url()}/api/cli/status?{params}", timeout=15.0) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.reason
@@ -127,12 +132,12 @@ def remote_status(*, refresh_token: str, install_id: str, app_version: str | Non
         rendered = _render_portal_error(detail=str(detail), payload=error_payload)
         raise ArchitecAuthClientError(f"Auth portal rejected the request: {rendered}") from exc
     except URLError as exc:
-        raise ArchitecAuthClientError(f"Cannot reach auth portal at {auth_base_url()}: {exc.reason}") from exc
+        raise ArchitecAuthClientError(f"Cannot reach auth portal at {auth_api_base_url()}: {exc.reason}") from exc
 
 
 def fetch_public_key() -> str:
     try:
-        with urlopen(f"{auth_base_url()}/api/public-key", timeout=15.0) as response:
+        with urlopen(f"{auth_api_base_url()}/api/public-key", timeout=15.0) as response:
             return response.read().decode("utf-8")
     except URLError as exc:
-        raise ArchitecAuthClientError(f"Cannot reach auth portal at {auth_base_url()}: {exc.reason}") from exc
+        raise ArchitecAuthClientError(f"Cannot reach auth portal at {auth_api_base_url()}: {exc.reason}") from exc

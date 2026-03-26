@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .auth import handle_auth_command, require_authorized_session
+from .auth import auto_login, handle_auth_command, require_authorized_session
 from .auth.guard import ArchitecAuthRequiredError
 from .analysis.public import run_analysis
 from .integration.bundle_loader import require_bundle
@@ -244,6 +244,26 @@ def _run_command(
     return _checked_result(args, checks) if args.check else _analysis_result(args)
 
 
+def _interactive_terminal() -> bool:
+    streams = (sys.stdin, sys.stdout, sys.stderr)
+    return all(getattr(stream, "isatty", lambda: False)() for stream in streams)
+
+
+def _ensure_authorized_access() -> None:
+    try:
+        require_authorized_session()
+        return
+    except ArchitecAuthRequiredError as exc:
+        if not _interactive_terminal():
+            raise
+        print(str(exc), file=sys.stderr)
+        print("Authorizing this install in the browser...", file=sys.stderr)
+    login_status = auto_login()
+    if login_status != 0:
+        raise ArchitecAuthRequiredError("Browser authorization did not complete.")
+    require_authorized_session()
+
+
 def _with_refresh_result(
     result: dict[str, Any],
     *,
@@ -268,7 +288,7 @@ def main() -> int:
         if invalid is not None:
             return invalid
         if not bool(args.skip_auth):
-            require_authorized_session()
+            _ensure_authorized_access()
         refresh_result = _ensure_bundle(args)
         checks = _required_llm_checks(diff=bool(args.diff), goal=str(args.goal or ''))
         emit_progress("archi [2/3] checking backend LLM configuration")

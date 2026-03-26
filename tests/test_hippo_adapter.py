@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from architec.hippo_adapter import HippoSnapshot
+from architec.integration.hippo_adapter import HippoSnapshot
 
 
 def _snapshot(tmp_path: Path) -> HippoSnapshot:

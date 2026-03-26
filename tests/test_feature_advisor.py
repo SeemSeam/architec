@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from architec.feature_advisor import _rank_candidate_files, suggest_feature_architecture
+from architec.feature.feature_advisor import _rank_candidate_files, suggest_feature_architecture
 
 
 class _Snapshot:
@@ -176,11 +176,11 @@ def test_suggest_feature_architecture_uses_hotspot_fallback_without_infra(monkey
     snapshot.project_root = tmp_path
 
     monkeypatch.setattr(
-        "architec.feature_advisor.HippoSnapshot.load",
+        "architec.feature.feature_advisor.HippoSnapshot.load",
         lambda _root: snapshot,
     )
     monkeypatch.setattr(
-        "architec.feature_advisor.load_or_build_component_descriptors",
+        "architec.feature.feature_advisor.load_or_build_component_descriptors",
         lambda *_a, **_k: {
             "llm-proxy:ops/context": {
                 "layer_role": "orchestration",

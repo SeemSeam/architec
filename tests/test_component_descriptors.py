@@ -7,9 +7,10 @@ from architec.component_descriptors import (
     build_component_descriptors,
     descriptor_search_text,
 )
-from architec.component_graph import build_component_graph
-from architec.component_qa import answer_component_question
-from architec.hippo_adapter import HippoSnapshot
+from architec.descriptors.component_descriptors_semantics import descriptor_terms
+from architec.descriptors.component_graph import build_component_graph
+from architec.orchestrator.component_qa import answer_component_question
+from architec.integration.hippo_adapter import HippoSnapshot
 
 
 def _write_json(path: Path, data: object) -> None:
@@ -146,3 +147,51 @@ def test_component_qa_avoids_tests_component_for_generic_question(
         llm_enabled=False,
     )
     assert result["component"] == "service:payments"
+
+
+def test_component_qa_accepts_preferred_short_name(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    _prepare_snapshot(root)
+    result = answer_component_question(
+        root,
+        "Which boundary needs the most work?",
+        component="payments",
+        llm_enabled=False,
+    )
+    assert result["component"] == "service:payments"
+
+
+def test_descriptor_terms_deduplicates_generic_tokens() -> None:
+    descriptor = {
+        "component": "service:payments",
+        "layer_role": "service-layer",
+        "responsibility_summary": "Payments service handles payment orchestration",
+        "primary_symbols": ["PaymentEngine.run", "PaymentEngine.run"],
+        "files": ["service/src/payments/engine.py"],
+    }
+    terms = descriptor_terms(descriptor)
+    assert "service" not in terms
+    assert terms.count("payments") == 1
+    assert "paymentengine" in terms
+
+
+def test_descriptor_search_text_includes_dependency_targets() -> None:
+    descriptor = {
+        "component": "service:payments",
+        "layer_role": "service",
+        "responsibility_summary": "Payments flows",
+        "primary_symbols": [],
+        "descriptor_terms": [],
+        "test_anchors": [],
+        "dependency_neighbors": [
+            {
+                "target_component": "service:orders",
+                "target_paths": ["service/src/orders/router.py"],
+            }
+        ],
+    }
+    search = descriptor_search_text(descriptor)
+    assert "service:orders" in search
+    assert "service/src/orders/router.py" in search

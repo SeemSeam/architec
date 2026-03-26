@@ -20,6 +20,28 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(_read(path))
 
 
+def _resolve_default_path(value: str | None, fallback: Path) -> Path:
+    return Path(value).resolve() if value else fallback
+
+
+def _optional_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return _load_json(path)
+    except Exception:
+        return {}
+
+
+def _structure_excerpt(path: Path, *, max_chars: int) -> str:
+    if not path.exists():
+        return ""
+    structure_text = _read(path)
+    if max_chars > 0 and len(structure_text) > max_chars:
+        return structure_text[:max_chars] + "\n... (truncated)"
+    return structure_text
+
+
 def _format_top_findings(findings: list[dict[str, Any]], limit: int = 30) -> str:
     ordered = sorted(
         findings,
@@ -75,57 +97,42 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    root = Path(args.root).resolve()
+def _resolve_runtime_paths(args: argparse.Namespace, role_root: Path, root: Path) -> dict[str, Path]:
+    return {
+        "metrics": _resolve_default_path(
+            args.metrics,
+            root / ".hippocampus" / "architect-metrics.json",
+        ),
+        "rubric": _resolve_default_path(
+            args.rubric,
+            role_root / "config" / "rubric.json",
+        ),
+        "structure": _resolve_default_path(
+            args.structure,
+            root / ".hippocampus" / "structure-prompt.md",
+        ),
+        "out": _resolve_default_path(
+            args.out,
+            root / ".hippocampus" / "architect-prompt.md",
+        ),
+    }
 
-    metrics_path = (
-        Path(args.metrics).resolve()
-        if args.metrics
-        else root / ".hippocampus" / "architect-metrics.json"
-    )
-    rubric_path = (
-        Path(args.rubric).resolve()
-        if args.rubric
-        else role_root / "config" / "rubric.json"
-    )
-    structure_path = (
-        Path(args.structure).resolve()
-        if args.structure
-        else root / ".hippocampus" / "structure-prompt.md"
-    )
-    out_path = (
-        Path(args.out).resolve()
-        if args.out
-        else root / ".hippocampus" / "architect-prompt.md"
-    )
 
-    if not metrics_path.exists():
-        raise FileNotFoundError(f"Metrics file not found: {metrics_path}")
-
-    metrics = _load_json(metrics_path)
-    system_prompt = _read(Path(args.system_prompt).resolve()).strip()
-    task_prompt = _read(Path(args.task_prompt).resolve()).strip()
-
-    structure_text = ""
-    if structure_path.exists():
-        structure_text = _read(structure_path)
-    if args.structure_chars > 0 and len(structure_text) > args.structure_chars:
-        structure_text = structure_text[: args.structure_chars] + "\n... (truncated)"
-
+def _prompt_sections(
+    *,
+    root: Path,
+    metrics: dict[str, Any],
+    rubric: dict[str, Any],
+    system_prompt: str,
+    task_prompt: str,
+    structure_text: str,
+    metrics_path: Path,
+) -> list[str]:
     scores = metrics.get("scores", {})
     summary = metrics.get("summary", {})
     findings = metrics.get("findings", [])
-    rubric: dict[str, Any] = {}
-    if rubric_path.exists():
-        try:
-            rubric = _load_json(rubric_path)
-        except Exception:
-            rubric = {}
-
     top_findings_md = _format_top_findings(findings)
-
-    out = []
+    out: list[str] = []
     out.append("# Architect Runtime Prompt")
     out.append("")
     out.append("## System Prompt")
@@ -167,6 +174,35 @@ def main() -> int:
     out.append("")
     out.append("## Full Metrics Path")
     out.append(f"- `{metrics_path}`")
+    return out
+
+
+def main() -> int:
+    args = parse_args()
+    root = Path(args.root).resolve()
+    runtime_paths = _resolve_runtime_paths(args, role_root, root)
+    metrics_path = runtime_paths["metrics"]
+    rubric_path = runtime_paths["rubric"]
+    structure_path = runtime_paths["structure"]
+    out_path = runtime_paths["out"]
+
+    if not metrics_path.exists():
+        raise FileNotFoundError(f"Metrics file not found: {metrics_path}")
+
+    metrics = _load_json(metrics_path)
+    system_prompt = _read(Path(args.system_prompt).resolve()).strip()
+    task_prompt = _read(Path(args.task_prompt).resolve()).strip()
+    structure_text = _structure_excerpt(structure_path, max_chars=args.structure_chars)
+    rubric = _optional_json(rubric_path)
+    out = _prompt_sections(
+        root=root,
+        metrics=metrics,
+        rubric=rubric,
+        system_prompt=system_prompt,
+        task_prompt=task_prompt,
+        structure_text=structure_text,
+        metrics_path=metrics_path,
+    )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(out) + "\n", encoding="utf-8")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from architec.architecture_report_compaction import (
+from architec.reporting.architecture_report_compaction import (
     compact_batches,
     compact_descriptors,
     compact_hotspots,

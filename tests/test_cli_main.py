@@ -4,6 +4,8 @@ import sys
 from types import SimpleNamespace
 
 import architec.cli as cli
+import pytest
+from architec.auth.guard import ArchitecAuthRequiredError
 
 
 def test_build_parser_accepts_trailing_path():
@@ -120,3 +122,46 @@ def test_emit_json_format_still_prints_summary_only(capsys):
     assert "Architecture snapshot" in out
     assert "Scores: overall=91.0" in out
     assert '"summary"' not in out
+
+
+def test_ensure_authorized_access_uses_existing_session(monkeypatch):
+    calls: list[str] = []
+
+    monkeypatch.setattr(cli, "require_authorized_session", lambda: calls.append("require") or {})
+    monkeypatch.setattr(cli, "auto_login", lambda: calls.append("login") or 0)
+
+    cli._ensure_authorized_access()
+
+    assert calls == ["require"]
+
+
+def test_ensure_authorized_access_auto_logins_for_interactive_use(monkeypatch, capsys):
+    calls: list[str] = []
+
+    def fake_require():
+        calls.append("require")
+        if len(calls) == 1:
+            raise ArchitecAuthRequiredError("Architec auth session is missing. Run `archi login`.")
+        return {}
+
+    monkeypatch.setattr(cli, "require_authorized_session", fake_require)
+    monkeypatch.setattr(cli, "auto_login", lambda: calls.append("login") or 0)
+    monkeypatch.setattr(cli, "_interactive_terminal", lambda: True)
+
+    cli._ensure_authorized_access()
+
+    assert calls == ["require", "login", "require"]
+    err = capsys.readouterr().err
+    assert "Authorizing this install in the browser..." in err
+
+
+def test_ensure_authorized_access_keeps_error_for_noninteractive_use(monkeypatch):
+    monkeypatch.setattr(cli, "_interactive_terminal", lambda: False)
+    monkeypatch.setattr(
+        cli,
+        "require_authorized_session",
+        lambda: (_ for _ in ()).throw(ArchitecAuthRequiredError("missing auth")),
+    )
+
+    with pytest.raises(ArchitecAuthRequiredError, match="missing auth"):
+        cli._ensure_authorized_access()

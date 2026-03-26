@@ -9,8 +9,8 @@ from architec.orchestrator import (
     _is_valid_pytest_target,
     orchestrate_analysis_modify_test,
 )
-from architec.orchestrator_test_plan import _collect_test_candidates
-from architec.llm_guard import ArchitectLLMUnavailableError
+from architec.orchestrator.orchestrator_test_plan import _collect_test_candidates
+from architec.support.llm_guard import ArchitectLLMUnavailableError
 
 
 def test_is_valid_pytest_target_filters_missing_and_non_test_files(tmp_path: Path) -> None:

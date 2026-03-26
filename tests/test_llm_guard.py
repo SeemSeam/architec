@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from architec.backend_llm import BackendLLMUnavailableError
-from architec.llm_guard import ArchitectLLMUnavailableError, guard_llm_result
+from architec.support.llm_guard import ArchitectLLMUnavailableError, guard_llm_result
 
 
 def test_guard_llm_result_raises_in_strict_mode() -> None:

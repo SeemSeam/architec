@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from architec import refresh_decider
+from architec.support import refresh_decider
 
 
 def _write(path: Path, text: str) -> None:

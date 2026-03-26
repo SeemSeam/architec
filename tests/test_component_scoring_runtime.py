@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from architec.component_scoring_runtime import (
+from architec.scoring.component_scoring_runtime import (
     build_component_entries,
     llm_payload_from_components,
     update_component_registry,
 )
-from architec.io_utils import read_json
+from architec.support.io_utils import read_json
 
 
 def test_build_component_entries_produces_sorted_scores() -> None:

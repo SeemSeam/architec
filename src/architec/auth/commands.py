@@ -1,18 +1,29 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
+import sys
 import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from .client import auth_base_url, build_browser_login_url, exchange_code, fetch_public_key, remote_status
+from .client import (
+    ArchitecAuthClientError,
+    auth_base_url,
+    build_browser_login_url,
+    exchange_code,
+    fetch_public_key,
+    remote_status,
+)
 from .device import ensure_device
 from .guard import ArchitecAuthRequiredError, auth_enforced, require_authorized_session
-from .lease import save_public_key
+from .lease import is_expired, save_public_key, trusted_public_key_pem, verify_signature
 from .store import clear_session, load_session, save_session
 from architec.version import current_cli_version
 
@@ -158,44 +169,14 @@ def _print_login_payload(payload: dict[str, Any]) -> None:
         print(f"Lease expires: {lease.get('expires_at', '')}")
 
 
-def _cmd_login(args: argparse.Namespace) -> int:
-    device = ensure_device(install_id=str(args.install_id or ""), device_name=str(args.device_name or ""))
-    install_id = str(device["install_id"])
-    device_name = str(device["device_name"])
-    client_version = current_cli_version()
-    auth_code = str(args.auth_code or "").strip()
-    if not auth_code:
-        state = f"state-{int(time.time())}-{install_id[:6]}"
-        server = _listen_server(str(args.listen_host or "127.0.0.1"), int(args.listen_port or 46319))
-        host, port = server.server_address
-        redirect_uri = f"http://{host}:{port}/callback"
-        login_url = build_browser_login_url(
-            state=state,
-            install_id=install_id,
-            device_name=device_name,
-            redirect_uri=redirect_uri,
-            app_version=client_version,
-        )
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        print(f"Open this URL to authorize the CLI:\n{login_url}")
-        if not bool(args.no_browser):
-            webbrowser.open(login_url)
-        if not server.event.wait(timeout=max(1, int(args.timeout or 180))):
-            server.shutdown()
-            raise ArchitecAuthRequiredError("Timed out waiting for browser callback.")
-        server.shutdown()
-        if server.state != state:
-            raise ArchitecAuthRequiredError("Browser callback state mismatch.")
-        if server.error:
-            if server.error == "access_denied":
-                raise ArchitecAuthRequiredError("Browser authorization was denied.")
-            raise ArchitecAuthRequiredError(f"Browser authorization failed: {server.error}")
-        auth_code = str(server.code or "").strip()
-        if not auth_code:
-            raise ArchitecAuthRequiredError("Browser callback did not include an auth code.")
-    exchanged = exchange_code(code=auth_code, install_id=install_id, app_version=client_version)
-    public_key = fetch_public_key()
+def _save_exchanged_session(
+    *,
+    exchanged: dict[str, Any],
+    install_id: str,
+    device_name: str,
+    client_version: str,
+) -> int:
+    public_key = str(exchanged.get("public_key_pem", "") or "").strip() or fetch_public_key()
     save_public_key(public_key)
     session = {
         "portal_url": auth_base_url(),
@@ -214,6 +195,180 @@ def _cmd_login(args: argparse.Namespace) -> int:
     save_session(session)
     _print_login_payload(session)
     return 0
+
+
+def _decode_local_activation_code(auth_code: str) -> dict[str, Any]:
+    raw = str(auth_code or "").strip()
+    if not raw:
+        raise ValueError("Activation code is empty")
+    prefixes = ("archi_act_", "archi_live_")
+    for prefix in prefixes:
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+            break
+    padded = raw + "=" * (-len(raw) % 4)
+    data = base64.urlsafe_b64decode(padded.encode("utf-8"))
+    payload = json.loads(data.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Activation payload must be a JSON object")
+    return payload
+
+
+def _build_session_from_local_activation(
+    *,
+    payload: dict[str, Any],
+    install_id: str,
+    device_name: str,
+    client_version: str,
+) -> dict[str, Any]:
+    signed = dict(payload)
+    signed.pop("signature", None)
+    bundle_signature = str(payload.get("signature", "") or "").strip()
+    if not bundle_signature:
+        raise ArchitecAuthClientError("Activation code signature missing.")
+    signed["signature"] = bundle_signature
+    if str(payload.get("kind", "") or "").strip() != "architec-offline-activation":
+        raise ArchitecAuthClientError("Activation code format is not supported.")
+    if str(payload.get("install_id", "") or "").strip() != install_id:
+        raise ArchitecAuthClientError("Activation code install ID does not match this local install.")
+    activation_expires_at = str(payload.get("activation_expires_at", "") or "").strip()
+    if not activation_expires_at:
+        raise ArchitecAuthClientError("Activation code expiry missing.")
+    if is_expired(activation_expires_at):
+        raise ArchitecAuthClientError("Activation code expired.")
+    if not verify_signature(signed):
+        raise ArchitecAuthClientError("Activation code signature is invalid.")
+    lease = payload.get("lease")
+    if not isinstance(lease, dict) or not verify_signature(lease):
+        raise ArchitecAuthClientError("Activation code lease signature is invalid.")
+    refresh_token = str(payload.get("refresh_token", "") or "").strip()
+    refresh_token_expires_at = str(payload.get("refresh_token_expires_at", "") or "").strip()
+    if not refresh_token or not refresh_token_expires_at:
+        raise ArchitecAuthClientError("Activation code session payload is incomplete.")
+    trusted_public_key = trusted_public_key_pem()
+    save_public_key(trusted_public_key)
+    return {
+        "portal_url": auth_base_url(),
+        "install_id": install_id,
+        "device_name": str(payload.get("device_name", "") or "").strip() or device_name,
+        "client_version": client_version,
+        "refresh_token": refresh_token,
+        "refresh_token_expires_at": refresh_token_expires_at,
+        "public_key_url": str(payload.get("public_key_url", "/api/public-key") or "").strip(),
+        "cli_min_version": str(payload.get("cli_min_version", "") or "").strip(),
+        "latest_release_url": str(payload.get("latest_release_url", "") or "").strip(),
+        "latest_linux_x64_url": str(payload.get("latest_linux_x64_url", "") or "").strip(),
+        "latest_install_script_url": str(payload.get("latest_install_script_url", "") or "").strip(),
+        "lease": lease,
+    }
+
+
+def _save_local_activation_session(
+    *,
+    auth_code: str,
+    install_id: str,
+    device_name: str,
+    client_version: str,
+) -> int:
+    payload = _decode_local_activation_code(auth_code)
+    session = _build_session_from_local_activation(
+        payload=payload,
+        install_id=install_id,
+        device_name=device_name,
+        client_version=client_version,
+    )
+    save_session(session)
+    _print_login_payload(session)
+    return 0
+
+
+def _exchange_and_save(
+    *,
+    auth_code: str,
+    install_id: str,
+    device_name: str,
+    client_version: str,
+) -> int:
+    try:
+        return _save_local_activation_session(
+            auth_code=auth_code,
+            install_id=install_id,
+            device_name=device_name,
+            client_version=client_version,
+        )
+    except (ValueError, json.JSONDecodeError, binascii.Error):
+        pass
+    exchanged = exchange_code(code=auth_code, install_id=install_id, app_version=client_version)
+    return _save_exchanged_session(
+        exchanged=exchanged,
+        install_id=install_id,
+        device_name=device_name,
+        client_version=client_version,
+    )
+
+
+def _cmd_login(args: argparse.Namespace) -> int:
+    device = ensure_device(install_id=str(args.install_id or ""), device_name=str(args.device_name or ""))
+    install_id = str(device["install_id"])
+    device_name = str(device["device_name"])
+    client_version = current_cli_version()
+    auth_code = str(args.auth_code or "").strip()
+    if auth_code:
+        return _exchange_and_save(
+            auth_code=auth_code,
+            install_id=install_id,
+            device_name=device_name,
+            client_version=client_version,
+        )
+
+    state = f"state-{int(time.time())}-{install_id[:6]}"
+    server = _listen_server(str(args.listen_host or "127.0.0.1"), int(args.listen_port or 46319))
+    host, port = server.server_address
+    redirect_uri = f"http://{host}:{port}/callback"
+    login_url = build_browser_login_url(
+        state=state,
+        install_id=install_id,
+        device_name=device_name,
+        redirect_uri=redirect_uri,
+        app_version=client_version,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"Open this URL to authorize the CLI:\n{login_url}")
+    if not bool(args.no_browser):
+        webbrowser.open(login_url)
+    if not server.event.wait(timeout=max(1, int(args.timeout or 180))):
+        server.shutdown()
+        raise ArchitecAuthRequiredError("Timed out waiting for browser callback. Run `archi login` again.")
+    server.shutdown()
+    if server.state != state:
+        raise ArchitecAuthRequiredError("Browser callback state mismatch.")
+    if server.error:
+        if server.error == "access_denied":
+            raise ArchitecAuthRequiredError("Browser authorization was denied.")
+        raise ArchitecAuthRequiredError(f"Browser authorization failed: {server.error}")
+    auth_code = str(server.code or "").strip()
+    if not auth_code:
+        raise ArchitecAuthRequiredError("Browser callback did not include an auth code.")
+    return _exchange_and_save(
+        auth_code=auth_code,
+        install_id=install_id,
+        device_name=device_name,
+        client_version=client_version,
+    )
+
+
+def auto_login() -> int:
+    args = SimpleNamespace(
+        auth_code="",
+        device_name="",
+        install_id="",
+        listen_host="127.0.0.1",
+        listen_port=46319,
+        no_browser=False,
+        timeout=180,
+    )
+    return _cmd_login(args)
 
 
 def _cmd_logout(args: argparse.Namespace) -> int:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from architec.architecture_report_sections import render_architecture_report_markdown
+from architec.reporting.architecture_report_sections import render_architecture_report_markdown
 
 
 def test_render_architecture_report_markdown_fallback_sections() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from architec.bundle_loader import inspect_bundle, require_bundle
+from architec.integration.bundle_loader import inspect_bundle, require_bundle
 
 
 def _touch(path: Path, content: str = "{}\n") -> None:

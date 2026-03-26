@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,8 @@ def _hippo_base_command(project_root: Path) -> list[str]:
     hippo_cmd = shutil.which("hippo")
     if hippo_cmd:
         return [hippo_cmd]
+    if importlib.util.find_spec("hippocampus.cli") is not None:
+        return [sys.executable, "-m", "hippocampus.cli"]
     src_root = project_root / "hippocampus" / "src"
     if src_root.exists():
         return [sys.executable, "-m", "hippocampus.cli"]

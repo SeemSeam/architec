@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import architec.component_scoring as component_scoring
-from architec.component_scoring import score_changed_components
-from architec.history_analyzer import analyze_history_and_iterate
+import architec.scoring.component_scoring as component_scoring
+from architec.scoring.component_scoring import score_changed_components
+from architec.analysis.history_analyzer import analyze_history_and_iterate
 
 
 def _write_json(path: Path, data: object) -> None:

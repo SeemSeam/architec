@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from architec.backend_llm_failover import (
+from architec.backend_llm.failover import (
     FailoverCandidate,
     FailoverPolicy,
     FailoverTracker,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import architec.architecture_report_md as report_md
+import architec.reporting.architecture_report_md as report_md
 
 
 def test_write_architecture_report_markdown_fallback(tmp_path: Path) -> None:
