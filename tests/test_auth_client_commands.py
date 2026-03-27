@@ -100,6 +100,8 @@ def test_cmd_login_saves_version_gate_metadata(monkeypatch, capsys):
     monkeypatch.setattr(commands, "save_session", lambda payload: saved_session.update(payload))
     args = SimpleNamespace(
         auth_code="issued-code",
+        browser=False,
+        activation_code=False,
         device_name="",
         install_id="",
         listen_host="127.0.0.1",
@@ -126,6 +128,9 @@ def test_cmd_login_waits_for_browser_callback_without_manual_code_prompt(monkeyp
     opened_urls: list[str] = []
     observed_exchange: dict[str, str] = {}
 
+    monkeypatch.setattr(commands, "_preferred_login_method", lambda: "")
+    monkeypatch.setattr(commands, "_interactive_terminal", lambda: False)
+    monkeypatch.setattr(commands, "_save_preferred_login_method", lambda method: None)
     monkeypatch.setattr(commands, "current_cli_version", lambda: "0.1.0")
     monkeypatch.setattr(commands.time, "time", lambda: 1234567890)
     monkeypatch.setattr(
@@ -198,6 +203,8 @@ def test_cmd_login_waits_for_browser_callback_without_manual_code_prompt(monkeyp
 
     args = SimpleNamespace(
         auth_code="",
+        browser=False,
+        activation_code=False,
         device_name="",
         install_id="",
         listen_host="127.0.0.1",
@@ -269,6 +276,8 @@ def test_cmd_login_accepts_self_contained_activation_code(monkeypatch, capsys):
 
     args = SimpleNamespace(
         auth_code=auth_code,
+        browser=False,
+        activation_code=False,
         device_name="",
         install_id="",
         listen_host="127.0.0.1",
@@ -288,6 +297,9 @@ def test_cmd_login_accepts_self_contained_activation_code(monkeypatch, capsys):
 
 
 def test_cmd_login_raises_when_browser_callback_times_out(monkeypatch):
+    monkeypatch.setattr(commands, "_preferred_login_method", lambda: "")
+    monkeypatch.setattr(commands, "_interactive_terminal", lambda: False)
+    monkeypatch.setattr(commands, "_save_preferred_login_method", lambda method: None)
     monkeypatch.setattr(commands, "current_cli_version", lambda: "0.1.0")
     monkeypatch.setattr(
         commands,
@@ -335,6 +347,8 @@ def test_cmd_login_raises_when_browser_callback_times_out(monkeypatch):
 
     args = SimpleNamespace(
         auth_code="",
+        browser=False,
+        activation_code=False,
         device_name="",
         install_id="",
         listen_host="127.0.0.1",
@@ -347,6 +361,88 @@ def test_cmd_login_raises_when_browser_callback_times_out(monkeypatch):
         commands._cmd_login(args)
 
     assert fake_server.shutdown_called is True
+
+
+def test_resolve_login_method_uses_saved_preference(monkeypatch):
+    monkeypatch.setattr(commands, "_preferred_login_method", lambda: commands.LOGIN_METHOD_ACTIVATION_CODE)
+    monkeypatch.setattr(commands, "_interactive_terminal", lambda: False)
+
+    method = commands._resolve_login_method(
+        SimpleNamespace(browser=False, activation_code=False)
+    )
+
+    assert method == commands.LOGIN_METHOD_ACTIVATION_CODE
+
+
+def test_cmd_login_prompts_for_activation_code_when_selected(monkeypatch, capsys):
+    saved_session: dict[str, object] = {}
+    saved_public_key: list[str] = []
+
+    monkeypatch.setattr(commands, "_interactive_terminal", lambda: True)
+    monkeypatch.setattr(commands, "_preferred_login_method", lambda: commands.LOGIN_METHOD_ACTIVATION_CODE)
+    monkeypatch.setattr(commands, "current_cli_version", lambda: "0.1.0")
+    monkeypatch.setattr(
+        commands,
+        "ensure_device",
+        lambda *, install_id, device_name: {
+            "install_id": install_id or "install-demo",
+            "device_name": device_name or "Demo Device",
+        },
+    )
+    monkeypatch.setattr(commands, "trusted_public_key_pem", lambda: "-----BEGIN PUBLIC KEY-----\ndemo\n-----END PUBLIC KEY-----")
+    monkeypatch.setattr(commands, "save_public_key", lambda pem: saved_public_key.append(pem))
+    monkeypatch.setattr(commands, "save_session", lambda payload: saved_session.update(payload))
+    monkeypatch.setattr(commands, "load_auth_preferences", lambda: {"login_method": commands.LOGIN_METHOD_ACTIVATION_CODE})
+    monkeypatch.setattr(commands, "save_auth_preferences", lambda payload: None)
+    monkeypatch.setattr(
+        commands,
+        "verify_signature",
+        lambda payload: str(payload.get("signature", "") or "") in {"bundle-signature", "lease-signature"},
+    )
+
+    payload = {
+        "kind": "architec-offline-activation",
+        "version": 1,
+        "activation_expires_at": "2099-01-01T00:00:00+00:00",
+        "install_id": "install-demo",
+        "device_name": "Demo Device",
+        "refresh_token": "refresh-token",
+        "refresh_token_expires_at": "2099-02-01T00:00:00+00:00",
+        "public_key_url": "/api/cli/public-key",
+        "cli_min_version": "0.1.0",
+        "client_version": "0.1.0",
+        "latest_release_url": "https://example.com/releases/latest",
+        "latest_linux_x64_url": "https://example.com/archi-linux-x86_64.tar.gz",
+        "latest_install_script_url": "https://example.com/install_prod.sh",
+        "lease": {
+            "email": "demo@example.com",
+            "plan": "standard",
+            "expires_at": "2099-01-02T00:00:00+00:00",
+            "signature": "lease-signature",
+        },
+        "signature": "bundle-signature",
+    }
+    auth_code = "archi_act_" + base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8").rstrip("=")
+    monkeypatch.setattr("builtins.input", lambda prompt="": auth_code)
+
+    args = SimpleNamespace(
+        auth_code="",
+        browser=False,
+        activation_code=False,
+        device_name="",
+        install_id="",
+        listen_host="127.0.0.1",
+        listen_port=46319,
+        no_browser=True,
+        timeout=30,
+    )
+
+    assert commands._cmd_login(args) == 0
+    assert saved_session["refresh_token"] == "refresh-token"
+    assert saved_public_key == ["-----BEGIN PUBLIC KEY-----\ndemo\n-----END PUBLIC KEY-----"]
+    out = capsys.readouterr().out
+    assert "Machine code (Install ID): install-demo" in out
+    assert "Activation code:" not in out
 
 
 def test_require_authorized_session_refresh_passes_cli_version(monkeypatch):

@@ -4,6 +4,7 @@ import argparse
 import base64
 import binascii
 import json
+import os
 import sys
 import threading
 import time
@@ -24,11 +25,14 @@ from .client import (
 from .device import ensure_device
 from .guard import ArchitecAuthRequiredError, auth_enforced, require_authorized_session
 from .lease import is_expired, save_public_key, trusted_public_key_pem, verify_signature
-from .store import clear_session, load_session, save_session
+from .store import clear_session, load_auth_preferences, load_session, save_auth_preferences, save_session
 from architec.version import current_cli_version
 
 
 AUTH_COMMANDS = {"login", "logout", "status", "whoami", "devices"}
+LOGIN_METHOD_BROWSER = "browser"
+LOGIN_METHOD_ACTIVATION_CODE = "activation_code"
+LOGIN_METHODS = {LOGIN_METHOD_BROWSER, LOGIN_METHOD_ACTIVATION_CODE}
 
 
 def _build_auth_parser() -> argparse.ArgumentParser:
@@ -37,6 +41,9 @@ def _build_auth_parser() -> argparse.ArgumentParser:
 
     login = subparsers.add_parser("login", help="authenticate this local install")
     login.add_argument("--auth-code", default="", help="exchange a pre-issued auth code directly")
+    method_group = login.add_mutually_exclusive_group()
+    method_group.add_argument("--browser", action="store_true", help="force browser authorization for this login")
+    method_group.add_argument("--activation-code", action="store_true", help="force manual activation-code login for this login")
     login.add_argument("--device-name", default="", help="override device display name")
     login.add_argument("--install-id", default="", help="override local install id")
     login.add_argument("--listen-host", default="127.0.0.1", help="callback host")
@@ -93,6 +100,67 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
         del format, args
+
+
+def _interactive_terminal() -> bool:
+    try:
+        return bool(sys.stdin.isatty() and sys.stdout.isatty())
+    except Exception:
+        return False
+
+
+def _preferred_login_method() -> str:
+    override = str(os.environ.get("ARCHITEC_LOGIN_METHOD", "") or "").strip().lower()
+    if override in LOGIN_METHODS:
+        return override
+    preferences = load_auth_preferences()
+    method = str(preferences.get("login_method", "") or "").strip().lower()
+    if method in LOGIN_METHODS:
+        return method
+    return ""
+
+
+def _save_preferred_login_method(method: str) -> None:
+    method_text = str(method or "").strip().lower()
+    if method_text not in LOGIN_METHODS:
+        return
+    preferences = load_auth_preferences()
+    preferences["login_method"] = method_text
+    save_auth_preferences(preferences)
+
+
+def _prompt_login_method(default_method: str) -> str:
+    if not _interactive_terminal():
+        return default_method or LOGIN_METHOD_BROWSER
+    default_choice = "2" if default_method == LOGIN_METHOD_ACTIVATION_CODE else "1"
+    default_label = "Activation code" if default_choice == "2" else "Browser authorization"
+    print("Choose activation method:")
+    print("  1. Browser authorization")
+    print("  2. Activation code")
+    while True:
+        raw = input(f"Selection [{default_choice}] ({default_label}): ").strip().lower()
+        if not raw:
+            return default_method or LOGIN_METHOD_BROWSER
+        if raw in {"1", "browser", "web"}:
+            return LOGIN_METHOD_BROWSER
+        if raw in {"2", "activation", "activation_code", "code", "manual"}:
+            return LOGIN_METHOD_ACTIVATION_CODE
+        print("Invalid selection. Enter 1 for browser authorization or 2 for activation code.")
+
+
+def _resolve_login_method(args: argparse.Namespace) -> str:
+    if bool(getattr(args, "browser", False)):
+        return LOGIN_METHOD_BROWSER
+    if bool(getattr(args, "activation_code", False)):
+        return LOGIN_METHOD_ACTIVATION_CODE
+    preferred = _preferred_login_method()
+    if preferred:
+        return preferred
+    if _interactive_terminal():
+        selected = _prompt_login_method(LOGIN_METHOD_BROWSER)
+        _save_preferred_login_method(selected)
+        return selected
+    return LOGIN_METHOD_BROWSER
 
 
 def _recommended_upgrade_command(payload: dict[str, Any]) -> str:
@@ -307,20 +375,26 @@ def _exchange_and_save(
     )
 
 
-def _cmd_login(args: argparse.Namespace) -> int:
-    device = ensure_device(install_id=str(args.install_id or ""), device_name=str(args.device_name or ""))
-    install_id = str(device["install_id"])
-    device_name = str(device["device_name"])
-    client_version = current_cli_version()
-    auth_code = str(args.auth_code or "").strip()
-    if auth_code:
-        return _exchange_and_save(
-            auth_code=auth_code,
-            install_id=install_id,
-            device_name=device_name,
-            client_version=client_version,
+def _prompt_activation_code(*, install_id: str, device_name: str) -> str:
+    print(f"Machine code (Install ID): {install_id}")
+    print(f"Device: {device_name}")
+    print(f"Open {auth_base_url()}/account and generate an activation code for this machine.")
+    auth_code = input("Activation code: ").strip()
+    if not auth_code:
+        raise ArchitecAuthRequiredError(
+            "Activation code is required for manual activation. Run `archi login --browser` to use website authorization."
         )
+    return auth_code
 
+
+def _cmd_login_with_browser(
+    *,
+    install_id: str,
+    device_name: str,
+    client_version: str,
+    args: argparse.Namespace,
+) -> int:
+    _save_preferred_login_method(LOGIN_METHOD_BROWSER)
     state = f"state-{int(time.time())}-{install_id[:6]}"
     server = _listen_server(str(args.listen_host or "127.0.0.1"), int(args.listen_port or 46319))
     host, port = server.server_address
@@ -358,9 +432,63 @@ def _cmd_login(args: argparse.Namespace) -> int:
     )
 
 
+def _cmd_login_with_activation_code(
+    *,
+    install_id: str,
+    device_name: str,
+    client_version: str,
+    args: argparse.Namespace,
+) -> int:
+    _save_preferred_login_method(LOGIN_METHOD_ACTIVATION_CODE)
+    auth_code = str(args.auth_code or "").strip()
+    if not auth_code:
+        if not _interactive_terminal():
+            raise ArchitecAuthRequiredError(
+                "Activation code login requires --auth-code in non-interactive mode."
+            )
+        auth_code = _prompt_activation_code(install_id=install_id, device_name=device_name)
+    return _exchange_and_save(
+        auth_code=auth_code,
+        install_id=install_id,
+        device_name=device_name,
+        client_version=client_version,
+    )
+
+
+def _cmd_login(args: argparse.Namespace) -> int:
+    device = ensure_device(install_id=str(args.install_id or ""), device_name=str(args.device_name or ""))
+    install_id = str(device["install_id"])
+    device_name = str(device["device_name"])
+    client_version = current_cli_version()
+    auth_code = str(args.auth_code or "").strip()
+    if auth_code:
+        return _exchange_and_save(
+            auth_code=auth_code,
+            install_id=install_id,
+            device_name=device_name,
+            client_version=client_version,
+        )
+    method = _resolve_login_method(args)
+    if method == LOGIN_METHOD_ACTIVATION_CODE:
+        return _cmd_login_with_activation_code(
+            install_id=install_id,
+            device_name=device_name,
+            client_version=client_version,
+            args=args,
+        )
+    return _cmd_login_with_browser(
+        install_id=install_id,
+        device_name=device_name,
+        client_version=client_version,
+        args=args,
+    )
+
+
 def auto_login() -> int:
     args = SimpleNamespace(
         auth_code="",
+        browser=False,
+        activation_code=False,
         device_name="",
         install_id="",
         listen_host="127.0.0.1",

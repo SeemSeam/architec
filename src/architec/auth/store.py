@@ -44,6 +44,10 @@ def public_key_file() -> Path:
     return ensure_auth_state_dir() / "portal-public-key.pem"
 
 
+def auth_preferences_file() -> Path:
+    return ensure_auth_state_dir() / "preferences.json"
+
+
 def load_session() -> dict[str, Any]:
     ensure_auth_state_dir()
     payload = read_json(session_file(), {})
@@ -52,6 +56,18 @@ def load_session() -> dict[str, Any]:
 
 def save_session(payload: dict[str, Any]) -> None:
     path = session_file()
+    write_json(path, payload)
+    protect_auth_file(path)
+
+
+def load_auth_preferences() -> dict[str, Any]:
+    ensure_auth_state_dir()
+    payload = read_json(auth_preferences_file(), {})
+    return payload if isinstance(payload, dict) else {}
+
+
+def save_auth_preferences(payload: dict[str, Any]) -> None:
+    path = auth_preferences_file()
     write_json(path, payload)
     protect_auth_file(path)
 
