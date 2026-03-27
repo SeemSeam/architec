@@ -14,6 +14,7 @@ def llm_orchestration_payload(
     question: str,
     batches: list[dict[str, Any]],
     test_commands: list[str],
+    test_command_specs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "goal": goal,
@@ -28,6 +29,7 @@ def llm_orchestration_payload(
             for batch in batches[:4]
         ],
         "test_commands": test_commands[:3],
+        "test_command_specs": (test_command_specs or [])[:3],
     }
 
 
@@ -48,6 +50,7 @@ def build_orchestration_report(
     batches: list[dict[str, Any]],
     tests: list[str],
     test_commands: list[str],
+    test_command_specs: list[dict[str, Any]],
     run_tests: bool,
     test_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -73,6 +76,7 @@ def build_orchestration_report(
         "test_plan": {
             "selected_tests": tests,
             "commands": test_commands,
+            "command_specs": test_command_specs,
             "executed": bool(run_tests),
             "results": test_results,
         },

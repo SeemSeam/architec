@@ -39,7 +39,9 @@ python3 --version
 如果你要使用 `--refresh-from-hippo`，则必须满足以下任一条件：
 
 - `hippo` 已在 `PATH` 中
-- 当前项目根目录下存在 `hippocampus/src`，可通过 `python -m hippocampus.cli` 调用
+- 当前激活的 Python 环境里已经安装 `hippocampus`，可通过 `python -m hippocampus.cli` 调用
+
+不再支持把项目内或同级目录中的 `hippocampus/src` 当作运行时回退来源。真实安装和验收必须基于已发布安装物。
 
 ## 3. 安装
 
@@ -122,6 +124,14 @@ archi --help
 - `archi-goal`
 - `archi-advice`
 
+默认同步目录：
+
+- Codex: `~/.codex/skills`
+- Claude: `~/.claude/skills`
+
+安装器优先使用 release 自带的 `architec-skills.tar.gz` 同步 skills；只有 release
+资产不可用时，才会回退到源码仓库归档。
+
 职责划分：
 
 - `archi-full`
@@ -167,6 +177,70 @@ archi --help
   `Goal -> Recommended Placement -> Risks -> Next Moves`
 - `archi-advice`
   `Current Position -> Immediate -> Next -> Later`
+
+## 3.2 修改后建议测试
+
+当你使用 `archi` 的 orchestration / modify-test 流程时，输出里的 `test_plan`
+现在会同时给出两类信息：
+
+- `commands`
+  可直接复制执行的测试命令字符串
+- `command_specs`
+  结构化元信息，包含 `language`、`runner`、`workspace`、`tests`
+
+这意味着你不仅能看到“要跑什么命令”，还能直接知道这条命令属于哪种语言生态、在哪个工作目录下执行，以及它覆盖了哪些测试文件。
+
+当前支持的测试 runner 识别包括：
+
+- Python: `pytest`
+- JavaScript / TypeScript: `vitest`、`jest`，否则回退到 package test
+- Go: `go test`
+- Rust: `cargo test`
+- Java / Kotlin: `gradle` 或 `maven`
+- C / C++ / Fortran: `ctest`、`fpm test`、`meson test`、`make test`
+- C#: `dotnet test`
+- Ruby: `rspec` 或 `ruby -Itest`
+- PHP: `phpunit`
+- Dart / Flutter: `dart test` 或 `flutter test`
+
+典型输出示例：
+
+```json
+{
+  "test_plan": {
+    "selected_tests": [
+      "frontend/tests/app.spec.ts",
+      "native/tests/solver_test.f90"
+    ],
+    "commands": [
+      "cd /repo/frontend && npx vitest run tests/app.spec.ts",
+      "cd /repo/native && ctest --output-on-failure -R solver_test"
+    ],
+    "command_specs": [
+      {
+        "language": "javascript/typescript",
+        "runner": "vitest",
+        "workspace": "/repo/frontend",
+        "command": "cd /repo/frontend && npx vitest run tests/app.spec.ts",
+        "tests": ["tests/app.spec.ts"]
+      },
+      {
+        "language": "c/cpp/fortran",
+        "runner": "ctest",
+        "workspace": "/repo/native",
+        "command": "cd /repo/native && ctest --output-on-failure -R solver_test",
+        "tests": ["tests/solver_test.f90"]
+      }
+    ]
+  }
+}
+```
+
+需要注意：
+
+- `archi` 现在能更稳地识别多语言测试文件，但它仍然是在“建议最合理命令”，不是保证所有项目的测试入口都完全标准化
+- 对于多工作区 monorepo、定制测试脚本、私有构建包装器，仍然建议人工复核生成命令
+- `command_specs` 适合后续给 skill、脚本包装器或控制面板继续消费
 
 ## 4. LLM 配置
 
@@ -481,8 +555,8 @@ architec --refresh-from-hippo .
 
 处理方式：
 
-- 安装 Hippo CLI 并加入 `PATH`
-- 或确保项目内存在 `hippocampus/src`
+- 重新执行网站安装器，确保已安装发布版 `hippo`
+- 或确认当前 Python 环境里已安装 `hippocampus`
 
 ## 12. 当前实现边界
 

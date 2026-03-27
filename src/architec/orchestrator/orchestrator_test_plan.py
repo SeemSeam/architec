@@ -32,6 +32,15 @@ class TestTarget:
     workspace: Path
 
 
+@dataclass(frozen=True)
+class TestCommandSpec:
+    language: str
+    runner: str
+    workspace: str
+    command: str
+    tests: list[str]
+
+
 def _is_valid_pytest_target(root: Path, rel_path: str) -> bool:
     target = _classify_test_target(root, rel_path)
     if not target or target.kind != "python":
@@ -291,6 +300,21 @@ def _node_runner(workspace: Path) -> tuple[str, str]:
     return "package-test", "npm test"
 
 
+def _runner_language(kind: str) -> str:
+    return {
+        "python": "python",
+        "node": "javascript/typescript",
+        "go": "go",
+        "rust": "rust",
+        "jvm": "java/kotlin",
+        "native": "c/cpp/fortran",
+        "dotnet": "csharp",
+        "ruby": "ruby",
+        "php": "php",
+        "dart": "dart/flutter",
+    }.get(kind, kind)
+
+
 def _cargo_command_for_tests(rel_tests: list[str]) -> str:
     test_bins = []
     for path in rel_tests:
@@ -374,40 +398,68 @@ def _dart_command(workspace: Path, rel_tests: list[str]) -> str:
 
 
 def _build_commands_for_group(root: Path, workspace: Path, kind: str, tests: list[str]) -> list[str]:
+    return [spec.command for spec in _build_command_specs_for_group(root, workspace, kind, tests)]
+
+
+def _build_command_specs_for_group(root: Path, workspace: Path, kind: str, tests: list[str]) -> list[TestCommandSpec]:
     rel_tests = _relative_group_tests(root, workspace, tests)
+    language = _runner_language(kind)
     if kind == "python":
         chunk = " ".join(shlex.quote(p) for p in rel_tests)
         py = _build_pythonpath(root, workspace)
         if py:
-            return [f"cd {shlex.quote(str(workspace))} && {py} pytest -q {chunk}"]
-        return [f"cd {shlex.quote(str(workspace))} && pytest -q {chunk}"]
+            return [TestCommandSpec(language=language, runner="pytest", workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {py} pytest -q {chunk}", tests=rel_tests)]
+        return [TestCommandSpec(language=language, runner="pytest", workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && pytest -q {chunk}", tests=rel_tests)]
     if kind == "node":
-        _runner_name, base = _node_runner(workspace)
+        runner_name, base = _node_runner(workspace)
         chunk = " ".join(shlex.quote(p) for p in rel_tests)
         if base.endswith("test"):
-            return [f"cd {shlex.quote(str(workspace))} && {base}"]
-        return [f"cd {shlex.quote(str(workspace))} && {base} {chunk}".strip()]
+            return [TestCommandSpec(language=language, runner=runner_name, workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {base}", tests=rel_tests)]
+        return [TestCommandSpec(language=language, runner=runner_name, workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {base} {chunk}".strip(), tests=rel_tests)]
     if kind == "go":
         dirs = sorted({str(Path(path).parent) for path in rel_tests})[:8]
-        return [f"cd {shlex.quote(str(workspace))} && go test ./{shlex.quote(d)}" for d in dirs]
+        return [
+            TestCommandSpec(
+                language=language,
+                runner="go test",
+                workspace=str(workspace),
+                command=f"cd {shlex.quote(str(workspace))} && go test ./{shlex.quote(d)}",
+                tests=[path for path in rel_tests if str(Path(path).parent) == d],
+            )
+            for d in dirs
+        ]
     if kind == "rust":
-        return [f"cd {shlex.quote(str(workspace))} && {_cargo_command_for_tests(rel_tests)}"]
+        return [TestCommandSpec(language=language, runner="cargo test", workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {_cargo_command_for_tests(rel_tests)}", tests=rel_tests)]
     if kind == "jvm":
-        return [f"cd {shlex.quote(str(workspace))} && {_jvm_command(workspace, rel_tests)}"]
+        command = _jvm_command(workspace, rel_tests)
+        runner = "gradle" if "gradlew" in command or "gradle" in command else "maven"
+        return [TestCommandSpec(language=language, runner=runner, workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {command}", tests=rel_tests)]
     if kind == "native":
-        return [f"cd {shlex.quote(str(workspace))} && {_native_command(workspace, rel_tests)}"]
+        command = _native_command(workspace, rel_tests)
+        runner = command.split()[0]
+        return [TestCommandSpec(language=language, runner=runner, workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {command}", tests=rel_tests)]
     if kind == "dotnet":
-        return [f"cd {shlex.quote(str(workspace))} && {_dotnet_command(workspace, rel_tests)}"]
+        return [TestCommandSpec(language=language, runner="dotnet test", workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {_dotnet_command(workspace, rel_tests)}", tests=rel_tests)]
     if kind == "ruby":
-        return [f"cd {shlex.quote(str(workspace))} && {cmd}" for cmd in _ruby_commands(rel_tests)]
+        specs: list[TestCommandSpec] = []
+        for cmd in _ruby_commands(rel_tests):
+            runner = "rspec" if "rspec" in cmd else "ruby"
+            specs.append(TestCommandSpec(language=language, runner=runner, workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {cmd}", tests=rel_tests))
+        return specs
     if kind == "php":
-        return [f"cd {shlex.quote(str(workspace))} && {_php_command(workspace, rel_tests)}"]
+        return [TestCommandSpec(language=language, runner="phpunit", workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {_php_command(workspace, rel_tests)}", tests=rel_tests)]
     if kind == "dart":
-        return [f"cd {shlex.quote(str(workspace))} && {_dart_command(workspace, rel_tests)}"]
+        command = _dart_command(workspace, rel_tests)
+        runner = "flutter test" if command.startswith("flutter ") else "dart test"
+        return [TestCommandSpec(language=language, runner=runner, workspace=str(workspace), command=f"cd {shlex.quote(str(workspace))} && {command}", tests=rel_tests)]
     return []
 
 
 def _build_test_commands(root: Path, tests: list[str]) -> list[str]:
+    return [spec["command"] for spec in _build_test_command_specs(root, tests)]
+
+
+def _build_test_command_specs(root: Path, tests: list[str]) -> list[dict[str, Any]]:
     if not tests:
         return []
     valid_tests = [t for t in tests if _classify_test_target(root, t)]
@@ -415,10 +467,10 @@ def _build_test_commands(root: Path, tests: list[str]) -> list[str]:
         return []
 
     grouped = _group_tests_by_workspace_and_kind(root, valid_tests)
-    cmds: list[str] = []
+    specs: list[dict[str, Any]] = []
     for (workspace, kind), group_tests in sorted(grouped.items(), key=lambda kv: (str(kv[0][0]), kv[0][1])):
-        cmds.extend(_build_commands_for_group(root, workspace, kind, group_tests))
-    return cmds
+        specs.extend(spec.__dict__ for spec in _build_command_specs_for_group(root, workspace, kind, group_tests))
+    return specs
 
 
 def _run_test_commands(commands: list[str]) -> list[dict[str, Any]]:

@@ -31,6 +31,7 @@ from .orchestrator_report import (
     runtime_summary,
 )
 from .orchestrator_test_plan import (
+    _build_test_command_specs,
     _build_test_commands,
     _collect_test_candidates,
     _is_valid_pytest_target,
@@ -89,7 +90,7 @@ def orchestrate_analysis_modify_test(
         qa_component=str(qa.get("component", "") or ""),
         goal=goal,
     )
-    tests, test_commands, test_results = test_plan(
+    tests, test_commands, test_command_specs, test_results = test_plan(
         snapshot=snapshot,
         batches=batches,
         root=root,
@@ -97,6 +98,7 @@ def orchestrate_analysis_modify_test(
         timings=timings,
         collect_tests=_collect_test_candidates,
         build_commands=_build_test_commands,
+        build_command_specs=_build_test_command_specs,
         run_commands=_run_test_commands,
     )
     report = build_orchestration_report(
@@ -115,6 +117,7 @@ def orchestrate_analysis_modify_test(
         batches=batches,
         tests=tests,
         test_commands=test_commands,
+        test_command_specs=test_command_specs,
         run_tests=run_tests,
         test_results=test_results,
     )
@@ -124,6 +127,7 @@ def orchestrate_analysis_modify_test(
         question=question,
         batches=batches,
         test_commands=test_commands,
+        test_command_specs=test_command_specs,
         llm_enabled=llm_enabled,
         report=report,
         timings=timings,
@@ -177,6 +181,7 @@ __all__ = [
     "HOTSPOT_DIGEST_PATH",
     "ORCHESTRATION_REPORT_PATH",
     "_build_test_commands",
+    "_build_test_command_specs",
     "_collect_test_candidates",
     "_is_valid_pytest_target",
     "_run_test_commands",

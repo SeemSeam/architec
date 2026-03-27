@@ -5,10 +5,12 @@ from pathlib import Path
 import pytest
 
 from architec.orchestrator import (
+    _build_test_command_specs,
     _build_test_commands,
     _is_valid_pytest_target,
     orchestrate_analysis_modify_test,
 )
+from architec.orchestrator.orchestrator_report import llm_orchestration_payload
 from architec.orchestrator.orchestrator_test_plan import _collect_test_candidates, _is_test_path
 from architec.support.llm_guard import ArchitectLLMUnavailableError
 
@@ -180,6 +182,58 @@ def test_build_test_commands_supports_jvm_and_dotnet(tmp_path: Path) -> None:
     assert "dotnet test --filter" in rendered
 
 
+def test_build_test_command_specs_include_language_runner_and_workspace(tmp_path: Path) -> None:
+    frontend = tmp_path / "frontend"
+    (frontend / "tests").mkdir(parents=True)
+    (frontend / "package.json").write_text('{"devDependencies":{"vitest":"^1.0.0"}}', encoding="utf-8")
+    (frontend / "tests" / "app.spec.ts").write_text("it('x', () => {})\n", encoding="utf-8")
+
+    specs = _build_test_command_specs(tmp_path, ["frontend/tests/app.spec.ts"])
+
+    assert len(specs) == 1
+    assert specs[0]["language"] == "javascript/typescript"
+    assert specs[0]["runner"] == "vitest"
+    assert specs[0]["workspace"] == str(frontend)
+    assert specs[0]["tests"] == ["tests/app.spec.ts"]
+    assert "vitest run" in specs[0]["command"]
+
+
+def test_llm_orchestration_payload_keeps_backward_commands_and_structured_specs() -> None:
+    payload = llm_orchestration_payload(
+        goal="stabilize service boundaries",
+        question="what should be tested first?",
+        batches=[
+            {
+                "batch": 1,
+                "component": "frontend:checkout",
+                "priority": "high",
+                "focus_files": ["frontend/src/checkout.ts", "frontend/src/cart.ts"],
+            }
+        ],
+        test_commands=["cd /repo/frontend && npx vitest run tests/app.spec.ts"],
+        test_command_specs=[
+            {
+                "language": "javascript/typescript",
+                "runner": "vitest",
+                "workspace": "/repo/frontend",
+                "command": "cd /repo/frontend && npx vitest run tests/app.spec.ts",
+                "tests": ["tests/app.spec.ts"],
+            }
+        ],
+    )
+
+    assert payload["test_commands"] == ["cd /repo/frontend && npx vitest run tests/app.spec.ts"]
+    assert payload["test_command_specs"] == [
+        {
+            "language": "javascript/typescript",
+            "runner": "vitest",
+            "workspace": "/repo/frontend",
+            "command": "cd /repo/frontend && npx vitest run tests/app.spec.ts",
+            "tests": ["tests/app.spec.ts"],
+        }
+    ]
+
+
 def test_orchestrate_emits_minimal_hotspot_artifact(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -244,6 +298,8 @@ def test_orchestrate_emits_minimal_hotspot_artifact(
     )
     monkeypatch.setattr("architec.orchestrator._collect_test_candidates", lambda *_a, **_k: [])
     monkeypatch.setattr("architec.orchestrator._build_test_commands", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
 
     out = orchestrate_analysis_modify_test(
         tmp_path,
@@ -260,6 +316,7 @@ def test_orchestrate_emits_minimal_hotspot_artifact(
     assert out["change_batches"][0]["why"]["layer_role"] == "orchestration"
     assert out["change_batches"][0]["why"]["descriptor_confidence"] == 0.88
     assert "llm-proxy:gateway" in out["change_batches"][0]["why"]["neighbor_components"]
+    assert out["test_plan"]["command_specs"] == []
     digest_path = tmp_path / ".architec" / "architec-hotspots-topk.json"
     report_path = tmp_path / ".architec" / "architec-architecture-report.md"
     assert digest_path.exists()
@@ -295,6 +352,8 @@ def test_orchestrate_hard_fails_when_llm_enhancement_raises(
     )
     monkeypatch.setattr("architec.orchestrator._collect_test_candidates", lambda *_a, **_k: [])
     monkeypatch.setattr("architec.orchestrator._build_test_commands", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
     monkeypatch.setattr(
         "architec.orchestrator._llm_orchestration_enhancement",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("llm blocked")),
@@ -367,6 +426,8 @@ def test_orchestrate_falls_back_to_descriptor_component_when_feature_targets_emp
     )
     monkeypatch.setattr("architec.orchestrator._collect_test_candidates", lambda *_a, **_k: [])
     monkeypatch.setattr("architec.orchestrator._build_test_commands", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
 
     out = orchestrate_analysis_modify_test(
         tmp_path,
@@ -439,6 +500,7 @@ def test_orchestrate_generic_goal_skips_gateway_infra_fallback(
     )
     monkeypatch.setattr("architec.orchestrator._collect_test_candidates", lambda *_a, **_k: [])
     monkeypatch.setattr("architec.orchestrator._build_test_commands", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
 
     out = orchestrate_analysis_modify_test(
         tmp_path,
@@ -522,6 +584,7 @@ def test_orchestrate_generic_goal_skips_tests_in_feature_targets(
     )
     monkeypatch.setattr("architec.orchestrator._collect_test_candidates", lambda *_a, **_k: [])
     monkeypatch.setattr("architec.orchestrator._build_test_commands", lambda *_a, **_k: [])
+    monkeypatch.setattr("architec.orchestrator._build_test_command_specs", lambda *_a, **_k: [])
 
     out = orchestrate_analysis_modify_test(
         tmp_path,

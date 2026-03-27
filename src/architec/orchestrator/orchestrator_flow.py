@@ -81,9 +81,11 @@ def test_plan(
     timings: dict[str, Any],
     collect_tests,
     build_commands,
+    build_command_specs,
     run_commands,
-) -> tuple[list[str], list[str], list[dict[str, Any]]]:
+) -> tuple[list[str], list[str], list[dict[str, Any]], list[dict[str, Any]]]:
     tests = collect_tests(snapshot, batches)
+    test_command_specs = build_command_specs(root, tests)
     test_commands = build_commands(root, tests)
     test_results: list[dict[str, Any]] = []
     if run_tests and test_commands:
@@ -91,9 +93,9 @@ def test_plan(
             "tests",
             lambda: run_commands(test_commands),
         )
-        return tests, test_commands, test_results
+        return tests, test_commands, test_command_specs, test_results
     timings["tests"] = {"label": "tests", "elapsed_sec": 0.0, "ok": True}
-    return tests, test_commands, test_results
+    return tests, test_commands, test_command_specs, test_results
 
 
 def apply_llm_orchestration(
@@ -103,6 +105,7 @@ def apply_llm_orchestration(
     question: str,
     batches: list[dict[str, Any]],
     test_commands: list[str],
+    test_command_specs: list[dict[str, Any]],
     llm_enabled: bool,
     report: dict[str, Any],
     timings: dict[str, Any],
@@ -122,6 +125,7 @@ def apply_llm_orchestration(
         question=question,
         batches=batches,
         test_commands=test_commands,
+        test_command_specs=test_command_specs,
     )
     llm_part, timings["llm_orchestration"] = timed_step(
         "llm_orchestration",
