@@ -9,7 +9,7 @@ from architec.orchestrator import (
     _is_valid_pytest_target,
     orchestrate_analysis_modify_test,
 )
-from architec.orchestrator.orchestrator_test_plan import _collect_test_candidates
+from architec.orchestrator.orchestrator_test_plan import _collect_test_candidates, _is_test_path
 from architec.support.llm_guard import ArchitectLLMUnavailableError
 
 
@@ -114,6 +114,70 @@ def test_collect_test_candidates_generic_component_match(tmp_path: Path) -> None
     )
     assert "service/tests/test_checkout_api.py" in selected
     assert "worker/tests/test_jobs_runner.py" not in selected
+
+
+def test_is_test_path_covers_multilanguage_patterns() -> None:
+    assert _is_test_path("frontend/src/app.spec.ts") is True
+    assert _is_test_path("backend/tests/api_test.go") is True
+    assert _is_test_path("pkg/tests/vector_test.f90") is True
+    assert _is_test_path("src/main.py") is False
+
+
+def test_build_test_commands_supports_node_go_rust_and_native(tmp_path: Path) -> None:
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    rustsvc = tmp_path / "rustsvc"
+    native = tmp_path / "native"
+
+    (frontend / "src").mkdir(parents=True)
+    (frontend / "tests").mkdir(parents=True)
+    (backend / "pkg").mkdir(parents=True)
+    (backend / "tests").mkdir(parents=True)
+    (rustsvc / "tests").mkdir(parents=True)
+    (native / "tests").mkdir(parents=True)
+
+    (frontend / "package.json").write_text('{"devDependencies":{"vitest":"^1.0.0"}}', encoding="utf-8")
+    (frontend / "tests" / "app.spec.ts").write_text("it('x', () => {})\n", encoding="utf-8")
+    (backend / "tests" / "api_test.go").write_text("package tests\n", encoding="utf-8")
+    (rustsvc / "tests" / "flow.rs").write_text("#[test]\nfn flow() {}\n", encoding="utf-8")
+    (native / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.20)\n", encoding="utf-8")
+    (native / "tests" / "solver_test.f90").write_text("program solver_test\nend program\n", encoding="utf-8")
+
+    cmds = _build_test_commands(
+        tmp_path,
+        [
+            "frontend/tests/app.spec.ts",
+            "backend/tests/api_test.go",
+            "rustsvc/tests/flow.rs",
+            "native/tests/solver_test.f90",
+        ],
+    )
+    rendered = "\n".join(cmds)
+    assert "vitest run" in rendered
+    assert "go test ./tests" in rendered
+    assert "cargo test --test flow" in rendered
+    assert "ctest --output-on-failure" in rendered
+
+
+def test_build_test_commands_supports_jvm_and_dotnet(tmp_path: Path) -> None:
+    jvm = tmp_path / "jvmapp"
+    dotnet = tmp_path / "dotnetapp"
+    (jvm / "src" / "test" / "java" / "com" / "acme").mkdir(parents=True)
+    (dotnet / "tests").mkdir(parents=True)
+    (jvm / "gradlew").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (jvm / "src" / "test" / "java" / "com" / "acme" / "CheckoutServiceTest.java").write_text("class CheckoutServiceTest {}\n", encoding="utf-8")
+    (dotnet / "tests" / "CheckoutTests.cs").write_text("class CheckoutTests {}\n", encoding="utf-8")
+
+    cmds = _build_test_commands(
+        tmp_path,
+        [
+            "jvmapp/src/test/java/com/acme/CheckoutServiceTest.java",
+            "dotnetapp/tests/CheckoutTests.cs",
+        ],
+    )
+    rendered = "\n".join(cmds)
+    assert "./gradlew test --tests CheckoutServiceTest" in rendered
+    assert "dotnet test --filter" in rendered
 
 
 def test_orchestrate_emits_minimal_hotspot_artifact(
