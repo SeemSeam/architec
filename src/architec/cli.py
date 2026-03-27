@@ -10,6 +10,7 @@ from .auth.guard import ArchitecAuthRequiredError
 from .analysis.public import run_analysis
 from .integration.bundle_loader import require_bundle
 from .integration.hippo_bridge import refresh_bundle_from_hippo
+from .self_manage import handle_self_manage_command
 from .support.io_utils import emit_progress, write_json
 from .support.llm_guard import ArchitectLLMUnavailableError
 from .support.llm_preflight import preflight_backend_llm
@@ -279,6 +280,9 @@ def _with_refresh_result(
 
 def main() -> int:
     try:
+        self_manage_result = handle_self_manage_command(sys.argv[1:])
+        if self_manage_result is not None:
+            return self_manage_result
         auth_result = handle_auth_command(sys.argv[1:])
         if auth_result is not None:
             return auth_result

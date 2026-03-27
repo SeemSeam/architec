@@ -597,3 +597,25 @@ def test_cmd_status_json_includes_empty_upgrade_object_when_no_upgrade_needed(mo
         "install_script_url": "",
         "command": "",
     }
+
+
+def test_cmd_status_prefers_current_binary_version_over_stored_session_version(monkeypatch, capsys):
+    monkeypatch.setattr(commands, "current_cli_version", lambda: "0.2.1")
+    monkeypatch.setattr(
+        commands,
+        "load_session",
+        lambda: {
+            "refresh_token": "token",
+            "install_id": "install-demo",
+            "device_name": "Demo Device",
+            "client_version": "0.1.1",
+        },
+    )
+    monkeypatch.setattr(commands, "auth_enforced", lambda: True)
+    monkeypatch.setattr(commands, "remote_status", lambda **_: {"client_version": "0.2.1"})
+    monkeypatch.setattr(commands, "require_authorized_session", lambda: {"ok": True})
+
+    assert commands._cmd_status(SimpleNamespace(json=True)) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["client_version"] == "0.2.1"

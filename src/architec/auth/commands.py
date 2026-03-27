@@ -514,7 +514,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     elif not session:
         payload = {"authenticated": False, "message": "No local auth session. Run `archi login`.", "client_version": client_version}
     else:
-        payload = {"authenticated": True, "client_version": client_version, **session}
+        payload = {"authenticated": True, **session, "client_version": client_version}
         _apply_upgrade_guidance(payload, payload)
         try:
             payload["remote"] = remote_status(

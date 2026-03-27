@@ -115,6 +115,40 @@ bash install_prod.sh
 archi --help
 ```
 
+### 3.0.1 更新与卸载
+
+当前 CLI 也支持直接自维护：
+
+更新到最新发布版本：
+
+```bash
+archi update
+```
+
+如果你已经确认要强制重装当前版本，也可以：
+
+```bash
+archi update --force
+```
+
+卸载当前安装物：
+
+```bash
+archi uninstall --yes
+```
+
+如果还希望连同本地配置目录一起清掉：
+
+```bash
+archi uninstall --yes --purge
+```
+
+如果还希望一起尝试卸载自动安装的 `hippocampus` 和 `llmgateway`：
+
+```bash
+archi uninstall --yes --remove-deps
+```
+
 ## 3.1 Skills
 
 网站安装脚本会同步安装以下 4 个 skills：
