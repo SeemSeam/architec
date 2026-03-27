@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import asyncio
 import pytest
 import yaml
 
+from architec import backend_llm
 from architec.backend_llm.config import (
     load_tiered_llm_config,
+    resolve_gateway_timeout_sec,
     resolve_tier_candidates,
 )
 
@@ -18,6 +21,7 @@ def _write_gateway_user_config(
     base_url: str = "https://primary.example",
     api_key: str = "sk-test",
     headers: dict[str, str] | None = None,
+    timeout: float = 90.0,
 ) -> None:
     cfg_path = tmp_path / ".llmgateway-user" / "config.yaml"
     monkeypatch.setenv("LLMGATEWAY_USER_CONFIG_DIR", str(cfg_path.parent))
@@ -40,6 +44,7 @@ def _write_gateway_user_config(
                     "strong_reasoning_effort": "high",
                     "weak_reasoning_effort": "low",
                     "max_concurrent": 20,
+                    "timeout": timeout,
                 },
             },
             sort_keys=False,
@@ -200,3 +205,49 @@ def test_load_tiered_llm_config_resolves_prompt_reference(
     assert loaded is not None
     assert loaded.task_prompt_prefixes["architect_folder_naming"] == "folder naming prompt"
     assert loaded.task_prompt_prefixes["architect_topology_review"] == "topology review prompt"
+
+
+def test_resolve_gateway_timeout_sec_uses_gateway_timeout_floor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_gateway_user_config(tmp_path, monkeypatch, timeout=90.0)
+    assert resolve_gateway_timeout_sec(20.0) == 90.0
+
+
+def test_resolve_gateway_timeout_sec_keeps_larger_requested_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_gateway_user_config(tmp_path, monkeypatch, timeout=30.0)
+    assert resolve_gateway_timeout_sec(45.0) == 45.0
+
+
+def test_acomplete_text_applies_gateway_timeout_floor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_gateway_user_config(tmp_path, monkeypatch, timeout=90.0)
+    captured: dict[str, float] = {}
+
+    async def fake_acomplete_text_impl(project_root, **kwargs):
+        del project_root
+        captured["timeout_sec"] = float(kwargs["timeout_sec"])
+        return {"ok": True}
+
+    monkeypatch.setattr(backend_llm, "acomplete_text_impl", fake_acomplete_text_impl)
+
+    out = asyncio.run(
+        backend_llm.acomplete_text(
+            tmp_path,
+            task="architect_topology_review",
+            tier="weak",
+            prompt="x",
+            timeout_sec=20.0,
+            max_tokens=64,
+            required=False,
+        )
+    )
+
+    assert out == {"ok": True}
+    assert captured["timeout_sec"] == 90.0

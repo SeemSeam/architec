@@ -8,6 +8,7 @@ from .config import (
     LLMCandidate,
     load_tiered_llm_config,
     normalize_model_name,
+    resolve_gateway_timeout_sec,
     resolve_tier_candidates,
 )
 from .errors import (
@@ -67,12 +68,15 @@ async def acomplete_text(
     max_tokens: int = 700,
     required: bool = False,
 ) -> dict[str, object] | None:
+    # Architecture prompts can be much larger than normal chat turns. If the
+    # installed llmgateway config asks for a higher timeout, use it as a floor.
+    effective_timeout_sec = resolve_gateway_timeout_sec(timeout_sec)
     return await acomplete_text_impl(
         project_root,
         task=task,
         tier=tier,
         prompt=prompt,
-        timeout_sec=timeout_sec,
+        timeout_sec=effective_timeout_sec,
         max_tokens=max_tokens,
         required=required,
         resolve_runtime_context_fn=_resolve_runtime_context,

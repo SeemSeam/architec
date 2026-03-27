@@ -183,6 +183,20 @@ def _gateway_runtime_spec():
         return None
 
 
+def resolve_gateway_timeout_sec(requested_timeout_sec: float) -> float:
+    resolved = max(1.0, float(requested_timeout_sec or 0.0))
+    runtime = _gateway_runtime_spec()
+    if runtime is None:
+        return resolved
+    try:
+        gateway_timeout = float(runtime.timeout or 0.0)
+    except Exception:
+        return resolved
+    if gateway_timeout <= 0:
+        return resolved
+    return max(resolved, gateway_timeout)
+
+
 def _candidate_from_spec(
     *,
     tier_text: str,
@@ -351,5 +365,6 @@ __all__ = [
     "build_messages",
     "load_tiered_llm_config",
     "normalize_model_name",
+    "resolve_gateway_timeout_sec",
     "resolve_tier_candidates",
 ]
