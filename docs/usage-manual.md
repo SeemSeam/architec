@@ -115,6 +115,12 @@ bash install_prod.sh
 archi --help
 ```
 
+也可以检查当前 CLI 版本，以及是否有新版本可更新：
+
+```bash
+archi --version
+```
+
 ### 3.0.1 更新与卸载
 
 当前 CLI 也支持直接自维护：

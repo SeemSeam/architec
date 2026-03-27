@@ -25,6 +25,15 @@ def test_main_rejects_base_without_diff(monkeypatch, capsys):
     assert "--base/--head require --diff" in capsys.readouterr().err
 
 
+def test_main_version_exits_before_auth(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["archi", "--version"])
+    monkeypatch.setattr(cli, "print_version_status", lambda: 0)
+    monkeypatch.setattr(cli, "require_authorized_session", lambda: pytest.fail("auth should not run"))
+    monkeypatch.setattr(cli, "preflight_backend_llm", lambda *args, **kwargs: pytest.fail("llm check should not run"))
+
+    assert cli.main() == 0
+
+
 def test_ensure_bundle_auto_refreshes_when_bundle_missing(monkeypatch):
     args = SimpleNamespace(path=".", refresh_from_hippo=False)
     calls: list[str] = []

@@ -110,6 +110,44 @@ def _download_file(url: str, destination: Path) -> None:
         destination.write_bytes(response.read())
 
 
+def resolve_version_status(metadata_url: str = DEFAULT_RELEASE_METADATA_URL) -> dict[str, Any]:
+    current_version = current_cli_version()
+    latest_version = ""
+    latest_error = ""
+    try:
+        latest_version = _latest_release_version(str(metadata_url or DEFAULT_RELEASE_METADATA_URL))
+    except Exception as exc:
+        latest_error = str(exc)
+    upgrade_available = bool(latest_version) and _normalize_version(latest_version) > _normalize_version(current_version)
+    return {
+        "current_version": current_version,
+        "latest_version": latest_version,
+        "latest_known": bool(latest_version),
+        "upgrade_available": upgrade_available,
+        "latest_error": latest_error,
+        "recommended_command": "archi update" if upgrade_available else "",
+    }
+
+
+def print_version_status(metadata_url: str = DEFAULT_RELEASE_METADATA_URL) -> int:
+    status = resolve_version_status(metadata_url)
+    print(f"Architec CLI version: {status['current_version']}")
+    latest_version = str(status.get("latest_version", "") or "").strip()
+    latest_error = str(status.get("latest_error", "") or "").strip()
+    if latest_version:
+        print(f"Latest release: {latest_version}")
+        if bool(status.get("upgrade_available")):
+            print("Update available: yes")
+            print(f"Run: {status['recommended_command']}")
+        else:
+            print("Update available: no")
+    else:
+        print("Latest release: unknown")
+        if latest_error:
+            print(f"Latest check failed: {latest_error}")
+    return 0
+
+
 def _run_install_script(script_url: str) -> int:
     with tempfile.TemporaryDirectory(prefix="archi-update-") as tmp:
         script_path = Path(tmp) / "install_prod.sh"
@@ -120,20 +158,20 @@ def _run_install_script(script_url: str) -> int:
 
 
 def _cmd_update(args: argparse.Namespace) -> int:
-    current_version = current_cli_version()
-    latest_version = ""
-    try:
-        latest_version = _latest_release_version(str(args.release_metadata_url or DEFAULT_RELEASE_METADATA_URL))
-    except Exception as exc:
-        print(f"Warning: could not resolve latest release version: {exc}", file=sys.stderr)
+    status = resolve_version_status(str(args.release_metadata_url or DEFAULT_RELEASE_METADATA_URL))
+    current_version = str(status.get("current_version", "") or "")
+    latest_version = str(status.get("latest_version", "") or "")
+    latest_error = str(status.get("latest_error", "") or "")
 
     if latest_version:
         print(f"Current version: {current_version}")
         print(f"Latest version: {latest_version}")
-        if not bool(args.force) and _normalize_version(latest_version) <= _normalize_version(current_version):
+        if not bool(args.force) and not bool(status.get("upgrade_available")):
             print(f"Architec is already up to date ({current_version}).")
             return 0
     else:
+        if latest_error:
+            print(f"Warning: could not resolve latest release version: {latest_error}", file=sys.stderr)
         print(f"Current version: {current_version}")
         print("Latest version: unknown")
         print("Proceeding with installer refresh because latest metadata could not be verified.")

@@ -40,6 +40,37 @@ def test_update_runs_installer_when_latest_is_newer(monkeypatch, capsys) -> None
     assert "Latest version: 0.2.1" in out
 
 
+def test_print_version_status_reports_update_available(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(self_manage, "current_cli_version", lambda: "0.2.1")
+    monkeypatch.setattr(self_manage, "_latest_release_version", lambda _url: "0.2.2")
+
+    result = self_manage.print_version_status()
+
+    assert result == 0
+    out = capsys.readouterr().out
+    assert "Architec CLI version: 0.2.1" in out
+    assert "Latest release: 0.2.2" in out
+    assert "Update available: yes" in out
+    assert "Run: archi update" in out
+
+
+def test_print_version_status_handles_release_lookup_failure(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(self_manage, "current_cli_version", lambda: "0.2.1")
+    monkeypatch.setattr(
+        self_manage,
+        "_latest_release_version",
+        lambda _url: (_ for _ in ()).throw(RuntimeError("network down")),
+    )
+
+    result = self_manage.print_version_status()
+
+    assert result == 0
+    out = capsys.readouterr().out
+    assert "Architec CLI version: 0.2.1" in out
+    assert "Latest release: unknown" in out
+    assert "Latest check failed: network down" in out
+
+
 def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatch, capsys) -> None:
     home = tmp_path / "home"
     install_base = home / ".local" / "architec"

@@ -10,7 +10,7 @@ from .auth.guard import ArchitecAuthRequiredError
 from .analysis.public import run_analysis
 from .integration.bundle_loader import require_bundle
 from .integration.hippo_bridge import refresh_bundle_from_hippo
-from .self_manage import handle_self_manage_command
+from .self_manage import handle_self_manage_command, print_version_status
 from .support.io_utils import emit_progress, write_json
 from .support.llm_guard import ArchitectLLMUnavailableError
 from .support.llm_preflight import preflight_backend_llm
@@ -142,6 +142,12 @@ def _add_argument(parser: argparse.ArgumentParser, *args: str, **kwargs: Any) ->
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='archi', description='Archi analysis CLI')
+    _add_argument(
+        parser,
+        '--version',
+        action='store_true',
+        help='show current CLI version and latest release status',
+    )
     _add_argument(parser, '--goal', default='', help='analysis goal / intent')
     _add_argument(
         parser,
@@ -288,6 +294,8 @@ def main() -> int:
             return auth_result
         parser = build_parser()
         args = parser.parse_args()
+        if bool(args.version):
+            return print_version_status()
         invalid = _validate_args(args)
         if invalid is not None:
             return invalid
