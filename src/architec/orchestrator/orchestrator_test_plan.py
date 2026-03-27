@@ -45,9 +45,11 @@ def _component_tokens(text: str) -> set[str]:
 
 def _valid_test_paths(snapshot: HippoSnapshot) -> list[str]:
     root = snapshot.project_root
+    test_paths_fn = getattr(snapshot, "test_support_paths", None)
+    test_paths = test_paths_fn() if callable(test_paths_fn) else snapshot.first_party_paths()
     return [
         path
-        for path in snapshot.first_party_paths()
+        for path in test_paths
         if _is_test_path(path) and _is_valid_pytest_target(root, path)
     ]
 

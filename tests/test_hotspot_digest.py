@@ -99,6 +99,25 @@ def test_build_hotspot_digest_deweights_test_like_paths(tmp_path: Path) -> None:
     assert "test file sprawl" in out["items"][1]["fix_hint"]
 
 
+def test_build_hotspot_digest_deweights_javascript_spec_paths(tmp_path: Path) -> None:
+    history = {
+        "hotspots": [
+            {"path": "src/navigation.ts", "critical": 2, "warning": 0, "score": 16.0},
+            {"path": "src/navigation.spec.ts", "critical": 2, "warning": 0, "score": 16.0},
+        ]
+    }
+    out = build_hotspot_digest(
+        tmp_path,
+        history=history,
+        score={"components": []},
+        batches=[],
+        governance={"full": 70.0, "incremental": 70.0, "overall": 70.0},
+        topk=2,
+    )
+    assert out["items"][0]["path"] == "src/navigation.ts"
+    assert out["items"][1]["rank_breakdown"]["test_penalty"] == 12.0
+
+
 def test_build_hotspot_digest_deweights_doc_like_paths(tmp_path: Path) -> None:
     history = {
         "hotspots": [

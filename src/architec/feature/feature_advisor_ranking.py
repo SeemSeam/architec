@@ -8,6 +8,7 @@ from ..scoring.component_selection_policy import (
     query_targets_infra,
     query_targets_tests,
 )
+from ..support.path_policy import is_relevant_arch_path as shared_is_relevant_arch_path, is_test_like_path
 from .feature_advisor_ranking_phase1 import (
     apply_descriptor_scores,
     apply_penalties,
@@ -17,69 +18,6 @@ from .feature_advisor_ranking_phase1 import (
 from .feature_advisor_ranking_output import build_ranked_output
 from .feature_advisor_ranking_phase2 import apply_hint_component_hotspot_scores
 from .feature_query import build_goal_signals
-from ..support.io_utils import normalize_relpath
-
-_CODE_SUFFIXES = {
-    ".py",
-    ".pyi",
-    ".js",
-    ".jsx",
-    ".ts",
-    ".tsx",
-    ".go",
-    ".rs",
-    ".java",
-    ".kt",
-    ".swift",
-    ".c",
-    ".cc",
-    ".cpp",
-    ".h",
-    ".hpp",
-    ".cs",
-    ".rb",
-}
-_IRRELEVANT_DIR_MARKERS = {
-    ".git",
-    ".hippocampus",
-    ".ccb",
-    ".venv",
-    "venv",
-    "node_modules",
-    "dist",
-    "build",
-    "vendor",
-    "__pycache__",
-    ".pytest_cache",
-}
-
-
-def is_relevant_arch_path(path: str) -> bool:
-    p = normalize_relpath(path)
-    if not p:
-        return False
-    parts = [seg.lower() for seg in p.split("/") if seg]
-    if not parts:
-        return False
-    if any(seg in _IRRELEVANT_DIR_MARKERS for seg in parts[:-1]):
-        return False
-    if "docs" in parts[:-1]:
-        return False
-    suffix = Path(p).suffix.lower()
-    if suffix and suffix not in _CODE_SUFFIXES:
-        return False
-    return True
-
-
-def is_test_like_path(path: str) -> bool:
-    p = normalize_relpath(path).lower()
-    if not p:
-        return False
-    parts = [seg for seg in p.split("/") if seg]
-    if "tests" in parts:
-        return True
-    name = parts[-1] if parts else ""
-    return name.startswith("test_") or name.endswith("_test.py")
 
 
 def rank_candidate_files(
@@ -89,6 +27,12 @@ def rank_candidate_files(
     descriptor_loader: Callable[..., dict[str, dict[str, Any]]],
     top_n: int = 20,
 ) -> list[dict[str, Any]]:
+    def is_relevant_arch_path(path: str) -> bool:
+        checker = getattr(snapshot, "is_architecture_path", None)
+        if callable(checker):
+            return bool(checker(path))
+        return shared_is_relevant_arch_path(path)
+
     project_root = Path(getattr(snapshot, "project_root", Path("."))).resolve()
     descriptors = descriptor_loader(
         project_root,

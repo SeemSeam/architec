@@ -5,34 +5,14 @@ from typing import Any
 
 from architec.integration.hippo_adapter import EXCLUDED_FINDING_PREFIXES, HippoSnapshot, split_symbol_ref
 from architec.support.io_utils import normalize_relpath
-
-
-_NOISE_PATH_MARKERS = {
-    "tests",
-    "test",
-    "tmp",
-    "temp",
-    "scratch",
-    "fixtures",
-    "__pycache__",
-}
+from architec.support.path_policy import path_kind
 
 
 def _is_noise_dependency_path(path: str) -> bool:
     norm = normalize_relpath(path)
     if not norm:
         return True
-    parts = [part.lower() for part in norm.split("/") if part]
-    if any(part in _NOISE_PATH_MARKERS for part in parts):
-        return True
-    if any(part.startswith(("tmp_", "temp_", "scratch_")) for part in parts):
-        return True
-    filename = parts[-1] if parts else ""
-    if filename.startswith(("test_", "tmp_", "temp_", "scratch_")):
-        return True
-    if "smoke" in filename or "fixture" in filename:
-        return True
-    return False
+    return path_kind(norm) in {"test", "doc", "fixture", "generated", "excluded", "hidden", "infra"}
 
 
 def _iter_component_edges(snapshot: HippoSnapshot) -> list[tuple[str, str, int]]:

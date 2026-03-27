@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 from .hotspot_digest_rank import ranked_items, top_items
 from .hotspot_digest_sources import apply_batch_refs, apply_component_refs, seed_hotspots
+from ..support.path_policy import is_doc_like_path as shared_is_doc_like_path, is_test_like_path as shared_is_test_like_path
 from ..support.io_utils import utc_now_iso, write_json
 from ..integration.paths import HOTSPOT_DIGEST_PATH
 
@@ -21,27 +21,11 @@ def _topk_limit(default: int = 8) -> int:
 
 
 def _is_test_like_path(path: str) -> bool:
-    rel = str(path or "").strip().replace("\\", "/").lower()
-    if not rel:
-        return False
-    marker = f"/{rel}/"
-    if "/tests/" in marker:
-        return True
-    name = Path(rel).name
-    return (
-        name.startswith("test_")
-        or name.endswith("_test.py")
-        or name.endswith("_spec.py")
-    )
+    return shared_is_test_like_path(path)
 
 
 def _is_doc_like_path(path: str) -> bool:
-    rel = str(path or "").strip().replace("\\", "/").lower()
-    if not rel:
-        return False
-    if rel.endswith(".md") or rel.endswith(".rst") or rel.endswith(".txt"):
-        return True
-    return rel.startswith("docs/") or "/docs/" in f"/{rel}/"
+    return shared_is_doc_like_path(path)
 
 
 def build_hotspot_digest(

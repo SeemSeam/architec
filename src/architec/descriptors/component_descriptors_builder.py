@@ -93,10 +93,10 @@ def load_or_build_component_descriptors(
 def _find_test_anchors(snapshot: HippoSnapshot, component: str) -> list[str]:
     component_parts = [part for part in component.lower().replace(":", "/").split("/") if len(part) >= 4]
     anchors: list[str] = []
-    for path in snapshot.first_party_paths():
+    test_paths_fn = getattr(snapshot, "test_support_paths", None)
+    test_paths = test_paths_fn() if callable(test_paths_fn) else snapshot.first_party_paths()
+    for path in test_paths:
         low = path.lower()
-        if "/tests/" not in low and not low.startswith("tests/"):
-            continue
         if any(token in low for token in component_parts):
             anchors.append(path)
         if len(anchors) >= 8:

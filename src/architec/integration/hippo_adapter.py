@@ -15,6 +15,7 @@ from architec.integration.hippo_adapter_snapshot import (
     signatures_from_file_map,
 )
 from architec.support.io_utils import normalize_relpath, read_json
+from architec.support.path_policy import is_relevant_arch_path, path_kind
 
 
 @dataclass
@@ -24,6 +25,7 @@ class HippoSnapshot:
     index: dict[str, Any]
     signatures: dict[str, Any]
     structure_prompt: str
+    file_manifest: dict[str, Any] | None = None
 
     @classmethod
     def load(cls, project_root: Path) -> "HippoSnapshot":
@@ -31,6 +33,7 @@ class HippoSnapshot:
         metrics = read_json(hippo / "architect-metrics.json", default={})
         index = read_json(hippo / "hippocampus-index.json", default={})
         signatures = read_json(hippo / "code-signatures.json", default={})
+        file_manifest = read_json(hippo / "file-manifest.json", default={})
         try:
             structure_prompt = (hippo / "structure-prompt.md").read_text(encoding="utf-8")
         except Exception:
@@ -41,7 +44,41 @@ class HippoSnapshot:
             index=index if isinstance(index, dict) else {},
             signatures=signatures if isinstance(signatures, dict) else {},
             structure_prompt=structure_prompt,
+            file_manifest=file_manifest if isinstance(file_manifest, dict) else {},
         )
+
+    def _manifest_files(self) -> dict[str, dict[str, Any]]:
+        raw = (self.file_manifest or {}).get("files", {})
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, dict[str, Any]] = {}
+        for path, item in raw.items():
+            normalized = normalize_relpath(str(path))
+            if normalized and isinstance(item, dict):
+                out[normalized] = item
+        return out
+
+    def file_record(self, path: str) -> dict[str, Any]:
+        return self._manifest_files().get(normalize_relpath(path), {})
+
+    def file_kind(self, path: str) -> str:
+        record = self.file_record(path)
+        kind = str(record.get("kind", "") or "").strip()
+        if kind:
+            return kind
+        return path_kind(path)
+
+    def is_architecture_path(self, path: str) -> bool:
+        record = self.file_record(path)
+        if "include_in_architecture" in record:
+            return bool(record.get("include_in_architecture"))
+        return is_relevant_arch_path(path)
+
+    def is_test_support_path(self, path: str) -> bool:
+        record = self.file_record(path)
+        if "include_in_test_support" in record:
+            return bool(record.get("include_in_test_support"))
+        return self.file_kind(path) == "test"
 
     def findings(self) -> list[dict[str, Any]]:
         raw = self.metrics.get("findings", [])
@@ -57,6 +94,8 @@ class HippoSnapshot:
                 continue
             if is_hidden_path(path):
                 continue
+            if not self.is_architecture_path(path):
+                continue
             if any(path.startswith(prefix) for prefix in EXCLUDED_FINDING_PREFIXES):
                 continue
             out.append(item)
@@ -65,6 +104,7 @@ class HippoSnapshot:
     def all_paths(self) -> list[str]:
         seen: set[str] = set()
         out: list[str] = []
+        add_unique_paths(out, seen, self._manifest_files())
         add_unique_paths(out, seen, self.index.get("files", {}))
         add_unique_paths(out, seen, self.signatures.get("files", {}))
         return sorted(out)
@@ -92,9 +132,22 @@ class HippoSnapshot:
         for path in self.all_paths():
             if is_hidden_path(path):
                 continue
+            if not self.is_architecture_path(path):
+                continue
             if any(path.startswith(prefix) for prefix in EXCLUDED_FINDING_PREFIXES):
                 continue
             out.append(path)
+        return out
+
+    def test_support_paths(self) -> list[str]:
+        out: list[str] = []
+        for path in self.all_paths():
+            if is_hidden_path(path):
+                continue
+            if any(path.startswith(prefix) for prefix in EXCLUDED_FINDING_PREFIXES):
+                continue
+            if self.is_test_support_path(path):
+                out.append(path)
         return out
 
     def component_files(self) -> dict[str, list[str]]:
