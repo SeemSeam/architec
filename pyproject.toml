@@ -21,3 +21,13 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [
+    "release-flow-test",
+    ".architec",
+    ".hippocampus",
+    "build",
+    "dist",
+]
