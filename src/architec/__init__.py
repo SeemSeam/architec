@@ -6,6 +6,8 @@ read-only `.hippocampus` artifacts and writes its own outputs to `.architec`.
 
 __all__ = [
     "run_analysis",
+    "run_baseline",
+    "run_gate",
     "analyze_history_and_iterate",
     "suggest_feature_architecture",
     "score_changed_components",
@@ -21,6 +23,14 @@ def __getattr__(name: str):
         from .analysis.public import run_analysis
 
         return run_analysis
+    if name == "run_baseline":
+        from .baseline.public import run_baseline
+
+        return run_baseline
+    if name == "run_gate":
+        from .gate.public import run_gate
+
+        return run_gate
     if name == "analyze_history_and_iterate":
         from .analysis.history_analyzer import analyze_history_and_iterate
 

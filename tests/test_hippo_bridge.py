@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import architec.integration.hippo_bridge as hippo_bridge
+import pytest
+from architec.integration.bundle_loader import compute_bundle_fingerprint
 
 
 def _touch(path: Path, content: str = "{}\n") -> None:
@@ -17,11 +20,25 @@ def test_refresh_bundle_from_hippo_runs_expected_steps(tmp_path, monkeypatch):
         executed.append(list(cmd))
         joined = " ".join(cmd)
         if "collect_repo_metrics.py" in joined:
-            _touch(tmp_path / ".hippocampus" / "architect-metrics.json")
+            fingerprint = compute_bundle_fingerprint(tmp_path)
+            _touch(
+                tmp_path / ".hippocampus" / "architect-metrics.json",
+                f'{{"bundle_fingerprint": "{fingerprint}"}}\n',
+            )
         elif "sig-extract" in cmd:
             _touch(tmp_path / ".hippocampus" / "code-signatures.json")
         elif "index" in cmd:
+            _touch(tmp_path / "src" / "app.py", "print('ok')\n")
             _touch(tmp_path / ".hippocampus" / "hippocampus-index.json")
+            _touch(
+                tmp_path / ".hippocampus" / "file-manifest.json",
+                '{"files": {"src/app.py": {"kind": "source"}}}\n',
+            )
+            fingerprint = compute_bundle_fingerprint(tmp_path)
+            _touch(
+                tmp_path / ".hippocampus" / "bundle-state.json",
+                json.dumps({"bundle_fingerprint": fingerprint}) + "\n",
+            )
         elif "structure-prompt" in cmd:
             _touch(tmp_path / ".hippocampus" / "structure-prompt.md", "# prompt\n")
         return {"cmd": cmd, "returncode": 0, "stdout": "", "stderr": ""}
@@ -81,3 +98,12 @@ def test_hippo_base_command_uses_python_module_when_cli_missing(tmp_path, monkey
     monkeypatch.setattr(hippo_bridge.importlib.util, "find_spec", lambda name: _Spec() if name == "hippocampus.cli" else None)
 
     assert hippo_bridge._hippo_base_command(tmp_path) == [hippo_bridge.sys.executable, "-m", "hippocampus.cli"]
+
+
+def test_hippo_base_command_does_not_fall_back_to_repo_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(hippo_bridge.shutil, "which", lambda name: None)
+    monkeypatch.setattr(hippo_bridge.importlib.util, "find_spec", lambda name: None)
+    (tmp_path / "hippocampus" / "src").mkdir(parents=True)
+
+    with pytest.raises(FileNotFoundError, match="Hippo CLI not found"):
+        hippo_bridge._hippo_base_command(tmp_path)

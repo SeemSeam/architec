@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from collect_repo_metrics_rules import ArchitectureRules, path_is_ignored
+
 
 DEFAULT_EXCLUDE_DIRS = {
     ".architec",
@@ -12,7 +14,13 @@ DEFAULT_EXCLUDE_DIRS = {
 }
 
 
-def iter_files(root: Path, exclude_dirs: set[str], exclude_suffixes: set[str]) -> list[Path]:
+def iter_files(
+    root: Path,
+    exclude_dirs: set[str],
+    exclude_suffixes: set[str],
+    *,
+    rules: ArchitectureRules | None = None,
+) -> list[Path]:
     effective_exclude_dirs = set(exclude_dirs) | DEFAULT_EXCLUDE_DIRS
     out: list[Path] = []
     for path in root.rglob("*"):
@@ -22,6 +30,8 @@ def iter_files(root: Path, exclude_dirs: set[str], exclude_suffixes: set[str]) -
         if any(part in effective_exclude_dirs for part in rel.parts):
             continue
         if path.suffix.lower() in exclude_suffixes:
+            continue
+        if path_is_ignored(path, root=root, rules=rules):
             continue
         out.append(path)
     return out

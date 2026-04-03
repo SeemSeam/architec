@@ -92,7 +92,9 @@ def write_report_artifacts(root: Path, report: dict[str, Any]) -> None:
     summary_path.write_text(render_summary_markdown(report), encoding='utf-8')
     viz_path.parent.mkdir(parents=True, exist_ok=True)
     viz_path.write_text(render_viz_html(report), encoding='utf-8')
+    existing_artifacts = report.get('artifacts', {}) if isinstance(report.get('artifacts'), dict) else {}
     report['artifacts'] = {
+        **existing_artifacts,
         'analysis_json': str(analysis_path),
         'summary_md': str(summary_path),
         'viz_html': str(viz_path),

@@ -27,6 +27,18 @@ from ..descriptors.component_graph import build_component_graph
 from ..scoring.component_scoring import score_changed_components
 from ..feature.feature_advisor import suggest_feature_architecture
 from ..integration.hippo_adapter import HippoSnapshot
+from ..cleanup.archive import (
+    archive_report_view,
+    build_archive_candidates,
+    write_archive_artifacts,
+)
+from ..cleanup.inventory import build_cleanup_inventory, build_cleanup_ledger
+from ..cleanup.report import cleanup_report_view, write_cleanup_artifacts
+from ..cleanup.semantic_judge import (
+    run_semantic_judge,
+    semantic_judge_report_view,
+    write_semantic_judge_artifacts,
+)
 from .history_analyzer import analyze_history_and_iterate
 from .hotspot_digest import build_hotspot_digest
 from ..support.io_utils import ProgressFn
@@ -36,6 +48,7 @@ from ..scoring.public import evaluate_overall_score, load_scoring_policy
 
 _llm_summary = llm_summary
 _review_folder_topology = review_folder_topology
+_run_semantic_judge = run_semantic_judge
 
 
 def run_analysis(
@@ -48,7 +61,7 @@ def run_analysis(
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root).resolve()
-    steps = 6 + (1 if diff else 0) + (1 if goal else 0)
+    steps = 9 + (1 if diff else 0) + (1 if goal else 0)
     step = 0
 
     def advance(label: str) -> None:
@@ -101,6 +114,21 @@ def run_analysis(
     current_hotspots = resolved_hotspots(snapshot, hotspot_digest)
     advance("reviewing folder topology and naming")
     topology = _review_folder_topology(root, snapshot=snapshot, llm_enabled=True)
+    advance("building cleanup inventory and ledger")
+    cleanup_inventory = build_cleanup_inventory(root)
+    cleanup_ledger = build_cleanup_ledger(cleanup_inventory)
+    cleanup = cleanup_report_view(cleanup_inventory, cleanup_ledger)
+    archive_candidates = build_archive_candidates(cleanup_inventory)
+    archive = archive_report_view(archive_candidates)
+    advance("running semantic cleanup judge")
+    semantic_judge_result = _run_semantic_judge(
+        root,
+        cleanup_inventory=cleanup_inventory,
+        archive_candidates=archive_candidates,
+        llm_enabled=True,
+        fail_open=True,
+    )
+    semantic_judge = semantic_judge_report_view(semantic_judge_result)
     dimensions = build_structure_dimensions(history, topology=topology)
     structure_score_value = build_structure_score(full_score, dimensions)
     snapshot_scores = score_snapshot(
@@ -147,7 +175,29 @@ def run_analysis(
         summary=summary,
         recommendations=recommendations_view,
         topology=topology,
+        cleanup=cleanup,
+        archive_candidates=archive,
+        semantic_judge=semantic_judge,
+        cleanup_inventory=cleanup_inventory,
         graph_builder=build_component_graph,
+    )
+    advance("writing cleanup and semantic artifacts")
+    report.setdefault("artifacts", {}).update(
+        {
+            **write_cleanup_artifacts(
+                root,
+                inventory=cleanup_inventory,
+                ledger=cleanup_ledger,
+            ),
+            **write_archive_artifacts(
+                root,
+                archive_candidates=archive_candidates,
+            ),
+            **write_semantic_judge_artifacts(
+                root,
+                semantic_judge=semantic_judge_result,
+            ),
+        }
     )
     advance("writing JSON, Markdown, and HTML artifacts")
     write_report_artifacts(root, report)

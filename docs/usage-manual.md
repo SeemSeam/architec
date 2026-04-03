@@ -54,6 +54,15 @@ bash install_prod.sh
 
 更多高级功能请查看 `archi --help`。
 
+这条命令本身就是跨平台入口：
+
+- 安装器会自动识别当前系统类型与 CPU 架构
+- Linux 和 macOS 用户都应优先使用同一条默认命令
+- 真正的前提不是“换一条安装命令”，而是当前 release 中已经包含对应平台的编译包
+- 例如：
+  - Linux x86_64: `archi-linux-x86_64.tar.gz`
+  - macOS arm64: `archi-macos-arm64.tar.gz`
+
 当前发布安装器会先做一次本机环境检查，并尽量自动补齐这些系统依赖：
 
 - `python3` 和 `pip`
@@ -131,28 +140,25 @@ archi --version
 archi update
 ```
 
-如果你已经确认要强制重装当前版本，也可以：
-
-```bash
-archi update --force
-```
+`archi update` 会尽量先检查最新发布版本；无论当前是否已经是最新版本，都会重跑公开安装器，把当前安装刷新到最新公开构建。
 
 卸载当前安装物：
 
 ```bash
+archi uninstall
+```
+
+`archi uninstall` 当前默认就是深度卸载，会同时：
+
+- 删除 `archi` launcher 和安装目录
+- 删除自动同步的 Architec skills
+- 删除本地 `~/.architec`、`~/.hippocampus`、`~/.llmgateway` 配置目录
+- 尝试从当前 Python 环境卸载 `hippocampus` 和 `llmgateway`
+
+如果你是在非交互脚本里调用，再加：
+
+```bash
 archi uninstall --yes
-```
-
-如果还希望连同本地配置目录一起清掉：
-
-```bash
-archi uninstall --yes --purge
-```
-
-如果还希望一起尝试卸载自动安装的 `hippocampus` 和 `llmgateway`：
-
-```bash
-archi uninstall --yes --remove-deps
 ```
 
 ## 3.1 Skills
@@ -309,7 +315,7 @@ export architec_llm_main_url=https://your-llm-endpoint
 然后执行：
 
 ```bash
-architec --check .
+archi --check .
 ```
 
 ### 4.3 方式三：手动维护配置文件
@@ -353,7 +359,7 @@ architec --check .
 只验证配置，不跑分析：
 
 ```bash
-architec --check .
+archi --check .
 ```
 
 注意：
@@ -364,7 +370,7 @@ architec --check .
 如果还想顺便刷新 Hippo 输入后再检查：
 
 ```bash
-architec --refresh-from-hippo --check .
+archi --refresh-from-hippo --check .
 ```
 
 ## 5. Hippo 输入要求
@@ -376,7 +382,18 @@ architec --refresh-from-hippo --check .
 - `.hippocampus/code-signatures.json`
 - `.hippocampus/structure-prompt.md`
 
-缺少任何一个，`architec` 都会直接报错退出。
+缺少任何一个，`archi` 都会直接报错退出。
+
+标准 Hippo bundle 现在还会额外包含：
+
+- `.hippocampus/file-manifest.json`
+- `.hippocampus/bundle-state.json`
+
+其中 `.hippocampus/bundle-state.json` 是 freshness 标准元数据；如果它存在，`archi` 会优先用它判断 `architect-metrics.json` 是否 stale。
+当前 `archi .` 还会做两层轻量动态感知：
+
+- 把工作区里的当前源码文件集合与 `.hippocampus/file-manifest.json` 对比；如果检测到源码文件新增或删除导致两边不一致，会自动触发 `refresh-from-hippo`
+- 检查当前源码文件的 `mtime` 是否晚于 bundle 生成时间；如果检测到已有源码文件被更新，也会自动触发 `refresh-from-hippo`
 
 ## 6. 基本命令
 
@@ -408,7 +425,7 @@ archi --help
 对整个项目做一次完整架构分析：
 
 ```bash
-architec .
+archi .
 ```
 
 说明：
@@ -422,7 +439,7 @@ architec .
 如果你希望工具围绕某个架构目标给建议，可以传入 `--goal`：
 
 ```bash
-architec --goal "analyze architecture stability" .
+archi --goal "analyze architecture stability" .
 ```
 
 适用场景：
@@ -431,18 +448,96 @@ architec --goal "analyze architecture stability" .
 - 架构稳定性评估
 - 边界收敛建议
 
-### 6.4 差异分析
+### 6.4 cleanup 扫描
+
+如果你只想查看当前仓库里哪些旧结构、旧脚本、旧文档、旧配置或旧 prompt 已经应该退场，可以直接运行：
+
+```bash
+archi cleanup .
+```
+
+这个命令：
+
+- 不依赖 Hippo 输入
+- 不执行后端 LLM 预检查
+- 会基于 cleanup inventory 额外派生 archive candidate 结果
+- 如果 backend LLM 可用，会额外对 top cleanup candidates 运行 semantic judge；若 backend 不可用，命令会 fail-open，不阻塞 cleanup 输出
+- 只写 cleanup / archive / semantic-judge 相关产物，不生成主分析 JSON / Markdown / HTML
+
+当前 archive candidate 的含义是：
+
+- 只覆盖适合“先归档、再决定是否删除”的非源码对象
+- 当前主要来自 `obsolete_script`、`stale_doc`、`stale_config`、`stale_prompt`
+- 会给出 `ready` / `review` tier，以及建议的 `archive/<path>` 归档路径
+
+当前 semantic judge 的含义是：
+
+- 它不是第二套扫描，而是对 top cleanup / archive candidates 的 LLM 语义复核
+- 只复核有限数量的 top candidates，避免把 cleanup 变成大规模慢调用
+- 当前会输出 `retire_now`、`archive_first`、`keep_active`、`review`
+- `archi cleanup` 不要求你先通过 LLM preflight；如果 semantic judge 当前不可用，会写出 `unavailable` 或 `skipped` artifact
+
+如果你希望给 cleanup candidate 补充责任人与时限 metadata，可以在 repo 根 `.architecture-rules.toml` 中增加：
+
+```toml
+[[shared.cleanup_metadata]]
+glob = "docs/legacy/**"
+owner = "docs-team"
+ttl_days = 30
+
+[[archi.cleanup_metadata]]
+path = "docs/legacy/guide.md"
+category = "stale_doc"
+expires_at = "2026-05-01"
+```
+
+当前规则行为是：
+
+- `shared.cleanup_metadata` 和 `archi.cleanup_metadata` 都只作用于 `archi` cleanup 派生产物
+- 支持 `path` 或 `glob` 作为匹配条件；可选再加 `kind`、`category`
+- 后匹配到的规则会覆盖前面规则的同名字段
+- `expires_at` 支持 ISO 日期或时间；写入 artifact 时会额外派生 `expired`
+- 这些 metadata 会透传到 cleanup inventory、archive candidate、semantic judge 和 autofix plan
+
+### 6.5 autofix
+
+如果你希望基于 archive candidate 和 semantic judge 结果，导出一份可执行的安全修复计划，可以运行：
+
+```bash
+archi autofix .
+```
+
+默认行为是 dry-run：
+
+- 不直接改动仓库文件
+- 只生成 autofix plan / summary artifact
+- 当前只把最安全的 `archive_first` 对象转成可执行动作
+
+如果你确认要执行这些安全动作，再运行：
+
+```bash
+archi autofix --apply .
+```
+
+当前 autofix v1 的边界是：
+
+- 只自动处理 `archive_first` 且带 `archive_path_hint` 的非源码对象
+- 当前执行动作只有 `archive_move`
+- `retire_now` 仍然只进计划，不会自动删改源码
+- 如果 semantic judge 不可用，autofix 会 fail-open，但通常不会生成可执行动作
+
+### 6.6 差异分析
 
 分析当前改动相对于工作区或指定提交范围的架构影响：
 
 ```bash
-architec --diff .
+archi --diff .
 ```
 
 指定比较范围：
 
 ```bash
-architec --diff --base main --head HEAD .
+archi --diff --base main --head HEAD .
 ```
 
 注意：
@@ -450,12 +545,76 @@ architec --diff --base main --head HEAD .
 - `--base` 和 `--head` 必须和 `--diff` 一起使用
 - 只写 `--base` 或 `--head` 而不加 `--diff` 会直接报错
 
-### 6.5 刷新 Hippo 输入后分析
+### 6.7 固化 baseline
+
+如果你希望把当前仓库的主分析结果固化为后续对比基线，可以运行：
+
+```bash
+archi baseline .
+```
+
+这个命令会：
+
+- 走完整的 `archi .` 主分析链路
+- 保留正常的主分析输出
+- 额外写出 baseline 专用产物
+
+baseline 产物包括：
+
+- `.architec/architec-baseline.json`
+- `.architec/architec-baseline-summary.md`
+
+其中会冻结这些稳定字段：
+
+- scores 快照
+- cleanup 汇总
+- top hotspots
+- top risk components
+- topology 摘要
+- goal / diff retire plan 的计数快照
+
+### 6.8 基于 baseline 执行 gate
+
+如果你已经固化过 baseline，并希望检查当前仓库是否出现结构回退，可以运行：
+
+```bash
+archi gate .
+```
+
+这个命令会：
+
+- 读取 `.architec/architec-baseline.json`
+- 重新执行当前仓库的完整主分析
+- 对比 baseline 与当前结果
+- 生成 gate 专用产物
+
+当前 gate 默认检查：
+
+- `overall` 不低于 baseline
+- `structure` 不低于 baseline
+- `full` 不低于 baseline
+- cleanup 候选总数不高于 baseline
+- cleanup review-required 总数不高于 baseline
+- cleanup 各 category 计数不高于 baseline
+
+当前 gate severity 规则：
+
+- `fallback_branch` / `legacy_impl` / `compat_layer` 回退记为 `block`
+- `obsolete_script` / `stale_doc` / `stale_config` / `stale_prompt` 回退记为 `warn`
+- score 回退仍然记为 `block`
+- cleanup 总数回退当前记为 `warn`
+
+gate 产物包括：
+
+- `.architec/architec-gate.json`
+- `.architec/architec-gate-summary.md`
+
+### 6.9 刷新 Hippo 输入后分析
 
 如果你希望先重新生成 Hippo 输入，再执行分析：
 
 ```bash
-architec --refresh-from-hippo .
+archi --refresh-from-hippo .
 ```
 
 这个流程会按顺序执行：
@@ -473,19 +632,49 @@ python collect_repo_metrics.py --root <root> --rubric <rubric>
 ### 7.1 刷新输入并校验配置
 
 ```bash
-architec --refresh-from-hippo --check .
+archi --refresh-from-hippo --check .
 ```
 
 ### 7.2 刷新输入并做全量分析
 
 ```bash
-architec --refresh-from-hippo .
+archi --refresh-from-hippo .
 ```
 
 ### 7.3 针对某个需求做差异分析
 
 ```bash
-architec --diff --goal "stabilize payment module boundaries" .
+archi --diff --goal "stabilize payment module boundaries" .
+```
+
+### 7.4 只执行 cleanup 扫描
+
+```bash
+archi cleanup .
+```
+
+### 7.5 生成 autofix 计划
+
+```bash
+archi autofix .
+```
+
+### 7.6 执行安全 autofix
+
+```bash
+archi autofix --apply .
+```
+
+### 7.7 固化当前 baseline
+
+```bash
+archi baseline .
+```
+
+### 7.8 对当前结果执行 gate
+
+```bash
+archi gate .
 ```
 
 ## 8. 参数说明
@@ -506,6 +695,17 @@ architec --diff --goal "stabilize payment module boundaries" .
 | `--out` | 额外把 JSON 结果写到指定路径 |
 | `path` | 项目根目录，默认是当前目录 `.` |
 
+另外还支持单独命令：
+
+- `archi cleanup [path]`
+  只执行 cleanup 扫描，输出 cleanup inventory / ledger / summary、archive candidate JSON / Markdown，以及 semantic judge JSON / Markdown
+- `archi autofix [path]`
+  生成 autofix plan / summary；加 `--apply` 时执行安全 archive move
+- `archi baseline [path]`
+  运行完整主分析并额外输出 baseline JSON / Markdown
+- `archi gate [path]`
+  基于已存在 baseline 执行结构回归检查，并输出 gate JSON / Markdown
+
 ## 9. 输出文件说明
 
 执行分析后，核心输出位于 `.architec/`：
@@ -513,6 +713,19 @@ architec --diff --goal "stabilize payment module boundaries" .
 - `.architec/architec-analysis.json`
 - `.architec/architec-summary.md`
 - `.architec/architec-viz.html`
+- `.architec/architec-cleanup-inventory.json`
+- `.architec/architec-cleanup-ledger.json`
+- `.architec/architec-cleanup-summary.md`
+- `.architec/architec-archive-candidates.json`
+- `.architec/architec-archive-summary.md`
+- `.architec/architec-semantic-judge.json`
+- `.architec/architec-semantic-judge-summary.md`
+- `.architec/architec-autofix-plan.json`
+- `.architec/architec-autofix-summary.md`
+- `.architec/architec-baseline.json`
+- `.architec/architec-baseline-summary.md`
+- `.architec/architec-gate.json`
+- `.architec/architec-gate-summary.md`
 - `.architec/cache/`
 
 说明：
@@ -520,6 +733,19 @@ architec --diff --goal "stabilize payment module boundaries" .
 - `architec-analysis.json` 是最完整的结构化结果
 - `architec-summary.md` 是可读性更好的 Markdown 摘要
 - `architec-viz.html` 是可视化页面
+- `architec-cleanup-inventory.json` 是 cleanup 候选明细
+- `architec-cleanup-ledger.json` 是 cleanup 汇总计数
+- `architec-cleanup-summary.md` 是 cleanup 可读摘要
+- `architec-archive-candidates.json` 是从 cleanup inventory 派生出的归档候选明细
+- `architec-archive-summary.md` 是 archive candidate 的可读摘要
+- `architec-semantic-judge.json` 是 LLM 对 top cleanup/archive candidates 的语义复核结果
+- `architec-semantic-judge-summary.md` 是 semantic judge 的可读摘要
+- `architec-autofix-plan.json` 是当前可安全执行的 autofix 动作计划
+- `architec-autofix-summary.md` 是 autofix 的可读摘要
+- `architec-baseline.json` 是后续回归检查可复用的结构基线快照
+- `architec-baseline-summary.md` 是 baseline 的可读摘要
+- `architec-gate.json` 是当前结果相对 baseline 的结构门禁检查结果
+- `architec-gate-summary.md` 是 gate 的可读摘要
 - `--out <path>` 不会替代默认输出，只会额外再写一份 JSON
 
 ## 10. 结果如何理解
@@ -532,8 +758,14 @@ architec --diff --goal "stabilize payment module boundaries" .
 - `scores`: 结构分、总体分、全量分、增量分
 - `hotspots`: 风险热点文件或区域
 - `components`: 组件级风险视图
-- `change_analysis`: 差异分析结果，仅在 `--diff` 时出现
-- `feature_analysis`: 目标驱动分析结果，仅在传入 `--goal` 时出现
+- `cleanup`: cleanup 候选汇总，`archi .` / `archi --goal` / `archi --diff` 都会带上
+- `archive_candidates`: 从 cleanup inventory 派生出的归档候选，只覆盖 `doc` / `config` / `prompt` / `script` 等非源码对象，并带 `ready` / `review`、`archive_path_hint`，以及可选的 `owner` / `ttl_days` / `expires_at`
+- `semantic_judge`: 对 top cleanup/archive candidates 的 LLM 语义复核，当前会输出 `retire_now`、`archive_first`、`keep_active`、`review`，以及简短理由；若上游已有 cleanup metadata，会一并透传
+- `autofix`: 基于 semantic judge 派生出的安全动作计划，当前只自动处理 `archive_move`，并保留上游 metadata 便于人工验收
+- `baseline`: 仅在 `archi baseline` 返回结果里额外出现，用于描述固化后的基线快照
+- `gate`: 仅在 `archi gate` 返回结果里额外出现，用于描述当前结果相对 baseline 的通过/失败情况
+- `change_analysis`: 差异分析结果，仅在 `--diff` 时出现，其中包含 `retire_plan`
+- `feature_analysis`: 目标驱动分析结果，仅在传入 `--goal` 时出现，其中包含 `retire_plan`
 - `recommendations`: 优先级建议
 - `artifacts`: 输出文件路径
 
@@ -548,7 +780,7 @@ architec --diff --goal "stabilize payment module boundaries" .
 处理方式：
 
 ```bash
-architec --refresh-from-hippo .
+archi --refresh-from-hippo .
 ```
 
 或者手动补齐这些 Hippo 文件：
@@ -574,7 +806,7 @@ architec --refresh-from-hippo .
 - 重点确认 `settings.strong_model` 和 `settings.weak_model` 已配置
 - 检查 `architec_llm_main_api_key`
 - 检查 `architec_llm_main_url`
-- 重新执行 `architec --check .`
+- 重新执行 `archi --check .`
 
 ### 11.3 报错：missing api_key 或 missing base_url
 
@@ -609,9 +841,10 @@ architec --refresh-from-hippo .
 因此，建议优先使用这几条稳定命令：
 
 ```bash
-architec --check .
-architec .
-architec --diff .
-architec --goal "..." .
-architec --refresh-from-hippo .
+archi --check .
+archi .
+archi cleanup .
+archi --diff .
+archi --goal "..." .
+archi --refresh-from-hippo .
 ```

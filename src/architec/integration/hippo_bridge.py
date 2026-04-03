@@ -17,11 +17,9 @@ def _hippo_base_command(project_root: Path) -> list[str]:
         return [hippo_cmd]
     if importlib.util.find_spec("hippocampus.cli") is not None:
         return [sys.executable, "-m", "hippocampus.cli"]
-    src_root = project_root / "hippocampus" / "src"
-    if src_root.exists():
-        return [sys.executable, "-m", "hippocampus.cli"]
     raise FileNotFoundError(
-        "Hippo CLI not found. Install hippocampus or ensure `hippo` is on PATH."
+        "Hippo CLI not found. Reinstall from the published Architec installer, "
+        "or ensure `hippo` / installed `hippocampus` is available in the active Python environment."
     )
 
 

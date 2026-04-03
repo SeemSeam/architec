@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+from architec.support.architecture_rules import cleanup_metadata_for_candidate, load_archi_rules
+
+
+def test_load_archi_rules_merges_cleanup_metadata_rules_and_resolves_candidate_metadata(tmp_path) -> None:
+    (tmp_path / ".architecture-rules.toml").write_text(
+        "\n".join(
+            [
+                "[[shared.cleanup_metadata]]",
+                'glob = "docs/legacy/**"',
+                'owner = "docs-platform"',
+                "ttl_days = 30",
+                "",
+                "[[archi.cleanup_metadata]]",
+                'path = "docs/legacy/guide.md"',
+                'expires_at = "2099-01-01"',
+                'category = "stale_doc"',
+                "",
+                "[[archi.cleanup_metadata]]",
+                'path = "docs/legacy/expired.md"',
+                'expires_at = "2000-01-01"',
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rules = load_archi_rules(tmp_path)
+
+    future_metadata = cleanup_metadata_for_candidate(
+        "docs/legacy/guide.md",
+        rules=rules,
+        kind="doc",
+        category="stale_doc",
+    )
+    expired_metadata = cleanup_metadata_for_candidate(
+        "docs/legacy/expired.md",
+        rules=rules,
+        kind="doc",
+        category="stale_doc",
+    )
+
+    assert future_metadata == {
+        "owner": "docs-platform",
+        "ttl_days": 30,
+        "expires_at": "2099-01-01",
+        "expired": False,
+    }
+    assert expired_metadata["owner"] == "docs-platform"
+    assert expired_metadata["ttl_days"] == 30
+    assert expired_metadata["expires_at"] == "2000-01-01"
+    assert expired_metadata["expired"] is True

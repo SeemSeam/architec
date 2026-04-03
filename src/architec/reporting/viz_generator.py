@@ -114,6 +114,31 @@ def render_viz_html(report: dict[str, Any]) -> str:
         <div class="item-grid">{content['recommendation_cards'] or empty_state('No recommendations.')}</div>
       </section>
       <section class="section">
+        <h2>Cleanup Candidates</h2>
+        <p class="muted">{content['cleanup_summary']}</p>
+        <div class="item-grid">{content['cleanup_cards'] or empty_state('No cleanup candidates.')}</div>
+      </section>
+      <section class="section">
+        <h2>Archive Candidates</h2>
+        <p class="muted">{content['archive_summary']}</p>
+        <div class="item-grid">{content['archive_cards'] or empty_state('No archive candidates.')}</div>
+      </section>
+      <section class="section">
+        <h2>Semantic Judge</h2>
+        <p class="muted">{content['semantic_summary']}</p>
+        <div class="item-grid">{content['semantic_cards'] or empty_state('No semantic judgments.')}</div>
+      </section>
+      <section class="section">
+        <h2>Goal Retire Plan</h2>
+        <p class="muted">{content['goal_retire_summary']}</p>
+        <div class="item-grid">{content['goal_retire_cards'] or empty_state('No goal retire plan.')}</div>
+      </section>
+      <section class="section">
+        <h2>Diff Retire Plan</h2>
+        <p class="muted">{content['diff_retire_summary']}</p>
+        <div class="item-grid">{content['diff_retire_cards'] or empty_state('No diff retire plan.')}</div>
+      </section>
+      <section class="section">
         <h2>Folder Management</h2>
         <p class="muted">{content['topology_summary']}</p>
         <p class="muted">{content['root_placement_summary']}</p>

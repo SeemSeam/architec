@@ -5,6 +5,7 @@ task_prompt_prefixes:
   architect_component_scoring: prompt:component-scoring.md
   architect_feature: prompt:feature-architecture.md
   architect_folder_naming: prompt:folder-naming-judge.md
+  architect_semantic_judge: prompt:semantic-judge.md
   architect_topology_review: prompt:topology-review-judge.md
   architect_full_report_md: prompt:full-report.md
   architect_history: prompt:history-remediation.md
@@ -25,6 +26,8 @@ tasks:
     tier: strong
   architect_folder_naming:
     tier: weak
+  architect_semantic_judge:
+    tier: strong
   architect_topology_review:
     tier: weak
   architect_full_report_md:

@@ -12,7 +12,7 @@ def test_handle_self_manage_command_returns_none_for_normal_args() -> None:
     assert self_manage.handle_self_manage_command(["--check", "."]) is None
 
 
-def test_update_skips_installer_when_current_matches_latest(monkeypatch, capsys) -> None:
+def test_update_reinstalls_even_when_current_matches_latest(monkeypatch, capsys) -> None:
     monkeypatch.setattr(self_manage, "current_cli_version", lambda: "0.2.1")
     monkeypatch.setattr(self_manage, "_latest_release_version", lambda _url: "0.2.1")
     calls: list[str] = []
@@ -21,8 +21,11 @@ def test_update_skips_installer_when_current_matches_latest(monkeypatch, capsys)
     result = self_manage.handle_self_manage_command(["update"])
 
     assert result == 0
-    assert calls == []
-    assert "already up to date" in capsys.readouterr().out
+    assert calls == [self_manage.DEFAULT_INSTALL_SCRIPT_URL]
+    out = capsys.readouterr().out
+    assert "Current version: 0.2.1" in out
+    assert "Latest version: 0.2.1" in out
+    assert "reinstalling 0.2.1" in out
 
 
 def test_update_runs_installer_when_latest_is_newer(monkeypatch, capsys) -> None:
@@ -92,6 +95,7 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
             (root / name).mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(self_manage, "_uninstall_python_deps", lambda: 0)
 
     result = self_manage.handle_self_manage_command(["uninstall", "--yes"])
 
@@ -102,10 +106,13 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
     for root in (codex_skills, claude_skills):
         for name in self_manage.MANAGED_SKILL_NAMES:
             assert not (root / name).exists()
-    assert "Architec uninstall complete." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Config purge: enabled" in out
+    assert "Python dependency removal attempted" in out
+    assert "Architec uninstall complete." in out
 
 
-def test_uninstall_purge_and_remove_deps(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_uninstall_removes_config_and_deps_by_default(monkeypatch, tmp_path: Path, capsys) -> None:
     home = tmp_path / "home"
     (home / ".architec").mkdir(parents=True)
     (home / ".hippocampus").mkdir(parents=True)
@@ -113,7 +120,7 @@ def test_uninstall_purge_and_remove_deps(monkeypatch, tmp_path: Path, capsys) ->
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(self_manage, "_uninstall_python_deps", lambda: 0)
 
-    result = self_manage.handle_self_manage_command(["uninstall", "--yes", "--purge", "--remove-deps"])
+    result = self_manage.handle_self_manage_command(["uninstall", "--yes"])
 
     assert result == 0
     assert not (home / ".architec").exists()

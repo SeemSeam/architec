@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from architec.cleanup.retire_plan import (
+    build_diff_retire_plan,
+    build_goal_retire_plan,
+)
 from architec.support.io_utils import utc_now_iso
 
 
@@ -113,22 +117,45 @@ def llm_recommendations(llm_summary: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def change_analysis(score: dict[str, Any], *, diff: bool) -> dict[str, Any]:
+def change_analysis(
+    score: dict[str, Any],
+    *,
+    diff: bool,
+    snapshot: Any,
+    cleanup_inventory: dict[str, Any],
+) -> dict[str, Any]:
     if not diff:
         return {}
     return {
         'changed_file_total': int(score.get('changed_file_total', 0) or 0),
         'components': score.get('components', [])[:8] if isinstance(score, dict) else [],
+        'retire_plan': build_diff_retire_plan(
+            score,
+            snapshot=snapshot,
+            cleanup_inventory=cleanup_inventory,
+        ),
     }
 
 
-def feature_analysis(feature: dict[str, Any], *, goal: str) -> dict[str, Any]:
+def feature_analysis(
+    feature: dict[str, Any],
+    *,
+    goal: str,
+    snapshot: Any,
+    cleanup_inventory: dict[str, Any],
+) -> dict[str, Any]:
     if not goal:
         return {}
     return {
         'goal': goal,
         'target_components': feature.get('target_components', [])[:8],
         'candidate_files': feature.get('candidate_files', [])[:10],
+        'retire_plan': build_goal_retire_plan(
+            feature,
+            goal=goal,
+            snapshot=snapshot,
+            cleanup_inventory=cleanup_inventory,
+        ),
     }
 
 

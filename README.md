@@ -19,6 +19,11 @@ This is the only recommended public install path. It installs the compiled Archi
 build, pulls the bundled open-source dependency wheels when available, performs
 basic environment checks, and leaves you with a working `archi` command.
 
+The installer auto-detects the current OS and CPU architecture. End users should
+normally use the same command on Linux and macOS. The only hard requirement is
+that the selected release already contains the matching compiled asset, such as
+`archi-linux-x86_64.tar.gz` or `archi-macos-arm64.tar.gz`.
+
 The production installer supports explicit release selection and checksum
 verification:
 
@@ -87,6 +92,13 @@ archi --refresh-from-hippo --check .
 
 The installer already runs backend LLM preflight without requiring `.hippocampus/`.
 
+For `archi --refresh-from-hippo`, the supported runtime sources are:
+
+- published `hippo` on `PATH`
+- installed `hippocampus` in the active Python environment
+
+A sibling checkout such as `./hippocampus/src` is not a supported runtime fallback for end-user installs or release validation.
+
 ## Skills
 
 Bundled skill source trees live in:
@@ -131,6 +143,14 @@ bash ../architec-release/tools/release_install_smoke.sh
 
 This starts the sibling `architec-cloud` portal, runs the website smoke, installs the public GitHub Release build, authorizes it through `/api/cli/authorize`, and verifies `archi login`, `archi whoami --json`, `archi status --json`, `archi devices --json`, and `archi logout`.
 
+Live production browser-auth regression:
+
+```bash
+bash tools/prod_browser_auth_smoke.sh
+```
+
+This uses `https://www.architec.top` directly, installs from the public website script into an isolated run directory, completes the browser-authorization callback over local `127.0.0.1`, and verifies `archi whoami --json`, `archi status --json`, and `archi devices --json`.
+
 Release cut helper:
 
 ```bash
@@ -165,6 +185,38 @@ archi .
 archi --goal "analyze architecture stability" .
 ```
 
+Cleanup scan:
+
+```bash
+archi cleanup .
+```
+
+Autofix dry-run:
+
+```bash
+archi autofix .
+archi autofix --apply .
+```
+
+Baseline capture:
+
+```bash
+archi baseline .
+```
+
+Gate check:
+
+```bash
+archi gate .
+```
+
+CLI self-maintenance:
+
+```bash
+archi update
+archi uninstall
+```
+
 Diff analysis:
 
 ```bash
@@ -185,6 +237,19 @@ Architec writes only to `.architec/`:
 - `.architec/architec-analysis.json`
 - `.architec/architec-summary.md`
 - `.architec/architec-viz.html`
+- `.architec/architec-cleanup-inventory.json`
+- `.architec/architec-cleanup-ledger.json`
+- `.architec/architec-cleanup-summary.md`
+- `.architec/architec-archive-candidates.json`
+- `.architec/architec-archive-summary.md`
+- `.architec/architec-semantic-judge.json`
+- `.architec/architec-semantic-judge-summary.md`
+- `.architec/architec-autofix-plan.json`
+- `.architec/architec-autofix-summary.md`
+- `.architec/architec-baseline.json`
+- `.architec/architec-baseline-summary.md`
+- `.architec/architec-gate.json`
+- `.architec/architec-gate-summary.md`
 - `.architec/cache/*`
 
 Hippo remains the producer of input artifacts under `.hippocampus/`.
@@ -194,6 +259,13 @@ Hippo remains the producer of input artifacts under `.hippocampus/`.
 - `--goal` is the only semantic analysis input.
 - Default mode is full analysis.
 - `--diff` switches to incremental analysis against the working tree or an explicit git range.
+- `archi cleanup` runs the expanded cleanup scan for `source`, `script`, `doc`, `config`, and `prompt` paths without requiring Hippo bundle refresh or backend LLM preflight, derives archive candidates for non-source cleanup items, and attempts an optional fail-open semantic judge over the top cleanup/archive candidates.
+- `archi autofix` is dry-run by default and only auto-applies the safest `archive_first` moves when `--apply` is provided; source retirement remains manual in v1.
+- `archi update` checks the latest public release when possible, then reruns the production installer; if the current version already matches, it simply reinstalls the latest build.
+- `archi uninstall` is a deep uninstall by default: it removes the managed launcher, install tree, bundled skills, local config dirs, and attempts to uninstall `hippocampus` and `llmgateway` from the active Python environment. Use `--yes` only for non-interactive automation.
+- repo-root `.architecture-rules.toml` can now annotate cleanup candidates via `[[shared.cleanup_metadata]]` or `[[archi.cleanup_metadata]]` with `owner`, `ttl_days`, and `expires_at`; those fields flow through cleanup, archive, semantic-judge, and autofix artifacts.
+- `archi baseline` runs the normal full analysis path, then freezes scores, cleanup summary, hotspot/component snapshots, topology summary, and retire-plan counts into dedicated baseline artifacts for later regression checks.
+- `archi gate` requires an existing baseline, runs the normal full analysis path again, and returns `pass`, `warn`, or `fail`. Score regressions and core legacy cleanup categories block; docs/config/prompt cleanup regressions warn.
 - `--refresh-from-hippo` refreshes Hippo inputs through stable local commands:
   `hippo init .`, `hippo sig-extract .`, `hippo tree .`, `hippo index --no-llm .`,
   `hippo structure-prompt --profile map --no-llm-enhance .`,

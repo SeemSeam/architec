@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -9,7 +10,10 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from collect_repo_metrics_python import analyze_python_file
+from collect_repo_metrics import collect_metrics
+from collect_repo_metrics_rules import load_architecture_rules
 from collect_repo_metrics_scan import iter_files, line_length_summary, module_size_findings
+from architec.integration.bundle_loader import compute_bundle_fingerprint
 
 
 class _Thr:
@@ -72,3 +76,65 @@ def test_iter_files_skips_generated_state_dirs(tmp_path: Path) -> None:
     assert included in files
     assert generated not in files
     assert bundled not in files
+
+
+def test_collect_metrics_includes_bundle_fingerprint(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    hippo = root / ".hippocampus"
+    hippo.mkdir(parents=True, exist_ok=True)
+    (hippo / "hippocampus-index.json").write_text('{"files":{"src/app.py":{}}}\n', encoding="utf-8")
+    (hippo / "code-signatures.json").write_text(
+        '{"files":{"src/app.py":{"signatures":[]}}}\n',
+        encoding="utf-8",
+    )
+    (hippo / "file-manifest.json").write_text(
+        json.dumps({"files": {"src/app.py": {"kind": "source"}}}) + "\n",
+        encoding="utf-8",
+    )
+
+    result = collect_metrics(root, {"exclude_dirs": [], "exclude_suffixes": [], "weights": {}})
+
+    assert result["bundle_fingerprint"]
+    assert result["bundle_fingerprint"] == compute_bundle_fingerprint(root)
+
+
+def test_iter_files_applies_shared_and_archi_rule_file(tmp_path: Path) -> None:
+    included = tmp_path / "src" / "keep.py"
+    ignored_by_shared = tmp_path / "tmp" / "skip.py"
+    ignored_by_archi = tmp_path / "src" / "legacy" / "old.py"
+    ignored_by_glob = tmp_path / "notes.skip"
+    included.parent.mkdir(parents=True, exist_ok=True)
+    ignored_by_shared.parent.mkdir(parents=True, exist_ok=True)
+    ignored_by_archi.parent.mkdir(parents=True, exist_ok=True)
+    included.write_text("print('ok')\n", encoding="utf-8")
+    ignored_by_shared.write_text("print('skip')\n", encoding="utf-8")
+    ignored_by_archi.write_text("print('old')\n", encoding="utf-8")
+    ignored_by_glob.write_text("skip\n", encoding="utf-8")
+    (tmp_path / ".architecture-rules.toml").write_text(
+        "\n".join(
+            [
+                "[shared]",
+                'ignore_paths = ["tmp"]',
+                "",
+                "[archi]",
+                'ignore_paths = ["src/legacy"]',
+                'ignore_extensions = [".skip"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    files = iter_files(
+        tmp_path,
+        exclude_dirs=set(),
+        exclude_suffixes=set(),
+        rules=load_architecture_rules(tmp_path),
+    )
+
+    assert included in files
+    assert ignored_by_shared not in files
+    assert ignored_by_archi not in files
+    assert ignored_by_glob not in files

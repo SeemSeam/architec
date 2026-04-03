@@ -24,33 +24,33 @@ def _build_self_manage_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="archi", description="Architec maintenance commands")
     subparsers = parser.add_subparsers(dest="self_manage_command", required=True)
 
-    update = subparsers.add_parser("update", help="check the latest release and install it when needed")
+    update = subparsers.add_parser("update", help="reinstall the latest public Architec build")
     update.add_argument(
         "--force",
         action="store_true",
-        help="run the installer even when the current CLI already matches the latest release",
+        help=argparse.SUPPRESS,
     )
     update.add_argument(
         "--install-script-url",
         default=DEFAULT_INSTALL_SCRIPT_URL,
-        help="override the installer URL used for updates",
+        help=argparse.SUPPRESS,
     )
     update.add_argument(
         "--release-metadata-url",
         default=DEFAULT_RELEASE_METADATA_URL,
-        help="override the metadata URL used to discover the latest release version",
+        help=argparse.SUPPRESS,
     )
 
-    uninstall = subparsers.add_parser("uninstall", help="remove the installed Architec launcher and assets")
+    uninstall = subparsers.add_parser("uninstall", help="deep-remove the installed Architec launcher, assets, configs, and managed deps")
     uninstall.add_argument(
         "--purge",
         action="store_true",
-        help="also remove local Architec, Hippocampus, and LLMGateway config directories",
+        help=argparse.SUPPRESS,
     )
     uninstall.add_argument(
         "--remove-deps",
         action="store_true",
-        help="also uninstall hippocampus and llmgateway from the current python environment",
+        help=argparse.SUPPRESS,
     )
     uninstall.add_argument(
         "--yes",
@@ -166,9 +166,8 @@ def _cmd_update(args: argparse.Namespace) -> int:
     if latest_version:
         print(f"Current version: {current_version}")
         print(f"Latest version: {latest_version}")
-        if not bool(args.force) and not bool(status.get("upgrade_available")):
-            print(f"Architec is already up to date ({current_version}).")
-            return 0
+        if not bool(status.get("upgrade_available")):
+            print(f"Current version already matches the latest release; reinstalling {latest_version}.")
     else:
         if latest_error:
             print(f"Warning: could not resolve latest release version: {latest_error}", file=sys.stderr)
@@ -263,14 +262,10 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     _remove_managed_skills(paths["codex_skills"], removed)
     _remove_managed_skills(paths["claude_skills"], removed)
 
-    if bool(args.purge):
-        _remove_path(paths["architec_config"], removed)
-        _remove_path(paths["hippocampus_config"], removed)
-        _remove_path(paths["llmgateway_config"], removed)
-
-    dep_result = 0
-    if bool(args.remove_deps):
-        dep_result = _uninstall_python_deps()
+    _remove_path(paths["architec_config"], removed)
+    _remove_path(paths["hippocampus_config"], removed)
+    _remove_path(paths["llmgateway_config"], removed)
+    dep_result = _uninstall_python_deps()
 
     if removed:
         print("Removed:")
@@ -279,10 +274,8 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     else:
         print("No Architec install artifacts were found.")
 
-    if bool(args.purge):
-        print("Config purge: enabled")
-    if bool(args.remove_deps):
-        print("Python dependency removal attempted for hippocampus and llmgateway.")
+    print("Config purge: enabled")
+    print("Python dependency removal attempted for hippocampus and llmgateway.")
     print("Architec uninstall complete.")
     return dep_result
 

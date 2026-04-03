@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from collections import Counter, defaultdict
@@ -17,6 +18,7 @@ from collect_repo_metrics_runtime import (
     analyze_file_metrics,
     apply_layer_contracts,
 )
+from collect_repo_metrics_rules import load_architecture_rules
 from collect_repo_metrics_scan import (
     iter_files,
 )
@@ -51,6 +53,11 @@ LANG_BY_EXT = {
     ".json": "json",
     ".toml": "toml",
 }
+_BUNDLE_FINGERPRINT_FILES = (
+    "hippocampus-index.json",
+    "code-signatures.json",
+    "file-manifest.json",
+)
 
 
 @dataclass
@@ -67,6 +74,24 @@ class Thresholds:
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _bundle_fingerprint(root: Path) -> str:
+    hasher = hashlib.sha256()
+    included = 0
+    hippo_dir = root / ".hippocampus"
+    for name in _BUNDLE_FINGERPRINT_FILES:
+        path = hippo_dir / name
+        if not path.exists() or not path.is_file():
+            continue
+        hasher.update(name.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(path.read_bytes())
+        hasher.update(b"\0")
+        included += 1
+    if included <= 0:
+        return ""
+    return hasher.hexdigest()
 
 
 def _detect_lang(path: Path) -> str:
@@ -123,7 +148,12 @@ def collect_metrics(root: Path, rubric: dict[str, Any]) -> dict[str, Any]:
 
     exclude_dirs = set(rubric.get("exclude_dirs", []))
     exclude_suffixes = set(rubric.get("exclude_suffixes", []))
-    files = iter_files(root, exclude_dirs, exclude_suffixes)
+    files = iter_files(
+        root,
+        exclude_dirs,
+        exclude_suffixes,
+        rules=load_architecture_rules(root),
+    )
 
     findings: list[dict[str, Any]] = []
     ext_counter: Counter[str] = Counter()
@@ -179,6 +209,7 @@ def collect_metrics(root: Path, rubric: dict[str, Any]) -> dict[str, Any]:
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "root": str(root),
+        "bundle_fingerprint": _bundle_fingerprint(root),
         "summary": {
             "total_files": len(file_rows),
             "total_lines": sum(x["lines"] for x in file_rows),

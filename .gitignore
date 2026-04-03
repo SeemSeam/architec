@@ -18,3 +18,4 @@ dist/
 .venv-auth-portal/
 local-test-env/
 nuitka-crash-report.xml
+release-flow-test/
