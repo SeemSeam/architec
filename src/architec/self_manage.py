@@ -190,6 +190,7 @@ def _installer_paths() -> dict[str, Path]:
         "install_base": install_base,
         "bin_dir": bin_dir,
         "archi_bin": bin_dir / "archi",
+        "hippo_bin": bin_dir / "hippo",
         "repomix_bin": bin_dir / "repomix",
         "architec_config": Path(os.environ.get("ARCHITEC_USER_CONFIG_DIR", home / ".architec")).expanduser(),
         "hippocampus_config": Path(os.environ.get("HIPPOCAMPUS_USER_CONFIG_DIR", home / ".hippocampus")).expanduser(),
@@ -214,29 +215,20 @@ def _remove_managed_skills(skill_root: Path, removed: list[str]) -> None:
         _remove_path(skill_root / name, removed)
 
 
-def _remove_repomix_if_managed(rep_path: Path, install_base: Path, removed: list[str]) -> None:
-    if not rep_path.exists() and not rep_path.is_symlink():
+def _remove_tool_if_managed(tool_path: Path, managed_root: Path, removed: list[str]) -> None:
+    if not tool_path.exists() and not tool_path.is_symlink():
         return
     try:
-        if rep_path.is_symlink():
-            target = rep_path.resolve()
-            if install_base in target.parents:
-                _remove_path(rep_path, removed)
+        if tool_path.is_symlink():
+            target = tool_path.resolve()
+            if managed_root in target.parents:
+                _remove_path(tool_path, removed)
             return
     except Exception:
         return
 
-    managed_node_tools = install_base / "node-tools"
-    if managed_node_tools.exists() and rep_path.is_file():
-        _remove_path(rep_path, removed)
-
-
-def _uninstall_python_deps() -> int:
-    proc = subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "-y", "hippocampus", "llmgateway"],
-        check=False,
-    )
-    return int(proc.returncode)
+    if managed_root.exists() and tool_path.is_file():
+        _remove_path(tool_path, removed)
 
 
 def _confirm_uninstall(args: argparse.Namespace, install_base: Path) -> bool:
@@ -257,7 +249,8 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
 
     removed: list[str] = []
     _remove_path(paths["archi_bin"], removed)
-    _remove_repomix_if_managed(paths["repomix_bin"], install_base, removed)
+    _remove_tool_if_managed(paths["hippo_bin"], install_base / "python-tools", removed)
+    _remove_tool_if_managed(paths["repomix_bin"], install_base / "node-tools", removed)
     _remove_path(install_base, removed)
     _remove_managed_skills(paths["codex_skills"], removed)
     _remove_managed_skills(paths["claude_skills"], removed)
@@ -265,7 +258,6 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     _remove_path(paths["architec_config"], removed)
     _remove_path(paths["hippocampus_config"], removed)
     _remove_path(paths["llmgateway_config"], removed)
-    dep_result = _uninstall_python_deps()
 
     if removed:
         print("Removed:")
@@ -275,9 +267,9 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
         print("No Architec install artifacts were found.")
 
     print("Config purge: enabled")
-    print("Python dependency removal attempted for hippocampus and llmgateway.")
+    print("Managed Python dependency environment purge: enabled")
     print("Architec uninstall complete.")
-    return dep_result
+    return 0
 
 
 def handle_self_manage_command(argv: list[str]) -> int | None:

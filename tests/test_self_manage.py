@@ -79,36 +79,41 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
     install_base = home / ".local" / "architec"
     bin_dir = home / ".local" / "bin"
     archi_bin = bin_dir / "archi"
+    hippo_bin = bin_dir / "hippo"
     repomix_bin = bin_dir / "repomix"
+    hippo_target = install_base / "python-tools" / "venv" / "bin" / "hippo"
     repomix_target = install_base / "node-tools" / "repomix" / "node_modules" / ".bin" / "repomix"
     codex_skills = home / ".codex" / "skills"
     claude_skills = home / ".claude" / "skills"
 
+    hippo_target.parent.mkdir(parents=True, exist_ok=True)
     repomix_target.parent.mkdir(parents=True, exist_ok=True)
     install_base.mkdir(parents=True, exist_ok=True)
     bin_dir.mkdir(parents=True, exist_ok=True)
     archi_bin.write_text("", encoding="utf-8")
+    hippo_target.write_text("", encoding="utf-8")
     repomix_target.write_text("", encoding="utf-8")
+    hippo_bin.symlink_to(hippo_target)
     repomix_bin.symlink_to(repomix_target)
     for root in (codex_skills, claude_skills):
         for name in self_manage.MANAGED_SKILL_NAMES:
             (root / name).mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.setattr(self_manage, "_uninstall_python_deps", lambda: 0)
 
     result = self_manage.handle_self_manage_command(["uninstall", "--yes"])
 
     assert result == 0
     assert not install_base.exists()
     assert not archi_bin.exists()
+    assert not hippo_bin.exists()
     assert not repomix_bin.exists()
     for root in (codex_skills, claude_skills):
         for name in self_manage.MANAGED_SKILL_NAMES:
             assert not (root / name).exists()
     out = capsys.readouterr().out
     assert "Config purge: enabled" in out
-    assert "Python dependency removal attempted" in out
+    assert "Managed Python dependency environment purge: enabled" in out
     assert "Architec uninstall complete." in out
 
 
@@ -118,7 +123,6 @@ def test_uninstall_removes_config_and_deps_by_default(monkeypatch, tmp_path: Pat
     (home / ".hippocampus").mkdir(parents=True)
     (home / ".llmgateway").mkdir(parents=True)
     monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.setattr(self_manage, "_uninstall_python_deps", lambda: 0)
 
     result = self_manage.handle_self_manage_command(["uninstall", "--yes"])
 
@@ -128,7 +132,7 @@ def test_uninstall_removes_config_and_deps_by_default(monkeypatch, tmp_path: Pat
     assert not (home / ".llmgateway").exists()
     out = capsys.readouterr().out
     assert "Config purge: enabled" in out
-    assert "Python dependency removal attempted" in out
+    assert "Managed Python dependency environment purge: enabled" in out
 
 
 def test_cli_main_dispatches_self_manage_before_auth(monkeypatch) -> None:
