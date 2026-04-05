@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+from .support.tls import ensure_default_ca_bundle_env
 from .version import current_cli_version
 
 
@@ -18,6 +19,11 @@ SELF_MANAGE_COMMANDS = {"update", "uninstall"}
 DEFAULT_INSTALL_SCRIPT_URL = "https://www.architec.top/downloads/latest/install_prod.sh"
 DEFAULT_RELEASE_METADATA_URL = "https://api.github.com/repos/bfly123/architec-releases/releases/latest"
 MANAGED_SKILL_NAMES = ("archi-full", "archi-diff", "archi-goal", "archi-advice")
+
+
+def _urlopen(target: Any, *, timeout: float):
+    ensure_default_ca_bundle_env()
+    return urlopen(target, timeout=timeout)
 
 
 def _build_self_manage_parser() -> argparse.ArgumentParser:
@@ -91,7 +97,7 @@ def _fetch_json(url: str) -> dict[str, Any]:
         headers["authorization"] = f"Bearer {token}"
         headers["x-github-api-version"] = "2022-11-28"
     request = Request(url, headers=headers)
-    with urlopen(request, timeout=15) as response:
+    with _urlopen(request, timeout=15) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload if isinstance(payload, dict) else {}
 
@@ -106,7 +112,7 @@ def _latest_release_version(metadata_url: str) -> str:
 
 def _download_file(url: str, destination: Path) -> None:
     request = Request(url)
-    with urlopen(request, timeout=30) as response:
+    with _urlopen(request, timeout=30) as response:
         destination.write_bytes(response.read())
 
 

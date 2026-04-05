@@ -7,6 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from architec.support.tls import ensure_default_ca_bundle_env
 from architec.version import current_cli_version
 
 
@@ -15,6 +16,11 @@ DEFAULT_AUTH_BASE_URL = "https://www.architec.top"
 
 class ArchitecAuthClientError(RuntimeError):
     """Raised when the auth portal rejects or cannot fulfill a request."""
+
+
+def _urlopen(target: Any, *, timeout: float):
+    ensure_default_ca_bundle_env()
+    return urlopen(target, timeout=timeout)
 
 
 def auth_base_url() -> str:
@@ -74,7 +80,7 @@ def _json_request(url: str, payload: dict[str, Any]) -> dict[str, Any]:
         method="POST",
     )
     try:
-        with urlopen(req, timeout=15.0) as response:
+        with _urlopen(req, timeout=15.0) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.reason
@@ -118,7 +124,7 @@ def remote_status(*, refresh_token: str, install_id: str, app_version: str | Non
         }
     )
     try:
-        with urlopen(f"{auth_api_base_url()}/api/cli/status?{params}", timeout=15.0) as response:
+        with _urlopen(f"{auth_api_base_url()}/api/cli/status?{params}", timeout=15.0) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.reason
@@ -137,7 +143,7 @@ def remote_status(*, refresh_token: str, install_id: str, app_version: str | Non
 
 def fetch_public_key() -> str:
     try:
-        with urlopen(f"{auth_api_base_url()}/api/public-key", timeout=15.0) as response:
+        with _urlopen(f"{auth_api_base_url()}/api/public-key", timeout=15.0) as response:
             return response.read().decode("utf-8")
     except URLError as exc:
         raise ArchitecAuthClientError(f"Cannot reach auth portal at {auth_api_base_url()}: {exc.reason}") from exc
