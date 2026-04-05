@@ -143,6 +143,16 @@ def test_inspect_bundle_respects_hippo_ignore_rules_when_comparing_source_tree(t
     assert status.stale_reasons == []
 
 
+def test_inspect_bundle_ignores_packaging_metadata_directories(tmp_path):
+    _write_valid_bundle(tmp_path)
+    _touch(tmp_path / "src" / "architec.egg-info" / "PKG-INFO", "Metadata-Version: 2.1\n")
+
+    status = inspect_bundle(tmp_path)
+
+    assert status.ok is True
+    assert status.stale_reasons == []
+
+
 def test_inspect_bundle_marks_updated_source_file_as_stale(tmp_path):
     _write_valid_bundle(tmp_path)
     source = tmp_path / "src" / "app.py"

@@ -108,6 +108,11 @@ def _normalize_segment(segment: str) -> str:
     return "".join(ch for ch in raw if ch.isalnum())
 
 
+def _is_packaging_metadata_segment(segment: str) -> bool:
+    name = str(segment or "").strip().lower()
+    return name.endswith(".egg-info") or name.endswith(".dist-info")
+
+
 def _parts(path: str) -> list[str]:
     return [seg for seg in normalize_relpath(path).split("/") if seg]
 
@@ -158,6 +163,8 @@ def path_kind(path: str) -> str:
     normalized = [_normalize_segment(seg) for seg in parts]
     if any(seg.startswith(".") for seg in parts):
         return "hidden"
+    if any(_is_packaging_metadata_segment(seg) for seg in parts):
+        return "excluded"
     if any(seg in _EXCLUDED_SEGMENTS or norm in _EXCLUDED_SEGMENTS for seg, norm in zip(parts[:-1], normalized[:-1])):
         return "excluded"
     if is_doc_like_path(path):
