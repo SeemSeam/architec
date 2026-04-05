@@ -65,7 +65,7 @@ def _manifest_architecture_paths(project_root: Path) -> tuple[bool, set[str]]:
                 out.add(path)
             continue
         kind = str(item.get("kind", "") or "").strip().lower()
-        if kind == "source" or (not kind and path_kind(path) == "source"):
+        if kind == "source" or (not kind and path_kind(path, probe_root=project_root) == "source"):
             out.add(path)
     return True, out
 
@@ -95,7 +95,7 @@ def _current_architecture_source_mtimes(project_root: Path) -> dict[str, int]:
             continue
         if path_is_ignored(rel, rules):
             continue
-        if path_kind(rel) != "source":
+        if path_kind(rel, probe_root=project_root) != "source":
             continue
         try:
             out[rel] = int(path.stat().st_mtime_ns)

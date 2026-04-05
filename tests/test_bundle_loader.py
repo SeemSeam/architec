@@ -123,6 +123,24 @@ def test_inspect_bundle_marks_deleted_source_file_as_stale(tmp_path):
     assert "file-manifest.json does not match current source tree (added=0, removed=1)" in status.stale_reasons
 
 
+def test_inspect_bundle_counts_extensionless_code_but_ignores_extensionless_docs(tmp_path):
+    _write_valid_bundle(tmp_path)
+    _touch(
+        tmp_path / "ccb",
+        "#!/usr/bin/env python3\n"
+        "from cli.entrypoint import run_cli_entrypoint\n"
+        "\n"
+        "def main():\n"
+        "    return run_cli_entrypoint()\n",
+    )
+    _touch(tmp_path / "LICENSE", "GNU Affero General Public License\n")
+
+    status = inspect_bundle(tmp_path)
+
+    assert status.ok is False
+    assert "file-manifest.json does not match current source tree (added=1, removed=0)" in status.stale_reasons
+
+
 def test_inspect_bundle_respects_hippo_ignore_rules_when_comparing_source_tree(tmp_path):
     _write_valid_bundle(tmp_path)
     _touch(tmp_path / "experimental" / "draft.py", "print('draft')\n")

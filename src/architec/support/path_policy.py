@@ -83,6 +83,17 @@ _EXCLUDED_SEGMENTS = {
     "local-test-env",
 }
 _DOC_SEGMENTS = {"docs", "doc", "documentation", "plans"}
+_DOC_NAMES = {
+    "readme",
+    "changelog",
+    "changes",
+    "license",
+    "licence",
+    "authors",
+    "contributors",
+    "copying",
+    "notice",
+}
 _FIXTURE_SEGMENTS = {"fixtures", "fixture", "mocks", "mock", "testdata"}
 _INFRA_SEGMENTS = {"infra", "terraform", "helm", "charts", "k8s", "deploy", "deployment"}
 _TEST_SEGMENTS = {
@@ -100,6 +111,37 @@ _TEST_SEGMENTS = {
     "benches",
     "benchmark",
     "benchmarks",
+}
+_KNOWN_EXTENSIONLESS_SOURCE_NAMES = {
+    "makefile",
+    "dockerfile",
+    "justfile",
+    "jenkinsfile",
+    "rakefile",
+    "gemfile",
+    "vagrantfile",
+    "brewfile",
+}
+_TEXT_PROBE_BYTES = 4096
+_SHEBANG_SOURCE_NAMES = {
+    "python",
+    "python2",
+    "python3",
+    "python3.11",
+    "node",
+    "nodejs",
+    "deno",
+    "bun",
+    "ruby",
+    "php",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "ksh",
+    "dash",
+    "ash",
+    "perl",
 }
 
 
@@ -145,7 +187,11 @@ def is_doc_like_path(path: str) -> bool:
         return False
     if any(_normalize_segment(seg) in _DOC_SEGMENTS for seg in parts[:-1]):
         return True
-    suffix = Path(parts[-1]).suffix.lower()
+    name = parts[-1]
+    stem = _normalize_segment(Path(name).stem or Path(name).name)
+    if any(stem.startswith(token) for token in _DOC_NAMES):
+        return True
+    suffix = Path(name).suffix.lower()
     return suffix in {".md", ".rst", ".txt", ".adoc"}
 
 
@@ -156,8 +202,92 @@ def is_generated_like_path(path: str) -> bool:
     return any(token in name for token in (".generated.", ".gen.", "_generated.", "_pb2.py", "_pb2_grpc.py"))
 
 
-def path_kind(path: str) -> str:
-    parts = _parts(path)
+def _candidate_interpreters(line: str) -> list[str]:
+    body = line[2:].strip()
+    if not body:
+        return []
+    tokens = [token for token in body.split() if token]
+    if not tokens:
+        return []
+    first = Path(tokens[0]).name.lower()
+    if first != "env":
+        return [first]
+    out: list[str] = []
+    for token in tokens[1:]:
+        lowered = Path(token).name.lower()
+        if lowered.startswith("-"):
+            continue
+        out.append(lowered)
+    return out
+
+
+def _looks_like_code_text(text: str) -> bool:
+    lines = [line.strip() for line in text.splitlines() if line.strip()][:40]
+    if not lines:
+        return False
+    if any(line.startswith("<?php") for line in lines[:8]):
+        return True
+    py_score = 0
+    js_score = 0
+    ruby_score = 0
+    for line in lines:
+        if line.startswith(("import ", "from ", "def ", "class ", "async def ")):
+            py_score += 2
+        if line.startswith(("@", "return ", "raise ", "yield ")):
+            py_score += 1
+        if line.startswith(("if ", "elif ", "else:", "for ", "while ", "with ", "try:", "except ", "finally:", "match ", "case ")):
+            py_score += 1
+        if "__main__" in line:
+            py_score += 3
+
+        if line.startswith(("import ", "export ", "const ", "let ", "var ", "function ")):
+            js_score += 2
+        if "=>" in line or "require(" in line or "module.exports" in line:
+            js_score += 1
+
+        if line.startswith(("require ", "def ", "class ", "module ")):
+            ruby_score += 2
+        if line in {"end", "begin"} or line.startswith("attr_"):
+            ruby_score += 1
+    return py_score >= 3 or js_score >= 3 or ruby_score >= 3
+
+
+def _probe_extensionless_kind(path: Path) -> str:
+    name = path.name.lower()
+    stem = _normalize_segment(Path(name).stem or Path(name).name)
+    if any(stem.startswith(token) for token in _DOC_NAMES):
+        return "doc"
+    if name in _KNOWN_EXTENSIONLESS_SOURCE_NAMES:
+        return "source"
+    try:
+        with path.open("rb") as handle:
+            data = handle.read(_TEXT_PROBE_BYTES)
+    except OSError:
+        return "unsupported"
+    if not data or b"\0" in data:
+        return "unsupported"
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return "unsupported"
+    if text.startswith("#!"):
+        first_line = text.splitlines()[0] if text.splitlines() else text
+        if any(candidate.startswith("python") or candidate in _SHEBANG_SOURCE_NAMES for candidate in _candidate_interpreters(first_line)):
+            return "source"
+    return "source" if _looks_like_code_text(text) else "unsupported"
+
+
+def _resolve_probe_path(path: str | Path, probe_root: Path | None) -> Path | None:
+    raw = Path(path)
+    if raw.is_absolute():
+        return raw
+    if probe_root is None:
+        return None
+    return probe_root / normalize_relpath(str(path))
+
+
+def path_kind(path: str | Path, *, probe_root: Path | None = None) -> str:
+    parts = _parts(str(path))
     if not parts:
         return "unknown"
     normalized = [_normalize_segment(seg) for seg in parts]
@@ -180,8 +310,16 @@ def path_kind(path: str) -> str:
     suffix = Path(parts[-1]).suffix.lower()
     if suffix and suffix not in _CODE_SUFFIXES:
         return "unsupported"
-    return "source"
+    if suffix:
+        return "source"
+    name = parts[-1].lower()
+    if name in _KNOWN_EXTENSIONLESS_SOURCE_NAMES:
+        return "source"
+    probe_path = _resolve_probe_path(path, probe_root)
+    if probe_path is None or not probe_path.is_file():
+        return "unsupported"
+    return _probe_extensionless_kind(probe_path)
 
 
-def is_relevant_arch_path(path: str) -> bool:
-    return path_kind(path) == "source"
+def is_relevant_arch_path(path: str | Path, *, probe_root: Path | None = None) -> bool:
+    return path_kind(path, probe_root=probe_root) == "source"

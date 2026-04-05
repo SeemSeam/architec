@@ -66,13 +66,13 @@ class HippoSnapshot:
         kind = str(record.get("kind", "") or "").strip()
         if kind:
             return kind
-        return path_kind(path)
+        return path_kind(path, probe_root=self.project_root)
 
     def is_architecture_path(self, path: str) -> bool:
         record = self.file_record(path)
         if "include_in_architecture" in record:
             return bool(record.get("include_in_architecture"))
-        return is_relevant_arch_path(path)
+        return is_relevant_arch_path(path, probe_root=self.project_root)
 
     def is_test_support_path(self, path: str) -> bool:
         record = self.file_record(path)

@@ -93,11 +93,12 @@ def classify_cleanup_path(
     path: str | Path,
     *,
     rules: ArchitectureRules | None = None,
+    probe_root: Path | None = None,
 ) -> str | None:
     normalized = normalize_relpath(str(path or ""))
     if not normalized or path_is_ignored(normalized, rules):
         return None
-    base_kind = path_kind(normalized)
+    base_kind = path_kind(normalized, probe_root=probe_root)
     if base_kind in {"hidden", "excluded", "fixture", "generated", "infra", "test"}:
         return None
     if _is_prompt_path(normalized):
@@ -126,7 +127,7 @@ def iter_cleanup_scope(
         if not path.is_file():
             continue
         rel = normalize_relpath(path.relative_to(root))
-        kind = classify_cleanup_path(rel, rules=effective_rules)
+        kind = classify_cleanup_path(rel, rules=effective_rules, probe_root=root)
         if not kind or kind not in allowed_kinds:
             continue
         entries.append(CleanupScopeEntry(path=rel, kind=kind))
