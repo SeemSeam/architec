@@ -129,7 +129,16 @@ def run_analysis(
         fail_open=True,
     )
     semantic_judge = semantic_judge_report_view(semantic_judge_result)
-    dimensions = build_structure_dimensions(history, topology=topology)
+    components = component_view(history)
+    dimensions = build_structure_dimensions(
+        history,
+        topology=topology,
+        hotspot_digest=hotspot_digest,
+        components=components,
+        cleanup=cleanup,
+        archive_candidates=archive,
+        semantic_judge=semantic_judge,
+    )
     structure_score_value = build_structure_score(full_score, dimensions)
     snapshot_scores = score_snapshot(
         structure_score=structure_score_value,
@@ -138,7 +147,6 @@ def run_analysis(
         governance_overall=governance_overall,
         diff=diff,
     )
-    components = component_view(history)
     recommendations_view = recommendations(hotspot_digest, components, goal)
     recommendations_view.extend(topology_recommendations(topology))
     payload = summary_payload(

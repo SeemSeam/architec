@@ -70,12 +70,17 @@ def score_snapshot(
         'full': round(float(full_score.get('score', 0.0) or 0.0), 2),
         'incremental': None,
     }
-    values = [float(detailed['structure'] or 0.0), float(detailed['full'] or 0.0)]
     if diff:
         incremental_value = round(float(incremental_score.get('score', 0.0) or 0.0), 2)
         detailed['incremental'] = incremental_value
-        values.append(incremental_value)
-    total_average = round(sum(values) / max(1, len(values)), 2)
+    total_average = round(
+        (
+            float(detailed['structure'] or 0.0)
+            + float(governance_overall.get('score', 0.0) or 0.0)
+        )
+        / 2.0,
+        2,
+    )
     return {
         'overall': total_average,
         'total_average': total_average,

@@ -8,6 +8,7 @@ from architec.analysis.analysis_runner_llm import (
     run_diff_analysis,
     run_goal_analysis,
 )
+from architec.analysis.governance_dimensions import governance_dimensions
 from architec.analysis.analysis_runner_recommendations import (
     recommendations,
     topology_recommendations,
@@ -140,6 +141,12 @@ def _topology_dimension(topology: dict[str, Any]) -> float:
 def structure_dimensions(
     history: dict[str, Any],
     topology: dict[str, Any] | None = None,
+    *,
+    hotspot_digest: dict[str, Any] | None = None,
+    components: list[dict[str, Any]] | None = None,
+    cleanup: dict[str, Any] | None = None,
+    archive_candidates: dict[str, Any] | None = None,
+    semantic_judge: dict[str, Any] | None = None,
 ) -> dict[str, float]:
     summary = history.get('summary', {}) if isinstance(history.get('summary'), dict) else {}
     by_metric = summary.get('by_metric', {}) if isinstance(summary.get('by_metric'), dict) else {}
@@ -175,6 +182,15 @@ def structure_dimensions(
     }
     if topology is not None:
         dimensions['package_topology'] = _topology_dimension(topology)
+    dimensions.update(
+        governance_dimensions(
+            hotspot_digest=hotspot_digest,
+            components=components,
+            cleanup=cleanup,
+            archive_candidates=archive_candidates,
+            semantic_judge=semantic_judge,
+        )
+    )
     return dimensions
 
 
@@ -183,7 +199,7 @@ def structure_score(full_score: dict[str, Any], dimensions: dict[str, float]) ->
     if not dimensions:
         return round(base, 2)
     avg = sum(float(v or 0.0) for v in dimensions.values()) / max(1, len(dimensions))
-    return round((base * 0.45) + (avg * 0.55), 2)
+    return round((base * 0.3) + (avg * 0.7), 2)
 
 
 def incremental_score(score: dict[str, Any], *, diff: bool) -> dict[str, Any]:
