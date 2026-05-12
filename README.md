@@ -113,23 +113,24 @@ The website installer syncs them into:
 
 Current skill map:
 
-- `archi-full`: baseline full-repo architecture analysis via `archi .`
-- `archi-diff`: change-scoped architecture review via `archi --diff .`
-- `archi-goal`: goal-driven architecture placement and boundary analysis via `archi --goal "<goal>" .`
-- `archi-advice`: concrete architecture improvement planning built on top of full analysis, then refined by goal or diff context when relevant
+- `archi-full`: full-project advisory code review via `archi .` or `archi code-review --full .`
+- `archi-diff`: change-scoped advisory code review via `archi --diff .` or `archi code-review --diff .`
+- `archi-goal`: retired public workflow; write a plan Markdown file and run `archi plan-review <plan.md>` instead
+- `archi-advice`: legacy planning-oriented workflow; advisory review output now uses `plan-review`, `code-review`, and `fix-advice`
 
 Recommended usage order:
 
-1. Run `archi-full` to establish the structural baseline.
+1. Run `archi-full` to establish the current structural review.
 2. Add `archi-diff` when evaluating active changes.
-3. Add `archi-goal` when the user has a concrete target or refactor objective.
-4. Use `archi-advice` only after baseline context exists; it should synthesize full analysis first, then goal or diff results.
+3. When a concrete target or refactor objective exists, write it as a plan Markdown file and run `archi plan-review <plan.md>`.
+4. Use code-review output as advisory input for human or agent follow-up; `architec` does not plan, gate, or automatically repair work.
 
 ## Usage
 
 Detailed manual:
 
 - `docs/usage-manual.md`
+- `docs/advisory-review/release-notes.md`
 - `docs/commercial-rollout-plan.md`
 - `../architec-cloud/docs/local-auth-portal-mvp.md`
 - `../architec-cloud/README.md`
@@ -178,37 +179,51 @@ Version-gated auth behavior:
 - `archi status --json` and `archi whoami --json` now expose `action_required`, release links, and `recommended_upgrade_command` when the local build is too old.
 - for automation, prefer the stable `upgrade` object in `archi status --json` and `archi whoami --json` instead of reading scattered top-level fields.
 
-Full analysis:
+Advisory review:
 
 ```bash
 archi .
-archi --goal "analyze architecture stability" .
+archi code-review --full .
+archi --diff .
+archi code-review --diff .
+archi code-review --since main .
 ```
 
-Cleanup scan:
+`archi .` and `archi --diff .` are top-level aliases for code-review output. When `--out <path>` is used with those aliases, the JSON shape is CodeReviewResult rather than the legacy analysis result.
+
+Plan review:
+
+````markdown
+# Plan
+
+## Intent
+Stabilize service boundaries.
+
+## Changes
+```yaml
+changes:
+  - action: update
+    path: src/service/boundary.py
+    intent: clarify service ownership
+dependencies:
+  - src/service/contracts.py
+```
+````
 
 ```bash
-archi cleanup .
+archi plan-review plan.md
 ```
 
-Autofix dry-run:
+The top-level `--goal` flag has been removed. Write the intent as a plan Markdown file and use `archi plan-review <plan.md>`.
 
-```bash
-archi autofix .
-archi autofix --apply .
-```
+Legacy maintenance command parsers have been removed. Use these replacement workflows instead:
 
-Baseline capture:
+- `archi cleanup .` -> `archi code-review --full .`
+- `archi autofix .` -> `archi fix-advice --for <review.json>`
+- `archi baseline .` -> `archi status --snapshot`
+- `archi gate .` -> `archi code-review --diff . --out review.json`
 
-```bash
-archi baseline .
-```
-
-Gate check:
-
-```bash
-archi gate .
-```
+`code-review --full` carries cleanup/archive observations as advisory signals and file-level concerns. `code-review --diff` output is advisory review data for humans or agents. Do not treat review output as a merge decision, and do not use automatic apply flows as part of the advisory-review workflow.
 
 CLI self-maintenance:
 
@@ -222,6 +237,7 @@ Diff analysis:
 ```bash
 archi --diff .
 archi --diff --base main --head HEAD .
+archi code-review --diff .
 ```
 
 Refresh Hippo bundle first:
@@ -244,28 +260,22 @@ Architec writes only to `.architec/`:
 - `.architec/architec-archive-summary.md`
 - `.architec/architec-semantic-judge.json`
 - `.architec/architec-semantic-judge-summary.md`
-- `.architec/architec-autofix-plan.json`
-- `.architec/architec-autofix-summary.md`
-- `.architec/architec-baseline.json`
-- `.architec/architec-baseline-summary.md`
-- `.architec/architec-gate.json`
-- `.architec/architec-gate-summary.md`
 - `.architec/cache/*`
+
+Historical legacy artifacts such as `.architec/architec-autofix-plan.json`, `.architec/architec-autofix-summary.md`, `.architec/architec-baseline.json`, `.architec/architec-baseline-summary.md`, `.architec/architec-gate.json`, and `.architec/architec-gate-summary.md` may exist from older runs. Cleanup, autofix, baseline, and gate wrapper public APIs and command parsers have been retired. Current advisory commands do not write these legacy-only artifacts.
 
 Hippo remains the producer of input artifacts under `.hippocampus/`.
 
 ## Notes
 
-- `--goal` is the only semantic analysis input.
-- Default mode is full analysis.
-- `--diff` switches to incremental analysis against the working tree or an explicit git range.
-- `archi cleanup` runs the expanded cleanup scan for `source`, `script`, `doc`, `config`, and `prompt` paths without requiring Hippo bundle refresh or backend LLM preflight, derives archive candidates for non-source cleanup items, and attempts an optional fail-open semantic judge over the top cleanup/archive candidates.
-- `archi autofix` is dry-run by default and only auto-applies the safest `archive_first` moves when `--apply` is provided; source retirement remains manual in v1.
+- `--goal` has been removed from the parser; use `archi plan-review <plan.md>` for plan or intent review.
+- Default top-level mode is full advisory code review.
+- `--diff` switches the top-level alias to advisory diff code review against the working tree or an explicit git range.
+- `archi cleanup` and `archi autofix` command parsers have been removed; use `archi code-review --full .` cleanup/archive signals and `archi fix-advice --for <review.json>`.
 - `archi update` checks the latest public release when possible, then reruns the production installer; if the current version already matches, it simply reinstalls the latest build.
 - `archi uninstall` is a deep uninstall by default: it removes the managed launcher, install tree, bundled skills, local config dirs, and attempts to uninstall `hippocampus` and `llmgateway` from the active Python environment. Use `--yes` only for non-interactive automation.
-- repo-root `.architecture-rules.toml` can now annotate cleanup candidates via `[[shared.cleanup_metadata]]` or `[[archi.cleanup_metadata]]` with `owner`, `ttl_days`, and `expires_at`; those fields flow through cleanup, archive, semantic-judge, and autofix artifacts.
-- `archi baseline` runs the normal full analysis path, then freezes scores, cleanup summary, hotspot/component snapshots, topology summary, and retire-plan counts into dedicated baseline artifacts for later regression checks.
-- `archi gate` requires an existing baseline, runs the normal full analysis path again, and returns `pass`, `warn`, or `fail`. Score regressions and core legacy cleanup categories block; docs/config/prompt cleanup regressions warn.
+- repo-root `.architecture-rules.toml` can now annotate cleanup candidates via `[[shared.cleanup_metadata]]` or `[[archi.cleanup_metadata]]` with `owner`, `ttl_days`, and `expires_at`; those fields flow through cleanup/archive signals and legacy compatibility internals.
+- `archi baseline` and `archi gate` command parsers have been removed; use `archi status --snapshot` and advisory `archi code-review --diff . --out review.json`.
 - `--refresh-from-hippo` refreshes Hippo inputs through stable local commands:
   `hippo init .`, `hippo sig-extract .`, `hippo tree .`, `hippo index --no-llm .`,
   `hippo structure-prompt --profile map --no-llm-enhance .`,

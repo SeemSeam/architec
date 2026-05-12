@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 
-from architec.baseline.public import run_baseline
+import architec
+import architec.baseline as baseline_pkg
+from architec.baseline.report import build_baseline_snapshot, write_baseline_artifacts
 
 
-def test_run_baseline_writes_baseline_artifacts(tmp_path, monkeypatch) -> None:
-    report = {
+def _analysis_report(tmp_path) -> dict[str, object]:
+    return {
         "meta": {
             "generated_at": "2026-04-03T00:00:00+00:00",
             "path": str(tmp_path),
@@ -83,20 +85,34 @@ def test_run_baseline_writes_baseline_artifacts(tmp_path, monkeypatch) -> None:
             "summary_md": str(tmp_path / ".architec" / "architec-summary.md"),
         },
     }
-    monkeypatch.setattr("architec.baseline.public.run_analysis", lambda root, progress=None: report)
 
-    result = run_baseline(tmp_path)
 
-    baseline_path = tmp_path / ".architec" / "architec-baseline.json"
-    summary_path = tmp_path / ".architec" / "architec-baseline-summary.md"
-    assert baseline_path.exists()
-    assert summary_path.exists()
+def test_baseline_wrapper_exports_are_retired() -> None:
+    assert "run_baseline" not in architec.__all__
+    assert "run_baseline" not in baseline_pkg.__all__
+    assert not hasattr(architec, "run_baseline")
+    assert not hasattr(baseline_pkg, "run_baseline")
 
-    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+
+def test_build_baseline_snapshot_preserves_legacy_snapshot_fields(tmp_path) -> None:
+    baseline = build_baseline_snapshot(_analysis_report(tmp_path))
+
     assert baseline["meta"]["mode"] == "baseline"
     assert baseline["scores"]["overall"] == 84.5
     assert baseline["cleanup"]["candidate_total"] == 2
     assert baseline["retire_plan"]["goal"]["retire_total"] == 1
-    assert result["summary"]["headline"] == "Archi baseline captured"
-    assert result["artifacts"]["baseline_json"].endswith("architec-baseline.json")
-    assert result["artifacts"]["baseline_summary_md"].endswith("architec-baseline-summary.md")
+    assert baseline["source_artifacts"]["analysis_json"].endswith("architec-analysis.json")
+
+
+def test_write_baseline_artifacts_emits_legacy_snapshot_files(tmp_path) -> None:
+    baseline = build_baseline_snapshot(_analysis_report(tmp_path))
+
+    artifacts = write_baseline_artifacts(tmp_path, baseline)
+
+    baseline_path = tmp_path / ".architec" / "architec-baseline.json"
+    summary_path = tmp_path / ".architec" / "architec-baseline-summary.md"
+    assert artifacts["baseline_json"] == str(baseline_path)
+    assert artifacts["baseline_summary_md"] == str(summary_path)
+    payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert payload["meta"]["mode"] == "baseline"
+    assert "# Architec Baseline" in summary_path.read_text(encoding="utf-8")

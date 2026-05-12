@@ -163,7 +163,7 @@ archi uninstall --yes
 
 ## 3.1 Skills
 
-网站安装脚本会同步安装以下 4 个 skills：
+网站安装脚本会同步安装以下 skills：
 
 - `archi-full`
 - `archi-diff`
@@ -181,26 +181,26 @@ archi uninstall --yes
 职责划分：
 
 - `archi-full`
-  全量架构分析基线，对应 `archi .`
+  全量建议型代码审查，对应 `archi .` 或 `archi code-review --full .`
 - `archi-diff`
-  基于当前 `git diff` 的增量架构分析，对应 `archi --diff .`
+  基于当前 `git diff` 的增量建议型代码审查，对应 `archi --diff .` 或 `archi code-review --diff .`
 - `archi-goal`
-  围绕具体目标的架构落点分析，对应 `archi --goal "<goal>" .`
+  旧目标驱动入口已退位；把目标写成方案 Markdown，并运行 `archi plan-review <plan.md>`
 - `archi-advice`
-  结合全量分析基线，再按需叠加 `goal` 或 `diff`，形成分阶段的架构改进建议
+  旧规划型工作流；建议迁移到 `plan-review`、`code-review` 以及 `fix-advice` 工作流
 
 推荐顺序：
 
-1. 先用 `archi-full` 建立当前结构基线
+1. 先用 `archi-full` 查看当前结构审查结果
 2. 有活动改动时再用 `archi-diff`
-3. 有明确目标时再用 `archi-goal`
-4. 最后用 `archi-advice` 产出具体的改造计划
+3. 有明确目标时写成方案 Markdown，再用 `archi plan-review <plan.md>`
+4. 后续修复方向由人或 agent 基于 review 输出判断，`architec` 不做规划、不做门禁、不自动修复
 
 误用边界：
 
 - 不要用 `archi-diff` 代替全量基线分析
-- 不要在没有明确目标时使用 `archi-goal`
-- 不要脱离 `archi-full` 单独使用 `archi-advice`
+- 不要继续使用 `--goal`；该参数已从 parser 移除
+- 不要把 review 输出当成放行门禁或自动修复计划
 
 最小示例 prompt：
 
@@ -208,21 +208,17 @@ archi uninstall --yes
   "Analyze this repo's overall architecture and summarize the main structural problems."
 - `archi-diff`
   "Review the current git diff from an architecture perspective."
-- `archi-goal`
-  "Use the goal 'stabilize service boundaries' and identify the right target components."
-- `archi-advice`
-  "Based on the current architecture, give me a phased architecture improvement plan."
+- plan review
+  "Write a short plan Markdown for stabilizing service boundaries, then run `archi plan-review plan.md`."
 
 建议输出模板：
 
 - `archi-full`
-  `Score -> Problems -> Improvements`
+  `Summary -> Concerns -> Evidence`
 - `archi-diff`
-  `Verdict -> Impacted Areas -> Required Changes`
-- `archi-goal`
-  `Goal -> Recommended Placement -> Risks -> Next Moves`
-- `archi-advice`
-  `Current Position -> Immediate -> Next -> Later`
+  `Summary -> New Concerns -> Evidence`
+- `plan-review`
+  `Intent -> Changes -> Dependencies -> Concerns -> Suggested Adjustments`
 
 ## 3.2 修改后建议测试
 
@@ -420,49 +416,72 @@ archi --help
 - 如果你要给 skill、脚本或外部包装器消费，优先读取稳定的 `upgrade` 对象：
   `required`、`minimum_version`、`install_script_url`、`command`
 
-### 6.2 全量分析
+### 6.2 全量代码审查
 
-对整个项目做一次完整架构分析：
+对整个项目做一次建议型代码结构审查：
 
 ```bash
 archi .
 ```
 
+等价的显式新入口：
+
+```bash
+archi code-review --full .
+```
+
 说明：
 
-- 默认模式就是全量分析
+- 默认顶层模式就是全量 code-review
 - 会要求 Hippo 输入齐全
 - 会执行后端 LLM 预检查
+- 如果使用 `--out <path>`，写出的 JSON 是 CodeReviewResult，不再是旧 analysis result
 
-### 6.3 目标驱动分析
+### 6.3 方案审查
 
-如果你希望工具围绕某个架构目标给建议，可以传入 `--goal`：
+如果你希望审查某个目标、重构方向或实施方案，先写成 Markdown plan：
+
+````markdown
+# Plan
+
+## Intent
+Stabilize service boundaries.
+
+## Changes
+```yaml
+changes:
+  - action: update
+    path: src/service/boundary.py
+    intent: clarify service ownership
+dependencies:
+  - src/service/contracts.py
+```
+````
+
+然后运行：
 
 ```bash
-archi --goal "analyze architecture stability" .
+archi plan-review plan.md
 ```
 
-适用场景：
+`--goal` 已从 parser 移除。请把目标、重构方向或实施方案写成 Markdown plan，并运行 `archi plan-review <plan.md>`。
 
-- 功能落点分析
-- 架构稳定性评估
-- 边界收敛建议
+### 6.4 cleanup / archive signals
 
-### 6.4 cleanup 扫描
+`archi cleanup` parser 已移除，当前不再作为 live workflow 使用。cleanup 与 archive 信息已进入全量 code-review 的 advisory signals 和 file-level concerns。
 
-如果你只想查看当前仓库里哪些旧结构、旧脚本、旧文档、旧配置或旧 prompt 已经应该退场，可以直接运行：
+如果你只想查看当前仓库里哪些旧结构、旧脚本、旧文档、旧配置或旧 prompt 需要关注，请运行全量建议型代码审查：
 
 ```bash
-archi cleanup .
+archi code-review --full . --out review.json
 ```
 
-这个命令：
+全量 code-review 会复用旧完整分析链路中的 cleanup / archive / semantic judge 数据，并在 JSON 中呈现：
 
-- 不依赖 Hippo 输入
-- 不执行后端 LLM 预检查
-- 会基于 cleanup inventory 额外派生 archive candidate 结果
-- 如果 backend LLM 可用，会额外对 top cleanup candidates 运行 semantic judge；若 backend 不可用，命令会 fail-open，不阻塞 cleanup 输出
-- 只写 cleanup / archive / semantic-judge 相关产物，不生成主分析 JSON / Markdown / HTML
+- `signals[]` 中的 `cleanup`：候选数、review-required 数、owner / TTL / expires_at metadata 计数和 category 分布
+- `signals[]` 中的 `archive`：archive candidate 数、ready / review tier 计数和 category 分布
+- `signals[]` 中的 `semantic_judge`：语义复核状态、reviewed count 和 decision 分布
+- `concerns[]` 中的 file-level cleanup concern：从 cleanup top candidates 和 archive top candidates 下沉到 `location.path`
 
 当前 archive candidate 的含义是：
 
@@ -475,7 +494,7 @@ archi cleanup .
 - 它不是第二套扫描，而是对 top cleanup / archive candidates 的 LLM 语义复核
 - 只复核有限数量的 top candidates，避免把 cleanup 变成大规模慢调用
 - 当前会输出 `retire_now`、`archive_first`、`keep_active`、`review`
-- `archi cleanup` 不要求你先通过 LLM preflight；如果 semantic judge 当前不可用，会写出 `unavailable` 或 `skipped` artifact
+- 如果 semantic judge 当前不可用，对应 signal 会显示 `unavailable` 或 `skipped`
 
 如果你希望给 cleanup candidate 补充责任人与时限 metadata，可以在 repo 根 `.architecture-rules.toml` 中增加：
 
@@ -493,45 +512,37 @@ expires_at = "2026-05-01"
 
 当前规则行为是：
 
-- `shared.cleanup_metadata` 和 `archi.cleanup_metadata` 都只作用于 `archi` cleanup 派生产物
+- `shared.cleanup_metadata` 和 `archi.cleanup_metadata` 都只作用于 cleanup 派生数据
 - 支持 `path` 或 `glob` 作为匹配条件；可选再加 `kind`、`category`
 - 后匹配到的规则会覆盖前面规则的同名字段
 - `expires_at` 支持 ISO 日期或时间；写入 artifact 时会额外派生 `expired`
-- 这些 metadata 会透传到 cleanup inventory、archive candidate、semantic judge 和 autofix plan
+- 这些 metadata 会透传到 cleanup inventory、archive candidate、semantic judge；historical / direct legacy API 生成的 autofix plan 也会保留这些字段
 
-### 6.5 autofix
+### 6.5 autofix（legacy parser removed）
 
-如果你希望基于 archive candidate 和 semantic judge 结果，导出一份可执行的安全修复计划，可以运行：
+`archi autofix` parser 已移除，不属于 advisory-review 的公开主流程。当前 CLI 不再输出 dry-run 计划，也不会执行自动修改。
 
-```bash
-archi autofix .
-```
-
-默认行为是 dry-run：
-
-- 不直接改动仓库文件
-- 只生成 autofix plan / summary artifact
-- 当前只把最安全的 `archive_first` 对象转成可执行动作
-
-如果你确认要执行这些安全动作，再运行：
+替代流程是先保存一次 code-review JSON，再生成修复建议：
 
 ```bash
-archi autofix --apply .
+archi code-review --full . --out review.json
+archi fix-advice --for review.json
 ```
 
-当前 autofix v1 的边界是：
+Historical note: 旧版本曾基于 archive candidate 和 semantic judge 生成 `.architec/architec-autofix-plan.json` / `.architec/architec-autofix-summary.md`，并包含 archive-move 动作模型。该 CLI 工作流已下线；cleanup 子包 wrapper API 也已退役，低层 plan / artifact helper 仍保留。
 
-- 只自动处理 `archive_first` 且带 `archive_path_hint` 的非源码对象
-- 当前执行动作只有 `archive_move`
-- `retire_now` 仍然只进计划，不会自动删改源码
-- 如果 semantic judge 不可用，autofix 会 fail-open，但通常不会生成可执行动作
+### 6.6 差异代码审查
 
-### 6.6 差异分析
-
-分析当前改动相对于工作区或指定提交范围的架构影响：
+审查当前改动相对于工作区或指定提交范围的结构影响：
 
 ```bash
 archi --diff .
+```
+
+等价的显式新入口：
+
+```bash
+archi code-review --diff .
 ```
 
 指定比较范围：
@@ -544,70 +555,33 @@ archi --diff --base main --head HEAD .
 
 - `--base` 和 `--head` 必须和 `--diff` 一起使用
 - 只写 `--base` 或 `--head` 而不加 `--diff` 会直接报错
+- 如果使用 `--out <path>`，写出的 JSON 是 `review_type: "diff"` 的 CodeReviewResult
 
-### 6.7 固化 baseline
+### 6.7 状态快照（替代 legacy baseline）
 
-如果你希望把当前仓库的主分析结果固化为后续对比基线，可以运行：
+`archi baseline` parser 已移除，当前不再作为 live workflow 使用。
 
-```bash
-archi baseline .
-```
-
-这个命令会：
-
-- 走完整的 `archi .` 主分析链路
-- 保留正常的主分析输出
-- 额外写出 baseline 专用产物
-
-baseline 产物包括：
-
-- `.architec/architec-baseline.json`
-- `.architec/architec-baseline-summary.md`
-
-其中会冻结这些稳定字段：
-
-- scores 快照
-- cleanup 汇总
-- top hotspots
-- top risk components
-- topology 摘要
-- goal / diff retire plan 的计数快照
-
-### 6.8 基于 baseline 执行 gate
-
-如果你已经固化过 baseline，并希望检查当前仓库是否出现结构回退，可以运行：
+如果你需要记录当前 advisory 状态，请使用：
 
 ```bash
-archi gate .
+archi status --snapshot
 ```
 
-这个命令会：
+Historical note: 旧版本曾写出 `.architec/architec-baseline.json` / `.architec/architec-baseline-summary.md`，用于保存旧 analysis result 的 scores、cleanup、hotspot、topology 等快照。该 CLI 工作流已下线；`run_baseline` root public API 也已退役。
 
-- 读取 `.architec/architec-baseline.json`
-- 重新执行当前仓库的完整主分析
-- 对比 baseline 与当前结果
-- 生成 gate 专用产物
+### 6.8 差异审查（替代 legacy gate）
 
-当前 gate 默认检查：
+`archi gate` parser 已移除，当前不再作为 live workflow 使用。advisory-review 不提供合并放行裁决。
 
-- `overall` 不低于 baseline
-- `structure` 不低于 baseline
-- `full` 不低于 baseline
-- cleanup 候选总数不高于 baseline
-- cleanup review-required 总数不高于 baseline
-- cleanup 各 category 计数不高于 baseline
+如果你需要在 CI 或本地检查当前改动的架构影响，请保存 advisory diff review JSON：
 
-当前 gate severity 规则：
+```bash
+archi code-review --diff . --out review.json
+```
 
-- `fallback_branch` / `legacy_impl` / `compat_layer` 回退记为 `block`
-- `obsolete_script` / `stale_doc` / `stale_config` / `stale_prompt` 回退记为 `warn`
-- score 回退仍然记为 `block`
-- cleanup 总数回退当前记为 `warn`
+这个 JSON 是给人或 agent 阅读的建议型审查输出，不是 merge decision。
 
-gate 产物包括：
-
-- `.architec/architec-gate.json`
-- `.architec/architec-gate-summary.md`
+Historical note: 旧版本曾读取 `.architec/architec-baseline.json`，并写出 `.architec/architec-gate.json` / `.architec/architec-gate-summary.md`。该 CLI 工作流已下线；`run_gate` root public API 也已退役。
 
 ### 6.9 刷新 Hippo 输入后分析
 
@@ -635,47 +609,53 @@ python collect_repo_metrics.py --root <root> --rubric <rubric>
 archi --refresh-from-hippo --check .
 ```
 
-### 7.2 刷新输入并做全量分析
+### 7.2 刷新输入并做全量代码审查
 
 ```bash
 archi --refresh-from-hippo .
 ```
 
-### 7.3 针对某个需求做差异分析
+### 7.3 先审查方案，再审查差异
 
 ```bash
-archi --diff --goal "stabilize payment module boundaries" .
+archi plan-review plan.md
+archi code-review --diff .
 ```
 
-### 7.4 只执行 cleanup 扫描
+### 7.4 查看 cleanup / archive signals
 
 ```bash
-archi cleanup .
+archi code-review --full . --out review.json
 ```
 
-### 7.5 生成 autofix 计划
+`archi cleanup` parser 已移除；请使用 `archi code-review --full .` 查看 cleanup/archive signals。
+
+### 7.5 生成修复建议（替代 legacy autofix）
 
 ```bash
-archi autofix .
+archi code-review --full . --out review.json
+archi fix-advice --for review.json
 ```
 
-### 7.6 执行安全 autofix
+### 7.6 `archi autofix` parser 已移除
+
+请使用 `archi fix-advice --for <review.json>` 生成修复建议。
+
+### 7.7 记录当前状态快照
 
 ```bash
-archi autofix --apply .
+archi status --snapshot
 ```
 
-### 7.7 固化当前 baseline
+`archi baseline` parser 已移除；请使用 `archi status --snapshot`。
+
+### 7.8 保存当前 diff 的 advisory review
 
 ```bash
-archi baseline .
+archi code-review --diff . --out review.json
 ```
 
-### 7.8 对当前结果执行 gate
-
-```bash
-archi gate .
-```
+`archi gate` parser 已移除；请使用 advisory `archi code-review --diff .` output。`review.json` 是建议型审查结果，不是 merge decision。
 
 ## 8. 参数说明
 
@@ -683,7 +663,6 @@ archi gate .
 
 | 参数 | 说明 |
 | --- | --- |
-| `--goal` | 分析目标或意图 |
 | `--diff` | 启用增量差异分析 |
 | `--base` | 差异分析的起始 git 引用 |
 | `--head` | 差异分析的结束 git 引用 |
@@ -695,24 +674,24 @@ archi gate .
 | `--out` | 额外把 JSON 结果写到指定路径 |
 | `path` | 项目根目录，默认是当前目录 `.` |
 
-另外还支持单独命令：
+另外还支持这些单独命令：
 
-- `archi cleanup [path]`
-  只执行 cleanup 扫描，输出 cleanup inventory / ledger / summary、archive candidate JSON / Markdown，以及 semantic judge JSON / Markdown
-- `archi autofix [path]`
-  生成 autofix plan / summary；加 `--apply` 时执行安全 archive move
-- `archi baseline [path]`
-  运行完整主分析并额外输出 baseline JSON / Markdown
-- `archi gate [path]`
-  基于已存在 baseline 执行结构回归检查，并输出 gate JSON / Markdown
+- `archi plan-review <plan.md>`
+  审查方案 Markdown，输出 understood plan、concerns、suggested adjustments 和 fingerprint
+- `archi code-review --full|--diff|--since <ref> [path]`
+  显式执行全量、当前 diff 或 since-ref 的建议型代码审查
 
 ## 9. 输出文件说明
 
-执行分析后，核心输出位于 `.architec/`：
+执行当前公开审查或状态命令后，输出位于 `.architec/`：
 
 - `.architec/architec-analysis.json`
 - `.architec/architec-summary.md`
 - `.architec/architec-viz.html`
+- `.architec/cache/`
+
+Full code-review may also write cleanup/archive/semantic-judge analysis artifacts because it reuses the full analysis path:
+
 - `.architec/architec-cleanup-inventory.json`
 - `.architec/architec-cleanup-ledger.json`
 - `.architec/architec-cleanup-summary.md`
@@ -720,13 +699,15 @@ archi gate .
 - `.architec/architec-archive-summary.md`
 - `.architec/architec-semantic-judge.json`
 - `.architec/architec-semantic-judge-summary.md`
+
+Historical / legacy compatibility artifacts may still exist from older runs, but current advisory CLI entries and retired wrapper public APIs do not write them:
+
 - `.architec/architec-autofix-plan.json`
 - `.architec/architec-autofix-summary.md`
 - `.architec/architec-baseline.json`
 - `.architec/architec-baseline-summary.md`
 - `.architec/architec-gate.json`
 - `.architec/architec-gate-summary.md`
-- `.architec/cache/`
 
 说明：
 
@@ -740,17 +721,30 @@ archi gate .
 - `architec-archive-summary.md` 是 archive candidate 的可读摘要
 - `architec-semantic-judge.json` 是 LLM 对 top cleanup/archive candidates 的语义复核结果
 - `architec-semantic-judge-summary.md` 是 semantic judge 的可读摘要
-- `architec-autofix-plan.json` 是当前可安全执行的 autofix 动作计划
-- `architec-autofix-summary.md` 是 autofix 的可读摘要
-- `architec-baseline.json` 是后续回归检查可复用的结构基线快照
-- `architec-baseline-summary.md` 是 baseline 的可读摘要
-- `architec-gate.json` 是当前结果相对 baseline 的结构门禁检查结果
-- `architec-gate-summary.md` 是 gate 的可读摘要
+- `architec-autofix-plan.json` 是 historical autofix 动作计划，当前 advisory CLI 不再写出
+- `architec-autofix-summary.md` 是 historical autofix 可读摘要，当前 advisory CLI 不再写出
+- `architec-baseline.json` 是 historical baseline 快照，当前 advisory CLI 不再写出
+- `architec-baseline-summary.md` 是 historical baseline 可读摘要，当前 advisory CLI 不再写出
+- `architec-gate.json` 是 historical gate evaluation 结果，当前 advisory CLI 不再写出
+- `architec-gate-summary.md` 是 historical gate 可读摘要，当前 advisory CLI 不再写出
 - `--out <path>` 不会替代默认输出，只会额外再写一份 JSON
+- 顶层 `archi .` / `archi --diff .` 当前写出的 `--out` JSON 是 CodeReviewResult，而不是旧 analysis result
 
 ## 10. 结果如何理解
 
-分析结果里主要会包含这些部分：
+顶层 `archi .`、`archi --diff .` 和显式 `archi code-review ...` 的 JSON 结果主要包含这些部分：
+
+- `mode`: 固定为 `code_review`
+- `review_type`: `full`、`diff` 或 `since`
+- `scores`: 复用底层分析得出的分数摘要
+- `summary`: 本次审查摘要
+- `findings`: 当前保留的发现列表
+- `signals`: cleanup、archive、semantic_judge、hotspot、topology 等信号摘要
+- `evidence`: 从 concerns 下沉出的证据视图
+- `concerns`: 建议关注的问题，包含 kind、level、confidence、location、evidence 和 next_steps_hint
+- `artifacts`: 相关输出文件路径
+
+旧 analysis result 仍可能出现在内部分析链路或历史产物中，主要包含这些部分：
 
 - `meta`: 本次分析的模式、时间、路径、diff 范围
 - `bundle`: Hippo 输入是否成功加载
@@ -758,14 +752,14 @@ archi gate .
 - `scores`: 结构分、总体分、全量分、增量分
 - `hotspots`: 风险热点文件或区域
 - `components`: 组件级风险视图
-- `cleanup`: cleanup 候选汇总，`archi .` / `archi --goal` / `archi --diff` 都会带上
+- `cleanup`: cleanup 候选汇总，旧 analysis result 中会带上
 - `archive_candidates`: 从 cleanup inventory 派生出的归档候选，只覆盖 `doc` / `config` / `prompt` / `script` 等非源码对象，并带 `ready` / `review`、`archive_path_hint`，以及可选的 `owner` / `ttl_days` / `expires_at`
 - `semantic_judge`: 对 top cleanup/archive candidates 的 LLM 语义复核，当前会输出 `retire_now`、`archive_first`、`keep_active`、`review`，以及简短理由；若上游已有 cleanup metadata，会一并透传
-- `autofix`: 基于 semantic judge 派生出的安全动作计划，当前只自动处理 `archive_move`，并保留上游 metadata 便于人工验收
-- `baseline`: 仅在 `archi baseline` 返回结果里额外出现，用于描述固化后的基线快照
-- `gate`: 仅在 `archi gate` 返回结果里额外出现，用于描述当前结果相对 baseline 的通过/失败情况
+- `autofix`: historical 字段；当前 advisory CLI 和 cleanup 子包 retired wrapper API 不再生成
+- `baseline`: historical 字段；当前 advisory CLI 和 retired root public API 不再生成
+- `gate`: historical 字段；当前 advisory CLI 和 retired root public API 不再生成
 - `change_analysis`: 差异分析结果，仅在 `--diff` 时出现，其中包含 `retire_plan`
-- `feature_analysis`: 目标驱动分析结果，仅在传入 `--goal` 时出现，其中包含 `retire_plan`
+- `feature_analysis`: 旧目标驱动分析结果；公开 `--goal` parser 已移除，不再通过顶层命令生成
 - `recommendations`: 优先级建议
 - `artifacts`: 输出文件路径
 
@@ -843,8 +837,9 @@ archi --refresh-from-hippo .
 ```bash
 archi --check .
 archi .
-archi cleanup .
+archi code-review --full .
+archi code-review --diff .
+archi plan-review plan.md
 archi --diff .
-archi --goal "..." .
 archi --refresh-from-hippo .
 ```

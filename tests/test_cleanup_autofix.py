@@ -2,15 +2,27 @@ from __future__ import annotations
 
 import json
 
-from architec.cleanup.autofix import run_autofix
+import architec.cleanup as cleanup_pkg
+from architec.cleanup.autofix import (
+    apply_autofix_plan,
+    build_autofix_plan,
+    write_autofix_artifacts,
+)
 
 
-def test_run_autofix_dry_run_writes_plan_artifacts(tmp_path, monkeypatch) -> None:
+def test_autofix_wrapper_export_is_retired() -> None:
+    assert "run_autofix" not in cleanup_pkg.__all__
+    assert not hasattr(cleanup_pkg, "run_autofix")
+
+
+def test_build_autofix_plan_and_write_artifacts_preserve_metadata(tmp_path) -> None:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "legacy.md").write_text("Deprecated old flow\n", encoding="utf-8")
-    monkeypatch.setattr(
-        "architec.cleanup.autofix.run_semantic_judge",
-        lambda *args, **kwargs: {
+
+    plan = build_autofix_plan(
+        cleanup={"candidate_total": 1},
+        archive_candidates={"candidate_total": 1},
+        semantic_judge={
             "status": "ok",
             "reviewed_total": 1,
             "judgments": [
@@ -28,36 +40,35 @@ def test_run_autofix_dry_run_writes_plan_artifacts(tmp_path, monkeypatch) -> Non
                     "expired": False,
                 }
             ],
-            "top_judgments": [],
-            "by_decision": {"archive_first": 1},
         },
+        apply=False,
     )
+    artifacts = write_autofix_artifacts(tmp_path, plan=plan)
 
-    result = run_autofix(tmp_path, apply=False, llm_enabled=True)
-
-    assert result["meta"]["mode"] == "autofix"
-    assert result["summary"]["headline"] == "Archi autofix plan ready"
-    assert result["autofix"]["status"] == "planned"
-    assert result["autofix"]["action_total"] == 1
+    assert plan["status"] == "planned"
+    assert plan["action_total"] == 1
     plan_path = tmp_path / ".architec" / "architec-autofix-plan.json"
     summary_path = tmp_path / ".architec" / "architec-autofix-summary.md"
     assert plan_path.exists()
     assert summary_path.exists()
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    assert plan["actions"][0]["action"] == "archive_move"
-    assert plan["actions"][0]["from_path"] == "docs/legacy.md"
-    assert plan["actions"][0]["to_path"] == "archive/docs/legacy.md"
-    assert plan["actions"][0]["owner"] == "docs-team"
-    assert plan["actions"][0]["ttl_days"] == 14
+    assert artifacts["autofix_plan_json"] == str(plan_path)
+    written_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert written_plan["actions"][0]["action"] == "archive_move"
+    assert written_plan["actions"][0]["from_path"] == "docs/legacy.md"
+    assert written_plan["actions"][0]["to_path"] == "archive/docs/legacy.md"
+    assert written_plan["actions"][0]["owner"] == "docs-team"
+    assert written_plan["actions"][0]["ttl_days"] == 14
 
 
-def test_run_autofix_apply_moves_file_to_archive(tmp_path, monkeypatch) -> None:
+def test_apply_autofix_plan_moves_file_to_archive(tmp_path) -> None:
     (tmp_path / "docs").mkdir()
     source = tmp_path / "docs" / "legacy.md"
     source.write_text("Deprecated old flow\n", encoding="utf-8")
-    monkeypatch.setattr(
-        "architec.cleanup.autofix.run_semantic_judge",
-        lambda *args, **kwargs: {
+
+    plan = build_autofix_plan(
+        cleanup={"candidate_total": 1},
+        archive_candidates={"candidate_total": 1},
+        semantic_judge={
             "status": "ok",
             "reviewed_total": 1,
             "judgments": [
@@ -74,16 +85,14 @@ def test_run_autofix_apply_moves_file_to_archive(tmp_path, monkeypatch) -> None:
                     "expired": True,
                 }
             ],
-            "top_judgments": [],
-            "by_decision": {"archive_first": 1},
         },
+        apply=True,
     )
+    result = apply_autofix_plan(tmp_path, plan=plan)
 
-    result = run_autofix(tmp_path, apply=True, llm_enabled=True)
-
-    assert result["autofix"]["status"] == "applied"
-    assert result["autofix"]["applied_total"] == 1
-    assert result["autofix"]["top_actions"][0]["owner"] == "docs-team"
-    assert result["autofix"]["top_actions"][0]["expired"] is True
+    assert result["status"] == "applied"
+    assert result["applied_total"] == 1
+    assert result["top_actions"][0]["owner"] == "docs-team"
+    assert result["top_actions"][0]["expired"] is True
     assert not source.exists()
     assert (tmp_path / "archive" / "docs" / "legacy.md").exists()

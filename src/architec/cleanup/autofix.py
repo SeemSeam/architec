@@ -4,17 +4,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from architec.cleanup.archive import (
-    archive_report_view,
-    build_archive_candidates,
-)
-from architec.cleanup.inventory import build_cleanup_inventory, build_cleanup_ledger
 from architec.cleanup.metadata import cleanup_metadata_fields, cleanup_metadata_text
-from architec.cleanup.report import cleanup_report_view
-from architec.cleanup.semantic_judge import (
-    run_semantic_judge,
-    semantic_judge_report_view,
-)
 from architec.integration.paths import (
     AUTOFIX_PLAN_JSON_PATH,
     AUTOFIX_SUMMARY_MD_PATH,
@@ -259,86 +249,10 @@ def write_autofix_artifacts(
     }
 
 
-def run_autofix(
-    project_root: str | Path,
-    *,
-    apply: bool = False,
-    llm_enabled: bool = True,
-) -> dict[str, Any]:
-    root = Path(project_root).resolve()
-    inventory = build_cleanup_inventory(root)
-    ledger = build_cleanup_ledger(inventory)
-    cleanup = cleanup_report_view(inventory, ledger)
-    archive_candidates = build_archive_candidates(inventory)
-    archive = archive_report_view(archive_candidates)
-    semantic_judge_result = run_semantic_judge(
-        root,
-        cleanup_inventory=inventory,
-        archive_candidates=archive_candidates,
-        llm_enabled=llm_enabled,
-        fail_open=True,
-    )
-    semantic_judge = semantic_judge_report_view(semantic_judge_result)
-    plan = build_autofix_plan(
-        cleanup=cleanup,
-        archive_candidates=archive,
-        semantic_judge=semantic_judge_result,
-        apply=apply,
-    )
-    if apply:
-        plan = apply_autofix_plan(root, plan=plan)
-    autofix = autofix_report_view(plan)
-    artifacts = write_autofix_artifacts(root, plan=plan)
-
-    status = str(autofix.get("status", "") or "noop")
-    if apply and status == "applied":
-        headline = "Archi autofix applied"
-    elif apply and status == "partial":
-        headline = "Archi autofix partially applied"
-    elif apply and status == "blocked":
-        headline = "Archi autofix blocked"
-    elif apply:
-        headline = "Archi autofix complete"
-    else:
-        headline = "Archi autofix plan ready"
-    executive_summary = (
-        f"Derived {autofix.get('action_total', 0)} safe archive-move actions from the current cleanup, archive, and semantic-judge results."
-    )
-    if apply:
-        executive_summary = (
-            f"Processed {autofix.get('action_total', 0)} autofix actions with "
-            f"{autofix.get('applied_total', 0)} applied, "
-            f"{autofix.get('blocked_total', 0)} blocked, and "
-            f"{autofix.get('skipped_total', 0)} skipped."
-        )
-    return {
-        "meta": {
-            "generated_at": utc_now_iso(),
-            "path": str(root),
-            "mode": "autofix",
-        },
-        "summary": {
-            "headline": headline,
-            "executive_summary": executive_summary,
-            "top_takeaways": [
-                "Autofix v1 only applies archive-first moves and leaves source retirement manual.",
-                "Semantic judge remains the gate for safe archive actions; unavailable semantic review yields no applied changes.",
-                "Dry-run is the default; use --apply to execute planned archive moves.",
-            ],
-        },
-        "cleanup": cleanup,
-        "archive_candidates": archive,
-        "semantic_judge": semantic_judge,
-        "autofix": autofix,
-        "artifacts": artifacts,
-    }
-
-
 __all__ = [
     "apply_autofix_plan",
     "autofix_report_view",
     "build_autofix_plan",
     "render_autofix_summary",
-    "run_autofix",
     "write_autofix_artifacts",
 ]

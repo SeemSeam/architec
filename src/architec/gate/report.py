@@ -31,7 +31,7 @@ def load_baseline_snapshot(project_root: str | Path) -> dict[str, Any]:
     baseline_path = root / BASELINE_JSON_PATH
     if not baseline_path.is_file():
         raise FileNotFoundError(
-            f"Baseline not found at {baseline_path}. Run `archi baseline {root}` first."
+            f"Baseline not found at {baseline_path}. Run `archi status --snapshot` to capture current advisory state."
         )
     baseline = read_json(baseline_path, {})
     if not isinstance(baseline, dict) or not baseline:

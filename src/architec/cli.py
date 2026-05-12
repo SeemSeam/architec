@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
 
 from .auth import auto_login, handle_auth_command, require_authorized_session
 from .auth.guard import ArchitecAuthRequiredError
-from .analysis.public import run_analysis
-from .baseline.public import run_baseline
-from .cleanup.public import run_cleanup
-from .cleanup.autofix import run_autofix
-from .gate.public import run_gate
+from .code_review.public import run_code_review_diff, run_code_review_full, run_code_review_since
+from .fix_advice.public import run_fix_advice
 from .integration.bundle_loader import inspect_bundle
 from .integration.hippo_bridge import refresh_bundle_from_hippo
+from .plan_review.public import run_plan_review
+from .project_status.public import run_status_snapshot, run_status_trend
 from .self_manage import handle_self_manage_command, print_version_status
 from .support.io_utils import emit_progress, write_json
 from .support.llm_guard import ArchitectLLMUnavailableError
@@ -120,21 +120,6 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
             lines.append(line)
         elif status != "skipped":
             lines.append(f"Semantic judge: status={status}")
-    autofix = result.get("autofix", {}) if isinstance(result.get("autofix"), dict) else {}
-    if autofix:
-        line = (
-            f"Autofix: status={str(autofix.get('status', '') or 'noop')} | "
-            f"actions={int(autofix.get('action_total', 0) or 0)} | "
-            f"applied={int(autofix.get('applied_total', 0) or 0)}"
-        )
-        blocked_total = int(autofix.get("blocked_total", 0) or 0)
-        skipped_total = int(autofix.get("skipped_total", 0) or 0)
-        if blocked_total > 0:
-            line += f" | blocked={blocked_total}"
-        if skipped_total > 0:
-            line += f" | skipped={skipped_total}"
-        lines.append(line)
-
     takeaways = summary.get("top_takeaways", [])
     if isinstance(takeaways, list):
         for item in takeaways[:3]:
@@ -166,12 +151,6 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
     archive_summary = str(artifacts.get("archive_summary_md", "") or "").strip()
     semantic_judge_json = str(artifacts.get("semantic_judge_json", "") or "").strip()
     semantic_judge_summary = str(artifacts.get("semantic_judge_summary_md", "") or "").strip()
-    autofix_plan_json = str(artifacts.get("autofix_plan_json", "") or "").strip()
-    autofix_summary = str(artifacts.get("autofix_summary_md", "") or "").strip()
-    baseline_json = str(artifacts.get("baseline_json", "") or "").strip()
-    baseline_summary = str(artifacts.get("baseline_summary_md", "") or "").strip()
-    gate_json = str(artifacts.get("gate_json", "") or "").strip()
-    gate_summary = str(artifacts.get("gate_summary_md", "") or "").strip()
     if (
         summary_md
         or viz_html
@@ -183,12 +162,6 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
         or archive_summary
         or semantic_judge_json
         or semantic_judge_summary
-        or autofix_plan_json
-        or autofix_summary
-        or baseline_json
-        or baseline_summary
-        or gate_json
-        or gate_summary
     ):
         lines.append("Artifacts:")
         if summary_md:
@@ -211,18 +184,6 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
             lines.append(f"- semantic judge: {semantic_judge_json}")
         if semantic_judge_summary:
             lines.append(f"- semantic judge summary: {semantic_judge_summary}")
-        if autofix_plan_json:
-            lines.append(f"- autofix plan: {autofix_plan_json}")
-        if autofix_summary:
-            lines.append(f"- autofix summary: {autofix_summary}")
-        if baseline_json:
-            lines.append(f"- baseline json: {baseline_json}")
-        if baseline_summary:
-            lines.append(f"- baseline summary: {baseline_summary}")
-        if gate_json:
-            lines.append(f"- gate json: {gate_json}")
-        if gate_summary:
-            lines.append(f"- gate summary: {gate_summary}")
     return lines
 
 
@@ -239,7 +200,13 @@ def _emit(
     print("\n".join(_summary_lines(result, check_mode=check_mode)))
 
 
-def _required_llm_checks(*, diff: bool, goal: str) -> list[tuple[str, str]]:
+def _emit_json(result: dict[str, Any], out: str | None) -> None:
+    if out:
+        write_json(Path(out).resolve(), result)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def _required_llm_checks(*, diff: bool) -> list[tuple[str, str]]:
     checks: list[tuple[str, str]] = [
         ('architect_history', 'strong'),
         ('architec_summary', 'strong'),
@@ -248,8 +215,6 @@ def _required_llm_checks(*, diff: bool, goal: str) -> list[tuple[str, str]]:
     ]
     if diff:
         checks.append(('architect_component_scoring', 'weak'))
-    if goal:
-        checks.append(('architect_feature', 'strong'))
     return checks
 
 
@@ -269,7 +234,6 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='show current CLI version and latest release status',
     )
-    _add_argument(parser, '--goal', default='', help='analysis goal / intent')
     _add_argument(
         parser,
         '--diff',
@@ -319,39 +283,48 @@ def build_parser() -> argparse.ArgumentParser:
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
     return parser
 
-
-def build_cleanup_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi cleanup', description='Archi cleanup CLI')
+def build_plan_review_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog='archi plan-review', description='Archi plan review CLI')
     _add_argument(
         parser,
         '--out',
         default='',
         help='optional output JSON path override',
     )
-    _add_argument(parser, 'path', nargs='?', default='.', help='project root')
+    _add_argument(
+        parser,
+        '--project-root',
+        default='.',
+        help='project root used for result context',
+    )
+    _add_argument(parser, 'plan', help='Markdown plan file')
     return parser
 
 
-def build_autofix_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi autofix', description='Archi autofix CLI')
+def build_code_review_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog='archi code-review', description='Archi code review CLI')
+    mode = parser.add_mutually_exclusive_group(required=True)
     _add_argument(
-        parser,
-        '--out',
-        default='',
-        help='optional output JSON path override',
-    )
-    _add_argument(
-        parser,
-        '--apply',
+        mode,
+        '--full',
         action='store_true',
-        help='execute safe archive-move actions instead of dry-run only',
+        help='run full project code review',
     )
-    _add_argument(parser, 'path', nargs='?', default='.', help='project root')
-    return parser
-
-
-def build_baseline_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi baseline', description='Archi baseline CLI')
+    _add_argument(
+        mode,
+        '--diff',
+        action='store_true',
+        help='run current diff code review',
+    )
+    _add_argument(
+        mode,
+        '--since',
+        default='',
+        metavar='REF',
+        help='run code review for changes since ref',
+    )
+    _add_argument(parser, '--base', default='', help='git base ref (only with --diff)')
+    _add_argument(parser, '--head', default='', help='git head ref (only with --diff)')
     _add_argument(
         parser,
         '--out',
@@ -362,7 +335,7 @@ def build_baseline_parser() -> argparse.ArgumentParser:
         parser,
         '--refresh-from-hippo',
         action='store_true',
-        help='force-refresh Hippo bundle before baseline capture',
+        help='force-refresh Hippo bundle before code review',
     )
     _add_argument(
         parser,
@@ -373,28 +346,28 @@ def build_baseline_parser() -> argparse.ArgumentParser:
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
     return parser
 
-
-def build_gate_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi gate', description='Archi gate CLI')
+def build_status_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog='archi status', description='Archi project status CLI')
+    mode = parser.add_mutually_exclusive_group(required=True)
+    _add_argument(mode, '--trend', action='store_true', help='show advisory project trend')
+    _add_argument(mode, '--snapshot', action='store_true', help='write advisory project status snapshot')
     _add_argument(
         parser,
         '--out',
         default='',
         help='optional output JSON path override',
     )
-    _add_argument(
-        parser,
-        '--refresh-from-hippo',
-        action='store_true',
-        help='force-refresh Hippo bundle before gate evaluation',
-    )
-    _add_argument(
-        parser,
-        '--skip-auth',
-        action='store_true',
-        help='development-only bypass for local auth gate',
-    )
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
+    return parser
+
+
+def build_fix_advice_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog='archi fix-advice', description='Archi fix advice CLI')
+    _add_argument(parser, '--for', dest='review', required=True, help='review JSON file to read')
+    _add_argument(parser, '--focus-file', default='', help='only include concerns whose path contains this text')
+    _add_argument(parser, '--focus-kind', default='', help='only include concerns of this kind')
+    _add_argument(parser, '--concern-id', default='', help='only include one concern id')
+    _add_argument(parser, '--out', default='', help='optional output JSON path override')
     return parser
 
 
@@ -426,45 +399,53 @@ def _checked_result(args: argparse.Namespace, checks: list[tuple[str, str]]) -> 
     return _preflight_result(args.path, checks)
 
 
-def _analysis_result(args: argparse.Namespace) -> dict[str, Any]:
-    emit_progress("archi [3/3] running analysis pipeline")
-    return run_analysis(
+def _plan_review_result(args: argparse.Namespace) -> dict[str, Any]:
+    emit_progress("archi plan-review [1/1] reading plan")
+    return run_plan_review(
+        args.plan,
+        project_root=args.project_root,
+    )
+
+
+def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
+    since_ref = str(args.since or "").strip()
+    if since_ref:
+        emit_progress("archi code-review [3/3] running since code review")
+        return run_code_review_since(
+            args.path,
+            ref=since_ref,
+            progress=emit_progress,
+        )
+    if bool(args.diff):
+        emit_progress("archi code-review [3/3] running diff code review")
+        return run_code_review_diff(
+            args.path,
+            base=str(args.base or "").strip(),
+            head=str(args.head or "").strip(),
+            progress=emit_progress,
+        )
+    emit_progress("archi code-review [3/3] running full code review")
+    return run_code_review_full(
         args.path,
-        goal=str(args.goal or '').strip(),
-        diff=bool(args.diff),
-        base=str(args.base or '').strip(),
-        head=str(args.head or '').strip(),
         progress=emit_progress,
     )
 
 
-def _cleanup_result(args: argparse.Namespace) -> dict[str, Any]:
-    emit_progress("archi cleanup [1/1] running cleanup scan")
-    return run_cleanup(args.path, llm_enabled=True)
+def _status_result(args: argparse.Namespace) -> dict[str, Any]:
+    if bool(args.snapshot):
+        emit_progress("archi status [1/1] writing advisory status snapshot")
+        return run_status_snapshot(args.path)
+    emit_progress("archi status [1/1] reading advisory status trend")
+    return run_status_trend(args.path)
 
 
-def _autofix_result(args: argparse.Namespace) -> dict[str, Any]:
-    emit_progress("archi autofix [1/1] deriving autofix actions")
-    return run_autofix(
-        args.path,
-        apply=bool(args.apply),
-        llm_enabled=True,
-    )
-
-
-def _baseline_result(args: argparse.Namespace) -> dict[str, Any]:
-    emit_progress("archi [3/3] capturing baseline snapshot")
-    return run_baseline(
-        args.path,
-        progress=emit_progress,
-    )
-
-
-def _gate_result(args: argparse.Namespace) -> dict[str, Any]:
-    emit_progress("archi [3/3] evaluating gate against baseline")
-    return run_gate(
-        args.path,
-        progress=emit_progress,
+def _fix_advice_result(args: argparse.Namespace) -> dict[str, Any]:
+    emit_progress("archi fix-advice [1/1] reading review")
+    return run_fix_advice(
+        args.review,
+        focus_file=str(args.focus_file or "").strip(),
+        focus_kind=str(args.focus_kind or "").strip(),
+        concern_id=str(args.concern_id or "").strip(),
     )
 
 
@@ -475,11 +456,35 @@ def _validate_args(args: argparse.Namespace) -> int | None:
     return None
 
 
+def _validate_code_review_args(args: argparse.Namespace) -> int | None:
+    if (args.base or args.head) and not args.diff:
+        print('--base/--head require --diff', file=sys.stderr)
+        return 2
+    return None
+
+def _is_advisory_status_command(argv: list[str]) -> bool:
+    return bool(argv and argv[0] == 'status' and any(arg in {'--trend', '--snapshot'} for arg in argv[1:]))
+
+
 def _run_command(
     args: argparse.Namespace,
     checks: list[tuple[str, str]],
 ) -> dict[str, Any]:
-    return _checked_result(args, checks) if args.check else _analysis_result(args)
+    if args.check:
+        return _checked_result(args, checks)
+    if bool(args.diff):
+        emit_progress("archi [3/3] running diff code review")
+        return run_code_review_diff(
+            args.path,
+            base=str(args.base or "").strip(),
+            head=str(args.head or "").strip(),
+            progress=emit_progress,
+        )
+    emit_progress("archi [3/3] running full code review")
+    return run_code_review_full(
+        args.path,
+        progress=emit_progress,
+    )
 
 
 def _interactive_terminal() -> bool:
@@ -521,74 +526,46 @@ def main() -> int:
         self_manage_result = handle_self_manage_command(argv)
         if self_manage_result is not None:
             return self_manage_result
+        if _is_advisory_status_command(argv):
+            parser = build_status_parser()
+            args = parser.parse_args(argv[1:])
+            result = _status_result(args)
+            _emit_json(result, args.out or None)
+            return 0
+        if argv and argv[0] == 'fix-advice':
+            parser = build_fix_advice_parser()
+            args = parser.parse_args(argv[1:])
+            result = _fix_advice_result(args)
+            _emit_json(result, args.out or None)
+            return 0
         auth_result = handle_auth_command(argv)
         if auth_result is not None:
             return auth_result
-        if argv and argv[0] == 'cleanup':
-            parser = build_cleanup_parser()
+        if argv and argv[0] == 'plan-review':
+            parser = build_plan_review_parser()
             args = parser.parse_args(argv[1:])
-            result = _cleanup_result(args)
-            _emit(
-                result,
-                args.out or None,
-                output_format='all',
-                check_mode=False,
-            )
+            result = _plan_review_result(args)
+            _emit_json(result, args.out or None)
             return 0
-        if argv and argv[0] == 'autofix':
-            parser = build_autofix_parser()
+        if argv and argv[0] == 'code-review':
+            parser = build_code_review_parser()
             args = parser.parse_args(argv[1:])
-            result = _autofix_result(args)
-            _emit(
-                result,
-                args.out or None,
-                output_format='all',
-                check_mode=False,
-            )
-            return 0
-        if argv and argv[0] == 'baseline':
-            parser = build_baseline_parser()
-            args = parser.parse_args(argv[1:])
+            invalid = _validate_code_review_args(args)
+            if invalid is not None:
+                return invalid
             if not bool(args.skip_auth):
                 _ensure_authorized_access()
             refresh_result = _ensure_bundle(args)
-            checks = _required_llm_checks(diff=False, goal="")
+            checks = _required_llm_checks(diff=bool(args.diff or args.since))
             emit_progress("archi [2/3] checking backend LLM configuration")
             preflight_backend_llm(args.path, checks=checks)
-            result = _baseline_result(args)
+            result = _code_review_result(args)
             result = _with_refresh_result(
                 result,
                 refresh_result=refresh_result,
                 check_mode=False,
             )
-            _emit(
-                result,
-                args.out or None,
-                output_format='all',
-                check_mode=False,
-            )
-            return 0
-        if argv and argv[0] == 'gate':
-            parser = build_gate_parser()
-            args = parser.parse_args(argv[1:])
-            if not bool(args.skip_auth):
-                _ensure_authorized_access()
-            refresh_result = _ensure_bundle(args)
-            checks = _required_llm_checks(diff=False, goal="")
-            emit_progress("archi [2/3] checking backend LLM configuration")
-            preflight_backend_llm(args.path, checks=checks)
-            result = _gate_result(args)
-            result = _with_refresh_result(
-                result,
-                refresh_result=refresh_result,
-                check_mode=False,
-            )
-            _emit(
-                result,
-                args.out or None,
-                output_format='all',
-                check_mode=False,
-            )
+            _emit_json(result, args.out or None)
             return 0
         parser = build_parser()
         args = parser.parse_args()
@@ -600,7 +577,7 @@ def main() -> int:
         if not bool(args.skip_auth):
             _ensure_authorized_access()
         refresh_result = _ensure_bundle(args)
-        checks = _required_llm_checks(diff=bool(args.diff), goal=str(args.goal or ''))
+        checks = _required_llm_checks(diff=bool(args.diff))
         emit_progress("archi [2/3] checking backend LLM configuration")
         preflight_backend_llm(args.path, checks=checks)
         result = _run_command(args, checks)

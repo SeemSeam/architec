@@ -20,7 +20,6 @@ from .autofix import (
     autofix_report_view,
     build_autofix_plan,
     render_autofix_summary,
-    run_autofix,
     write_autofix_artifacts,
 )
 from .semantic_judge import (
@@ -35,7 +34,6 @@ from .report import (
     render_cleanup_summary,
     write_cleanup_artifacts,
 )
-from .public import run_cleanup
 from .retire_plan import (
     build_diff_retire_plan,
     build_goal_retire_plan,
@@ -59,8 +57,6 @@ __all__ = [
     "render_autofix_summary",
     "render_cleanup_summary",
     "render_semantic_judge_summary",
-    "run_cleanup",
-    "run_autofix",
     "run_semantic_judge",
     "semantic_judge_payload",
     "semantic_judge_report_view",
