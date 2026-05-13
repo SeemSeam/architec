@@ -11,7 +11,7 @@
 
 `near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：当前只在全量审查中检测 Python 函数/方法的规范化 AST 重复，优先低误报。
 
-`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。当前检测 Python 函数和类级跨文件相似实现，优先高精度。
+`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。当前检测 Python 函数和类级跨文件相似实现，优先高精度。
 
 `shadow_implementation` v1 不是：
 

@@ -60,6 +60,26 @@ archi fix-advice --for <review.json>
 
 该分支不判断哪个实现正确，不输出 patch，不承诺合并方向。
 
+## Shadow Implementation Advice
+
+当 concern 的 `kind` 是 `shadow-implementation` 时，`fix-advice` 使用 shadow implementation 专用建议分支。
+
+该分支优先读取 `references[]` 中 `role: "existing_implementation"` 的结构化位置。疑似 shadow implementation 仍来自 concern 的 `location`。
+
+函数级 concern 的建议围绕这些 advisory options：
+
+- 比较 changed function 与 existing implementation 的行为是否确实应共享。
+- 如果行为应共享，可考虑让 changed function 路由到或复用 existing implementation。
+- 如果两者需要分离，可在 changed function 的局部契约或调用者说明中记录差异。
+
+类级 concern 的建议围绕这些 advisory options：
+
+- 比较 changed class 与 existing class 的职责、生命周期和配置上下文。
+- 如果职责应共享，可考虑复用 existing class 或抽取稳定的共享行为。
+- 如果上下文不同，可记录 intentional divergence，避免后续把两者误判为可合并。
+
+如果 concern 缺少结构化 `existing_implementation` reference，输出保守 fallback，并说明 reference evidence insufficient。该分支不判断哪个实现正确，不输出 patch，不承诺合并方向。
+
 ## 空/降级输出
 
 - 如果 review 结果没有 concern，输出空 `suggestions` 和摘要说明。

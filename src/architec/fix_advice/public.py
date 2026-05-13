@@ -81,6 +81,23 @@ def _reference_from_structured(concern: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _existing_implementation_reference(concern: dict[str, Any]) -> dict[str, Any]:
+    for item in _list(concern.get("references")):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("role", "") or "") != "existing_implementation":
+            continue
+        path = str(item.get("path", "") or "").strip()
+        if path:
+            return {
+                "path": path,
+                "line": int(item.get("line", 0) or 0),
+                "symbol": str(item.get("symbol", "") or "").strip(),
+                "symbol_kind": str(item.get("symbol_kind", "") or "").strip(),
+            }
+    return {}
+
+
 def _reference_from_evidence(evidence: list[str]) -> dict[str, Any]:
     prefix = "near_duplicate.reference="
     for item in evidence:
@@ -101,6 +118,30 @@ def _reference_from_evidence(evidence: list[str]) -> dict[str, Any]:
             "line": line,
             "symbol": parts[2].strip() if len(parts) >= 3 else "",
             "symbol_kind": "function",
+        }
+    return {}
+
+
+def _shadow_reference_from_evidence(evidence: list[str]) -> dict[str, Any]:
+    role_prefix = "shadow_implementation.existing="
+    for item in evidence:
+        if not item.startswith(role_prefix):
+            continue
+        raw = item[len(role_prefix):]
+        parts = raw.split(":", 2)
+        if not parts or not parts[0].strip():
+            continue
+        line = 0
+        if len(parts) >= 2:
+            try:
+                line = int(parts[1])
+            except ValueError:
+                line = 0
+        return {
+            "path": parts[0].strip(),
+            "line": line,
+            "symbol": parts[2].strip() if len(parts) >= 3 else "",
+            "symbol_kind": "",
         }
     return {}
 
@@ -159,6 +200,66 @@ def _duplication_suggestion(
     }
 
 
+def _shadow_suggestion(
+    concern: dict[str, Any],
+    *,
+    concern_id: str,
+    path: str,
+    evidence: list[str],
+) -> dict[str, Any]:
+    location = _dict(concern.get("location"))
+    candidate = _format_location(location)
+    reference = _existing_implementation_reference(concern) or _shadow_reference_from_evidence(evidence)
+    if not reference:
+        return {
+            "target": path,
+            "concern": concern_id,
+            "options": [
+                f"Review the shadow implementation concern at {candidate}.",
+                "Identify the existing implementation before choosing reuse, extraction, or intentional divergence.",
+            ],
+            "tradeoffs": [
+                "Evidence does not identify an existing implementation, so advice stays generic.",
+            ],
+            "risks": [
+                "Similar role and structure do not prove one implementation should replace the other.",
+            ],
+        }
+
+    reference_text = _format_location(reference)
+    symbol_kind = str(location.get("symbol_kind", "") or reference.get("symbol_kind", "") or "")
+    if symbol_kind == "class":
+        options = [
+            f"Compare class {candidate} with existing class {reference_text}.",
+            f"Consider reusing {reference_text} or extracting shared behavior if both classes are meant to serve the same role.",
+            "If the classes intentionally serve different contexts, document the divergence near the changed class or its callers.",
+        ]
+        tradeoffs = [
+            "Reusing an existing class can reduce drift but may couple contexts that need different lifecycle or configuration behavior.",
+            "Extracting shared behavior can clarify ownership, but it can also introduce an abstraction before the variation is stable.",
+        ]
+    else:
+        options = [
+            f"Compare {candidate} with existing implementation {reference_text}.",
+            f"Consider routing through {reference_text} if the changed implementation should share behavior with the existing one.",
+            "If both implementations should remain separate, document the intended difference in the changed implementation's local contract.",
+        ]
+        tradeoffs = [
+            "Reusing the existing implementation can reduce drift but may require adapting callers to an existing boundary.",
+            "Keeping separate implementations can preserve local behavior when the roles only appear similar.",
+        ]
+    return {
+        "target": path,
+        "concern": concern_id,
+        "options": options,
+        "tradeoffs": tradeoffs,
+        "risks": [
+            "Shadow implementation evidence is structural and role-based, not proof of semantic equivalence.",
+            "Advice does not decide which implementation is correct.",
+        ],
+    }
+
+
 def _suggestion(concern: dict[str, Any]) -> dict[str, Any]:
     concern_id = str(concern.get("concern_id", "") or "")
     kind = str(concern.get("kind", "") or "unknown")
@@ -166,6 +267,13 @@ def _suggestion(concern: dict[str, Any]) -> dict[str, Any]:
     evidence = [str(item) for item in _list(concern.get("evidence"))]
     if kind == "duplication":
         return _duplication_suggestion(
+            concern,
+            concern_id=concern_id,
+            path=path,
+            evidence=evidence,
+        )
+    if kind == "shadow-implementation":
+        return _shadow_suggestion(
             concern,
             concern_id=concern_id,
             path=path,

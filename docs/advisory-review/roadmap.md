@@ -78,6 +78,7 @@ Done:
 - `shadow_implementation` v1 已落地到 `code-review --full`：输出 `shadow-implementation` concern 和 `shadow_implementation` signal，增量模式暂不启用。
 - `shadow_implementation` class-level v1 已收敛并落地：全量审查可输出 Python 类级 `shadow-implementation` concern，见 [decisions/023-shadow-implementation-class-v1.md](decisions/023-shadow-implementation-class-v1.md)。
 - `shadow_implementation` diff/since scope 已收敛：增量审查只报告 changed-file primary shadow concern，见 [decisions/024-shadow-implementation-diff-since-scope.md](decisions/024-shadow-implementation-diff-since-scope.md)。
+- `fix-advice` 已为 `shadow-implementation` concern 增加专用 advisory options，消费 `references[].role: "existing_implementation"`，见 [decisions/025-shadow-implementation-fix-advice.md](decisions/025-shadow-implementation-fix-advice.md)。
 
 In Progress:
 
@@ -92,7 +93,6 @@ Deferred:
 - 无发现场景文案进一步标准化。
 - JSON 主体 20KB 目标在中大型仓库中的体量校准。
 - `shadow_implementation` file-level 检测。
-- `fix-advice` 是否为 `shadow-implementation` 增加专用 advisory options。
 - `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - 多语言支持。
 - 自建运行时信号采集。
@@ -175,7 +175,7 @@ Deferred:
 深化线：
 
 - 实现第一批 AI 特有信号中的 `near_duplicate`。
-- `shadow_implementation` v1 已作为封版后深化项落地；后续再评估专用 fix-advice 和增量范围控制。
+- `shadow_implementation` v1 已作为封版后深化项落地；增量范围控制和专用 fix-advice 已补齐，后续再评估 file-level 检测。
 
 验收：
 
@@ -203,7 +203,7 @@ Deferred:
 
 如果工期吃紧，优先保主线。深化线按以下顺序降级：
 
-- 先推迟 `shadow_implementation` 的 file-level 和 fix-advice 深化。
+- 先推迟 `shadow_implementation` 的 file-level 深化。
 - 再推迟趋势归因细化。
 - 最后推迟 plan fingerprint 的精细一致性观察。
 

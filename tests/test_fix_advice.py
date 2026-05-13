@@ -104,6 +104,41 @@ def test_build_fix_advice_uses_structured_duplication_reference() -> None:
     assert "Normalized AST similarity does not prove semantic equivalence." in suggestion["risks"]
 
 
+def test_build_fix_advice_duplication_keeps_reference_role_semantics() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:near-duplicate:role-check",
+                "kind": "duplication",
+                "location": {"path": "src/b.py", "line": 8, "symbol": "second"},
+                "evidence": ["near_duplicate.fingerprint=abc"],
+                "references": [
+                    {
+                        "role": "existing_implementation",
+                        "path": "src/shadow_existing.py",
+                        "line": 1,
+                        "symbol": "not_dup_reference",
+                        "symbol_kind": "function",
+                    },
+                    {
+                        "role": "reference",
+                        "path": "src/a.py",
+                        "line": 2,
+                        "symbol": "first",
+                        "symbol_kind": "function",
+                    },
+                ],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    rendered = json.dumps(result["suggestions"][0])
+    assert "src/a.py:2:first" in rendered
+    assert "src/shadow_existing.py" not in rendered
+
+
 def test_build_fix_advice_duplication_without_reference_stays_advisory() -> None:
     review = {
         "concerns": [
@@ -149,6 +184,135 @@ def test_fix_advice_duplication_output_avoids_execution_and_gate_terms() -> None
                 "kind": "duplication",
                 "location": {"path": "src/b.py", "line": 8, "symbol": "second"},
                 "evidence": ["near_duplicate.reference=src/a.py:2:first"],
+            }
+        ]
+    }
+
+    payload = json.dumps(build_fix_advice(review), sort_keys=True).lower()
+
+    assert "patch" not in payload
+    assert "apply" not in payload
+    assert "must-fix" not in payload
+    assert "verdict" not in payload
+    assert "pass" not in payload
+    assert "fail" not in payload
+    assert "block" not in payload
+
+
+def test_build_fix_advice_shadow_function_uses_existing_implementation_reference() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:shadow-implementation:abc123",
+                "kind": "shadow-implementation",
+                "location": {
+                    "path": "src/new_policy.py",
+                    "line": 8,
+                    "symbol": "component_permission_policy",
+                    "symbol_kind": "function",
+                },
+                "evidence": [
+                    "shadow_implementation.role=policy",
+                    "shadow_implementation.reuse_edge=false",
+                ],
+                "references": [
+                    {
+                        "role": "existing_implementation",
+                        "path": "src/base_policy.py",
+                        "line": 2,
+                        "symbol": "component_allow_policy",
+                        "symbol_kind": "function",
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    suggestion = result["suggestions"][0]
+    rendered = json.dumps(suggestion)
+    assert suggestion["target"] == "src/new_policy.py"
+    assert "src/new_policy.py:8:component_permission_policy" in rendered
+    assert "src/base_policy.py:2:component_allow_policy" in rendered
+    assert "routing through" in suggestion["options"][1]
+    assert "does not decide which implementation is correct" in suggestion["risks"][1]
+
+
+def test_build_fix_advice_shadow_class_uses_existing_implementation_reference() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:shadow-implementation:def456",
+                "kind": "shadow-implementation",
+                "location": {
+                    "path": "src/policy/candidate_class.py",
+                    "line": 2,
+                    "symbol": "ComponentPolicyInspector",
+                    "symbol_kind": "class",
+                },
+                "evidence": [
+                    "shadow_implementation.scope=class",
+                    "shadow_implementation.role=policy",
+                ],
+                "references": [
+                    {
+                        "role": "existing_implementation",
+                        "path": "src/policy/base_class.py",
+                        "line": 2,
+                        "symbol": "ComponentPolicyReviewer",
+                        "symbol_kind": "class",
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    suggestion = result["suggestions"][0]
+    rendered = json.dumps(suggestion)
+    assert "Compare class src/policy/candidate_class.py:2:ComponentPolicyInspector" in rendered
+    assert "src/policy/base_class.py:2:ComponentPolicyReviewer" in rendered
+    assert "extracting shared behavior" in suggestion["options"][1]
+
+
+def test_build_fix_advice_shadow_without_reference_stays_generic() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:shadow-implementation:no-ref",
+                "kind": "shadow-implementation",
+                "location": {"path": "src/new_policy.py", "line": 8, "symbol": "component_permission_policy"},
+                "evidence": ["shadow_implementation.role=policy"],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    suggestion = result["suggestions"][0]
+    assert "Identify the existing implementation" in suggestion["options"][1]
+    assert "advice stays generic" in suggestion["tradeoffs"][0]
+
+
+def test_fix_advice_shadow_output_avoids_execution_and_gate_terms() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:shadow-implementation:abc123",
+                "kind": "shadow-implementation",
+                "location": {"path": "src/new_policy.py", "line": 8, "symbol": "component_permission_policy"},
+                "evidence": ["shadow_implementation.role=policy"],
+                "references": [
+                    {
+                        "role": "existing_implementation",
+                        "path": "src/base_policy.py",
+                        "line": 2,
+                        "symbol": "component_allow_policy",
+                        "symbol_kind": "function",
+                    }
+                ],
             }
         ]
     }
