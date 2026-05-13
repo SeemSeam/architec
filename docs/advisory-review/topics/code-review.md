@@ -61,7 +61,7 @@ archi code-review --since <ref> .
 - `near_duplicate`：规范化 AST 指纹重复，输出 `duplication` concern。
 - `shadow_implementation`：函数级和类级跨文件相似实现，输出 `shadow-implementation` concern，并通过 `references[]` 标出 `existing_implementation`。
 
-这两类信号暂不在 `--diff` / `--since` 中启用，避免把历史债务混入增量结果。
+`near_duplicate` 暂不在 `--diff` / `--since` 中启用。`shadow_implementation` 在增量模式中只报告 `location.path` 位于 changed files 的 concern，`references[]` 可以指向未变更的 existing implementation。
 
 ## 增量审查
 

@@ -10,7 +10,7 @@ from collections import Counter
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 
 SKIP_DIRS = {
@@ -128,6 +128,14 @@ class _FunctionCandidate:
     @property
     def module_tokens(self) -> frozenset[str]:
         return frozenset(_tokens(Path(self.path).stem))
+
+
+@dataclass(frozen=True)
+class _ShadowMatch:
+    role: str
+    name_overlap: float
+    signature_similarity: float
+    ast_similarity: float
 
 
 class _NormalizeAst(ast.NodeTransformer):
@@ -575,8 +583,14 @@ def _build_concern(
     name_overlap: float,
     signature_similarity: float,
     ast_similarity: float,
+    primary: _FunctionCandidate | None = None,
 ) -> dict[str, Any]:
-    existing, duplicate = sorted([left, right], key=_candidate_key)
+    if primary is left:
+        existing, duplicate = right, left
+    elif primary is right:
+        existing, duplicate = left, right
+    else:
+        existing, duplicate = sorted([left, right], key=_candidate_key)
     if duplicate.symbol_kind == "class":
         confidence = _class_confidence(name_overlap, signature_similarity, ast_similarity)
         evidence = [
@@ -635,7 +649,7 @@ def _build_concern(
     }
 
 
-def _shadow_pair(left: _FunctionCandidate, right: _FunctionCandidate) -> dict[str, Any] | None:
+def _shadow_match(left: _FunctionCandidate, right: _FunctionCandidate) -> _ShadowMatch | None:
     if left.path == right.path:
         return None
     if left.symbol_kind != right.symbol_kind:
@@ -669,9 +683,7 @@ def _shadow_pair(left: _FunctionCandidate, right: _FunctionCandidate) -> dict[st
     )
     if confidence < MIN_CONFIDENCE:
         return None
-    return _build_concern(
-        left,
-        right,
+    return _ShadowMatch(
         role=role,
         name_overlap=name_overlap,
         signature_similarity=signature_similarity,
@@ -679,24 +691,92 @@ def _shadow_pair(left: _FunctionCandidate, right: _FunctionCandidate) -> dict[st
     )
 
 
-def shadow_implementation_concerns(
+def _changed_primary(
+    left: _FunctionCandidate,
+    right: _FunctionCandidate,
+    changed_files: frozenset[str] | None,
+) -> _FunctionCandidate | None:
+    if changed_files is None:
+        return None
+    left_changed = left.path in changed_files
+    right_changed = right.path in changed_files
+    if left_changed and not right_changed:
+        return left
+    if right_changed and not left_changed:
+        return right
+    if left_changed and right_changed:
+        return None
+    return None
+
+
+def _shadow_pair(
+    left: _FunctionCandidate,
+    right: _FunctionCandidate,
+    *,
+    changed_files: frozenset[str] | None = None,
+) -> dict[str, Any] | None:
+    match = _shadow_match(left, right)
+    if match is None:
+        return None
+    if changed_files is not None and left.path not in changed_files and right.path not in changed_files:
+        return None
+    return _build_concern(
+        left,
+        right,
+        role=match.role,
+        name_overlap=match.name_overlap,
+        signature_similarity=match.signature_similarity,
+        ast_similarity=match.ast_similarity,
+        primary=_changed_primary(left, right, changed_files),
+    )
+
+
+def _normalized_changed_files(changed_files: Iterable[str] | None) -> frozenset[str] | None:
+    if changed_files is None:
+        return None
+    normalized = {
+        Path(str(path)).as_posix().lstrip("./")
+        for path in changed_files
+        if str(path or "").strip()
+    }
+    return frozenset(normalized)
+
+
+def shadow_implementation_scan(
     project_root: str | Path,
     *,
     limit: int = 20,
-) -> list[dict[str, Any]]:
+    changed_files: Iterable[str] | None = None,
+) -> dict[str, Any]:
     root = Path(project_root)
+    changed_scope = _normalized_changed_files(changed_files)
     candidates: list[_FunctionCandidate] = []
     for path in _iter_python_files(root):
         candidates.extend(_collect_functions(path, root))
         candidates.extend(_collect_classes(path, root))
 
+    candidate_total_before_scope = 0
     concerns: list[dict[str, Any]] = []
     for left, right in combinations(sorted(candidates, key=_candidate_key), 2):
-        concern = _shadow_pair(left, right)
-        if concern is not None:
-            concerns.append(concern)
+        match = _shadow_match(left, right)
+        if match is None:
+            continue
+        candidate_total_before_scope += 1
+        if changed_scope is not None and left.path not in changed_scope and right.path not in changed_scope:
+            continue
+        concerns.append(
+            _build_concern(
+                left,
+                right,
+                role=match.role,
+                name_overlap=match.name_overlap,
+                signature_similarity=match.signature_similarity,
+                ast_similarity=match.ast_similarity,
+                primary=_changed_primary(left, right, changed_scope),
+            )
+        )
 
-    return sorted(
+    sorted_concerns = sorted(
         concerns,
         key=lambda item: (
             -float(item.get("confidence", 0.0) or 0.0),
@@ -704,6 +784,29 @@ def shadow_implementation_concerns(
             str(item.get("concern_id", "") or ""),
         ),
     )[:limit]
+    result: dict[str, Any] = {
+        "concerns": sorted_concerns,
+        "candidate_total_before_scope": candidate_total_before_scope,
+    }
+    if changed_scope is not None:
+        result["scoped_to_changed_files"] = True
+        result["changed_file_total"] = len(changed_scope)
+    return result
 
 
-__all__ = ["shadow_implementation_concerns"]
+def shadow_implementation_concerns(
+    project_root: str | Path,
+    *,
+    limit: int = 20,
+    changed_files: Iterable[str] | None = None,
+) -> list[dict[str, Any]]:
+    return list(
+        shadow_implementation_scan(
+            project_root,
+            limit=limit,
+            changed_files=changed_files,
+        )["concerns"]
+    )
+
+
+__all__ = ["shadow_implementation_concerns", "shadow_implementation_scan"]

@@ -98,6 +98,61 @@ def component_access_policy(component, rules, context):
     )
 
 
+def _write_shadow_policy_project_with_paths(tmp_path, *, existing_path: str, candidate_path: str) -> None:
+    existing = tmp_path / existing_path
+    candidate = tmp_path / candidate_path
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_text(
+        """
+def component_allow_policy(component, rules, context):
+    allowed = []
+    denied = []
+    for rule in rules:
+        if rule.get("disabled"):
+            continue
+        target = rule.get("component")
+        if target not in ("*", component):
+            continue
+        decision = rule.get("decision")
+        if decision == "allow":
+            allowed.append(rule.get("name", ""))
+        elif decision == "deny":
+            denied.append(rule.get("name", ""))
+    if context.get("maintenance"):
+        denied.append("maintenance")
+    if context.get("owner") == component:
+        allowed.append("owner")
+    return bool(allowed) and not denied
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """
+def component_permission_policy(component, rules, context):
+    matches = []
+    warnings = []
+    for entry in rules:
+        if entry.get("disabled"):
+            continue
+        matches_scope = entry.get("component") in ("*", component)
+        if not matches_scope:
+            continue
+        value = entry.get("decision")
+        if value == "allow":
+            matches.append(entry.get("name", ""))
+        if value == "deny":
+            warnings.append(entry.get("name", ""))
+    if context.get("maintenance"):
+        warnings.append("maintenance")
+    if context.get("owner") == component:
+        matches.append("owner")
+    return len(matches) > 0 and len(warnings) == 0
+""",
+        encoding="utf-8",
+    )
+
+
 def _write_shadow_policy_classes(tmp_path) -> None:
     policy_dir = tmp_path / "src" / "policy"
     policy_dir.mkdir(parents=True, exist_ok=True)
@@ -251,6 +306,29 @@ def test_shadow_implementation_concern_id_is_stable(tmp_path) -> None:
     second = shadow_implementation_concerns(tmp_path)
 
     assert [item["concern_id"] for item in first] == [item["concern_id"] for item in second]
+
+
+def test_shadow_implementation_scoped_changed_file_is_primary_location(tmp_path) -> None:
+    _write_shadow_policy_project_with_paths(
+        tmp_path,
+        existing_path="src/policy/z_existing_policy.py",
+        candidate_path="src/policy/a_candidate_policy.py",
+    )
+
+    concerns = shadow_implementation_concerns(
+        tmp_path,
+        changed_files=["src/policy/a_candidate_policy.py"],
+    )
+
+    assert concerns
+    assert concerns[0]["location"]["path"] == "src/policy/a_candidate_policy.py"
+    assert concerns[0]["references"][0]["path"] == "src/policy/z_existing_policy.py"
+
+
+def test_shadow_implementation_scoped_without_changed_candidate_is_empty(tmp_path) -> None:
+    _write_shadow_policy_project(tmp_path)
+
+    assert shadow_implementation_concerns(tmp_path, changed_files=["src/unrelated.py"]) == []
 
 
 def test_shadow_implementation_class_concern_id_is_stable(tmp_path) -> None:
@@ -554,6 +632,72 @@ def test_code_review_diff_and_since_do_not_include_shadow_signal(tmp_path, monke
     assert all(item["kind"] != "shadow-implementation" for item in since_result["concerns"])
     assert all(item["kind"] != "shadow_implementation" for item in diff_result["signals"])
     assert all(item["kind"] != "shadow_implementation" for item in since_result["signals"])
+
+
+def test_code_review_diff_includes_changed_file_scoped_shadow_signal(tmp_path, monkeypatch) -> None:
+    _write_shadow_policy_project(tmp_path)
+    report = {
+        **_empty_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/policy/generated_policy.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    concern = next(item for item in result["concerns"] if item["kind"] == "shadow-implementation")
+    assert concern["location"]["path"] == "src/policy/generated_policy.py"
+    assert concern["references"][0]["path"] == "src/policy/base_policy.py"
+    signal = next(item for item in result["signals"] if item["kind"] == "shadow_implementation")
+    assert signal["metrics"]["scoped_to_changed_files"] is True
+    assert signal["metrics"]["changed_file_total"] == 1
+    assert signal["metrics"]["candidate_total_before_scope"] >= signal["metrics"]["candidate_total"]
+
+
+def test_code_review_since_includes_changed_file_scoped_shadow_signal(tmp_path, monkeypatch) -> None:
+    _write_shadow_policy_classes(tmp_path)
+    report = {
+        **_empty_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/policy/candidate_class.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_since(tmp_path, ref="main")
+
+    concern = next(
+        item
+        for item in result["concerns"]
+        if item["kind"] == "shadow-implementation" and item["location"]["symbol_kind"] == "class"
+    )
+    assert concern["location"]["path"] == "src/policy/candidate_class.py"
+    assert concern["references"][0]["path"] == "src/policy/base_class.py"
+    signal = next(item for item in result["signals"] if item["kind"] == "shadow_implementation")
+    assert signal["metrics"]["scoped_to_changed_files"] is True
+    assert signal["metrics"]["by_symbol_kind"]["class"] == 1
+
+
+def test_code_review_since_bad_ref_does_not_run_shadow_detector(tmp_path, monkeypatch) -> None:
+    def raise_bad_ref(*args, **kwargs):
+        raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
+
+    def fail_shadow(*args, **kwargs):
+        raise AssertionError("shadow detector should not run")
+
+    monkeypatch.setattr(code_review, "run_analysis", raise_bad_ref)
+    monkeypatch.setattr(code_review, "shadow_implementation_scan", fail_shadow)
+
+    result = code_review.run_code_review_since(tmp_path, ref="missing")
+
+    assert result["review_type"] == "since"
+    assert result["concerns"] == []
+    assert result["signals"] == []
 
 
 def test_shadow_implementation_output_avoids_gate_and_repair_terms(tmp_path) -> None:

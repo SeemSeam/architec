@@ -77,6 +77,7 @@ Done:
 - `shadow_implementation` v1 范围已收敛为全量审查里的 Python 函数级跨文件相似实现，见 [decisions/022-shadow-implementation-v1-scope.md](decisions/022-shadow-implementation-v1-scope.md)。
 - `shadow_implementation` v1 已落地到 `code-review --full`：输出 `shadow-implementation` concern 和 `shadow_implementation` signal，增量模式暂不启用。
 - `shadow_implementation` class-level v1 已收敛并落地：全量审查可输出 Python 类级 `shadow-implementation` concern，见 [decisions/023-shadow-implementation-class-v1.md](decisions/023-shadow-implementation-class-v1.md)。
+- `shadow_implementation` diff/since scope 已收敛：增量审查只报告 changed-file primary shadow concern，见 [decisions/024-shadow-implementation-diff-since-scope.md](decisions/024-shadow-implementation-diff-since-scope.md)。
 
 In Progress:
 
@@ -84,14 +85,13 @@ In Progress:
 
 Next:
 
-- 从 Deferred 中选择下一阶段深化项；优先考虑继续增强核心审查检测能力，如 `shadow_implementation` file-level 或 diff/since 范围控制。
+- 从 Deferred 中选择下一阶段深化项；优先考虑继续增强核心审查检测能力，如 `shadow_implementation` file-level 检测。
 
 Deferred:
 
 - 无发现场景文案进一步标准化。
 - JSON 主体 20KB 目标在中大型仓库中的体量校准。
 - `shadow_implementation` file-level 检测。
-- `shadow_implementation` diff/since 变更范围控制。
 - `fix-advice` 是否为 `shadow-implementation` 增加专用 advisory options。
 - `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - 多语言支持。
@@ -203,7 +203,7 @@ Deferred:
 
 如果工期吃紧，优先保主线。深化线按以下顺序降级：
 
-- 先推迟 `shadow_implementation` 的 file-level、diff/since 和 fix-advice 深化。
+- 先推迟 `shadow_implementation` 的 file-level 和 fix-advice 深化。
 - 再推迟趋势归因细化。
 - 最后推迟 plan fingerprint 的精细一致性观察。
 

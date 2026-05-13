@@ -7,7 +7,7 @@ from typing import Any
 
 from architec.analysis.public import run_analysis
 from architec.code_review.near_duplicate import near_duplicate_concerns
-from architec.code_review.shadow_implementation import shadow_implementation_concerns
+from architec.code_review.shadow_implementation import shadow_implementation_scan
 from architec.events.public import append_review_event
 from architec.support.io_utils import ProgressFn, clamp
 
@@ -313,7 +313,12 @@ def _shadow_role(concern: dict[str, Any]) -> str:
     return "unknown"
 
 
-def _signals(report: dict[str, Any], concerns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _signals(
+    report: dict[str, Any],
+    concerns: list[dict[str, Any]],
+    *,
+    shadow_scan: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     signals: list[dict[str, Any]] = []
     cleanup = _dict(report.get("cleanup"))
     if cleanup:
@@ -423,16 +428,29 @@ def _signals(report: dict[str, Any], concerns: list[dict[str, Any]]) -> list[dic
             for concern in shadow_items
             if _safe_confidence(concern.get("confidence"), 0.0) >= 0.78
         )
+        metrics: dict[str, Any] = {
+            "candidate_total": len(shadow_items),
+            "high_confidence_total": high_confidence_total,
+            "by_role": dict(sorted(by_role.items())),
+            "by_symbol_kind": dict(sorted(by_symbol_kind.items())),
+        }
+        scoped = _dict(shadow_scan) if shadow_scan is not None else {}
+        if scoped.get("scoped_to_changed_files"):
+            metrics["scoped_to_changed_files"] = True
+            metrics["changed_file_total"] = int(scoped.get("changed_file_total", 0) or 0)
+            metrics["candidate_total_before_scope"] = int(
+                scoped.get("candidate_total_before_scope", len(shadow_items)) or 0
+            )
+        summary = (
+            f"{len(shadow_items)} shadow implementation candidates detected in changed files."
+            if scoped.get("scoped_to_changed_files")
+            else f"{len(shadow_items)} shadow implementation candidates detected."
+        )
         signals.append(
             {
                 "kind": "shadow_implementation",
-                "summary": f"{len(shadow_items)} shadow implementation candidates detected.",
-                "metrics": {
-                    "candidate_total": len(shadow_items),
-                    "high_confidence_total": high_confidence_total,
-                    "by_role": dict(sorted(by_role.items())),
-                    "by_symbol_kind": dict(sorted(by_symbol_kind.items())),
-                },
+                "summary": summary,
+                "metrics": metrics,
             }
         )
     return signals
@@ -523,6 +541,37 @@ def _is_since_range_error(exc: Exception) -> bool:
     return any(marker in text for marker in markers)
 
 
+def _changed_files_from_report(report: dict[str, Any]) -> list[str]:
+    change = _dict(report.get("change_analysis"))
+    raw = _list(change.get("changed_files"))
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        path = str(item or "").strip().lstrip("./")
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        out.append(path)
+    return out
+
+
+def _shadow_scan_for_review(
+    report: dict[str, Any],
+    *,
+    review_type: str,
+    project_root: str | Path | None,
+) -> dict[str, Any]:
+    if project_root is None:
+        return {"concerns": []}
+    if review_type == "full":
+        return shadow_implementation_scan(project_root)
+    if review_type in {"diff", "since"}:
+        changed_files = _changed_files_from_report(report)
+        if changed_files:
+            return shadow_implementation_scan(project_root, changed_files=changed_files)
+    return {"concerns": []}
+
+
 def _result_from_report(
     report: dict[str, Any],
     *,
@@ -535,11 +584,12 @@ def _result_from_report(
         if review_type == "full" and project_root is not None
         else []
     )
-    shadow_concerns = (
-        shadow_implementation_concerns(project_root)
-        if review_type == "full" and project_root is not None
-        else []
+    shadow_scan = _shadow_scan_for_review(
+        report,
+        review_type=review_type,
+        project_root=project_root,
     )
+    shadow_concerns = list(shadow_scan.get("concerns", []))
     generated_concerns = [
         *_cleanup_concerns(report),
         *_archive_concerns(report),
@@ -549,7 +599,7 @@ def _result_from_report(
         *shadow_concerns,
     ]
     concerns = _ranked_concerns(generated_concerns, limit=CONCERN_LIMIT)
-    signals = _signals(report, generated_concerns)
+    signals = _signals(report, generated_concerns, shadow_scan=shadow_scan)
     return {
         "mode": "code_review",
         "review_type": review_type,

@@ -126,8 +126,19 @@ def change_analysis(
 ) -> dict[str, Any]:
     if not diff:
         return {}
+    changed_files = score.get('changed_files', []) if isinstance(score, dict) else []
+    if not isinstance(changed_files, list):
+        changed_files = []
+    if not changed_files:
+        for component in score.get('components', []) if isinstance(score, dict) else []:
+            if not isinstance(component, dict):
+                continue
+            for path in component.get('changed_files', []):
+                if path:
+                    changed_files.append(path)
     return {
         'changed_file_total': int(score.get('changed_file_total', 0) or 0),
+        'changed_files': sorted({str(path) for path in changed_files if str(path or '')}),
         'components': score.get('components', [])[:8] if isinstance(score, dict) else [],
         'retire_plan': build_diff_retire_plan(
             score,

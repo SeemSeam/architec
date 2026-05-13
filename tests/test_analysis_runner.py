@@ -210,6 +210,7 @@ def test_run_analysis_writes_architec_artifacts(tmp_path, monkeypatch):
     assert data['semantic_judge']['status'] == 'ok'
     assert data['feature_analysis']['retire_plan']['add'][0]['component'] == 'core'
     assert data['feature_analysis']['retire_plan']['retire']
+    assert data['change_analysis']['changed_files'] == ['src/compat/core_adapter.py']
     assert data['change_analysis']['retire_plan']['add'][0]['signals'] == ['compat']
     assert data['change_analysis']['retire_plan']['retire']
     assert data['artifacts']['summary_md'].endswith('architec-summary.md')

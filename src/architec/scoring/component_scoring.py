@@ -96,6 +96,7 @@ def score_changed_components(
         "base": base or "",
         "head": head or "",
         "changed_file_total": len(changed),
+        "changed_files": [str(item.get("path", "") or "") for item in changed if item.get("path")],
         "components": components,
         "summary": {
             "block": sum(1 for c in components if c["recommendation"] == "block"),

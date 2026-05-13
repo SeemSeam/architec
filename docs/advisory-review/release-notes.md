@@ -173,7 +173,9 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 `code-review --since <ref>` returns a structured CodeReviewResult degradation when the git ref or range cannot be resolved. It does not fall back to full review or unrelated working-tree diff.
 
-`code-review --full` now includes a conservative Python `shadow_implementation` signal for function-level and class-level candidates. It reports `shadow-implementation` concerns only when static evidence shows cross-file similarity, shared role, compatible function signature or class API shape, AST similarity, and no direct reuse edge. Diff and since review do not include this historical signal.
+`code-review --full` now includes a conservative Python `shadow_implementation` signal for function-level and class-level candidates. It reports `shadow-implementation` concerns only when static evidence shows cross-file similarity, shared role, compatible function signature or class API shape, AST similarity, and no direct reuse edge.
+
+`code-review --diff` and `code-review --since <ref>` now run `shadow_implementation` in changed-file-scoped mode. They only report concerns whose primary `location.path` is in the changed files; `references[]` may point at unchanged existing implementations.
 
 ## Advisory-Only Boundary
 
