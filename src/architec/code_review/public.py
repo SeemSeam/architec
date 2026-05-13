@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from architec.analysis.public import run_analysis
-from architec.code_review.near_duplicate import near_duplicate_concerns
+from architec.code_review.near_duplicate import near_duplicate_concerns, near_duplicate_scan
 from architec.code_review.shadow_implementation import shadow_implementation_scan
 from architec.events.public import append_review_event
 from architec.support.io_utils import ProgressFn, clamp
@@ -317,6 +317,7 @@ def _signals(
     report: dict[str, Any],
     concerns: list[dict[str, Any]],
     *,
+    near_duplicate_scope: dict[str, Any] | None = None,
     shadow_scan: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     signals: list[dict[str, Any]] = []
@@ -406,11 +407,23 @@ def _signals(
         )
     near_duplicate_total = _near_duplicate_total(concerns)
     if near_duplicate_total:
+        scoped = _dict(near_duplicate_scope) if near_duplicate_scope is not None else {}
+        metrics: dict[str, Any] = {"concern_total": near_duplicate_total}
+        if scoped.get("scoped_to_changed_files"):
+            metrics["scoped_to_changed_files"] = True
+            metrics["changed_file_total"] = int(scoped.get("changed_file_total", 0) or 0)
+            metrics["candidate_total_before_scope"] = int(
+                scoped.get("candidate_total_before_scope", near_duplicate_total) or 0
+            )
         signals.append(
             {
                 "kind": "near_duplicate",
-                "summary": f"{near_duplicate_total} near-duplicate function concerns detected.",
-                "metrics": {"concern_total": near_duplicate_total},
+                "summary": (
+                    f"{near_duplicate_total} near-duplicate function concerns detected in changed files."
+                    if scoped.get("scoped_to_changed_files")
+                    else f"{near_duplicate_total} near-duplicate function concerns detected."
+                ),
+                "metrics": metrics,
             }
         )
     shadow_items = _shadow_implementation_items(concerns)
@@ -572,6 +585,21 @@ def _shadow_scan_for_review(
     return {"concerns": []}
 
 
+def _near_duplicate_scan_for_review(
+    report: dict[str, Any],
+    *,
+    review_type: str,
+    project_root: str | Path | None,
+) -> dict[str, Any]:
+    if project_root is None:
+        return {"concerns": []}
+    if review_type in {"diff", "since"}:
+        changed_files = _changed_files_from_report(report)
+        if changed_files:
+            return near_duplicate_scan(project_root, changed_files=changed_files)
+    return {"concerns": []}
+
+
 def _result_from_report(
     report: dict[str, Any],
     *,
@@ -584,6 +612,12 @@ def _result_from_report(
         if review_type == "full" and project_root is not None
         else []
     )
+    near_duplicate_scope = _near_duplicate_scan_for_review(
+        report,
+        review_type=review_type,
+        project_root=project_root,
+    )
+    duplicate_concerns.extend(list(near_duplicate_scope.get("concerns", [])))
     shadow_scan = _shadow_scan_for_review(
         report,
         review_type=review_type,
@@ -599,7 +633,12 @@ def _result_from_report(
         *shadow_concerns,
     ]
     concerns = _ranked_concerns(generated_concerns, limit=CONCERN_LIMIT)
-    signals = _signals(report, generated_concerns, shadow_scan=shadow_scan)
+    signals = _signals(
+        report,
+        generated_concerns,
+        near_duplicate_scope=near_duplicate_scope,
+        shadow_scan=shadow_scan,
+    )
     return {
         "mode": "code_review",
         "review_type": review_type,

@@ -5,7 +5,7 @@ import copy
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 
 SKIP_DIRS = {
@@ -116,6 +116,10 @@ def _stable_concern_id(
     return f"code-review:duplication:{digest}"
 
 
+def _candidate_key(item: _FunctionFingerprint) -> tuple[str, int, str]:
+    return (item.path, item.line, item.symbol)
+
+
 def _collect_functions(path: Path, root: Path) -> list[_FunctionFingerprint]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -148,53 +152,107 @@ def _collect_functions(path: Path, root: Path) -> list[_FunctionFingerprint]:
     return found
 
 
-def near_duplicate_concerns(project_root: str | Path, *, limit: int = 20) -> list[dict[str, Any]]:
+def _build_concern(
+    duplicate: _FunctionFingerprint,
+    reference: _FunctionFingerprint,
+    fingerprint: str,
+) -> dict[str, Any]:
+    return {
+        "concern_id": _stable_concern_id(duplicate, reference, fingerprint),
+        "kind": "duplication",
+        "level": "caution",
+        "confidence": 0.9,
+        "location": {
+            "path": duplicate.path,
+            "line": duplicate.line,
+            "symbol": duplicate.symbol,
+            "symbol_kind": "function",
+        },
+        "root_cause": "Function has the same normalized AST fingerprint as another function.",
+        "evidence": [
+            f"near_duplicate.fingerprint={fingerprint}",
+            f"near_duplicate.reference={reference.path}:{reference.line}:{reference.symbol}",
+            f"near_duplicate.node_count={duplicate.node_count}",
+        ],
+        "references": [
+            {
+                "role": "reference",
+                "path": reference.path,
+                "line": reference.line,
+                "symbol": reference.symbol,
+                "symbol_kind": "function",
+            }
+        ],
+        "blast_radius": [duplicate.path, reference.path],
+        "next_steps_hint": "Review whether one implementation can reuse or call the other.",
+    }
+
+
+def _normalized_changed_files(changed_files: Iterable[str] | None) -> frozenset[str] | None:
+    if changed_files is None:
+        return None
+    normalized = {
+        Path(str(path)).as_posix().lstrip("./")
+        for path in changed_files
+        if str(path or "").strip()
+    }
+    return frozenset(normalized)
+
+
+def _reference_for_scoped_candidate(
+    candidate: _FunctionFingerprint,
+    group: list[_FunctionFingerprint],
+) -> _FunctionFingerprint:
+    for item in group:
+        if item != candidate:
+            return item
+    return group[0]
+
+
+def near_duplicate_scan(
+    project_root: str | Path,
+    *,
+    limit: int = 20,
+    changed_files: Iterable[str] | None = None,
+) -> dict[str, Any]:
     root = Path(project_root)
+    changed_scope = _normalized_changed_files(changed_files)
     by_fingerprint: dict[str, list[_FunctionFingerprint]] = {}
     for path in _iter_python_files(root):
         for item in _collect_functions(path, root):
             by_fingerprint.setdefault(item.fingerprint, []).append(item)
 
     concerns: list[dict[str, Any]] = []
+    candidate_total_before_scope = 0
     for fingerprint, items in sorted(by_fingerprint.items()):
         if len(items) < 2:
             continue
-        reference = sorted(items, key=lambda item: (item.path, item.line, item.symbol))[0]
-        for duplicate in sorted(items, key=lambda item: (item.path, item.line, item.symbol))[1:]:
-            concerns.append(
-                {
-                    "concern_id": _stable_concern_id(duplicate, reference, fingerprint),
-                    "kind": "duplication",
-                    "level": "caution",
-                    "confidence": 0.9,
-                    "location": {
-                        "path": duplicate.path,
-                        "line": duplicate.line,
-                        "symbol": duplicate.symbol,
-                        "symbol_kind": "function",
-                    },
-                    "root_cause": "Function has the same normalized AST fingerprint as another function.",
-                    "evidence": [
-                        f"near_duplicate.fingerprint={fingerprint}",
-                        f"near_duplicate.reference={reference.path}:{reference.line}:{reference.symbol}",
-                        f"near_duplicate.node_count={duplicate.node_count}",
-                    ],
-                    "references": [
-                        {
-                            "role": "reference",
-                            "path": reference.path,
-                            "line": reference.line,
-                            "symbol": reference.symbol,
-                            "symbol_kind": "function",
-                        }
-                    ],
-                    "blast_radius": [duplicate.path, reference.path],
-                    "next_steps_hint": "Review whether one implementation can reuse or call the other.",
-                }
+        group = sorted(items, key=_candidate_key)
+        candidate_total_before_scope += len(group) - 1
+        if changed_scope is None:
+            reference = group[0]
+            candidates = group[1:]
+        else:
+            candidates = [item for item in group if item.path in changed_scope]
+        for duplicate in candidates:
+            reference = (
+                _reference_for_scoped_candidate(duplicate, group)
+                if changed_scope is not None
+                else reference
             )
-            if len(concerns) >= limit:
-                return concerns
-    return concerns
+            concerns.append(_build_concern(duplicate, reference, fingerprint))
+    result: dict[str, Any] = {
+        "concerns": concerns[:limit],
+        "candidate_total_before_scope": candidate_total_before_scope,
+    }
+    if changed_scope is not None:
+        result["scoped_to_changed_files"] = True
+        result["changed_file_total"] = len(changed_scope)
+    return result
 
 
-__all__ = ["near_duplicate_concerns"]
+def near_duplicate_concerns(project_root: str | Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    return list(near_duplicate_scan(project_root, limit=limit)["concerns"])
+
+
+__all__ = ["near_duplicate_concerns", "near_duplicate_scan"]

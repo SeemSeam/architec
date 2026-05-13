@@ -79,6 +79,7 @@ Done:
 - `shadow_implementation` class-level v1 已收敛并落地：全量审查可输出 Python 类级 `shadow-implementation` concern，见 [decisions/023-shadow-implementation-class-v1.md](decisions/023-shadow-implementation-class-v1.md)。
 - `shadow_implementation` diff/since scope 已收敛：增量审查只报告 changed-file primary shadow concern，见 [decisions/024-shadow-implementation-diff-since-scope.md](decisions/024-shadow-implementation-diff-since-scope.md)。
 - `fix-advice` 已为 `shadow-implementation` concern 增加专用 advisory options，消费 `references[].role: "existing_implementation"`，见 [decisions/025-shadow-implementation-fix-advice.md](decisions/025-shadow-implementation-fix-advice.md)。
+- `near_duplicate` diff/since scope 已收敛：增量审查只报告 changed-file primary duplication concern，见 [decisions/026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
 
 In Progress:
 
@@ -86,7 +87,7 @@ In Progress:
 
 Next:
 
-- 从 Deferred 中选择下一阶段深化项；优先考虑继续增强核心审查检测能力，如 `shadow_implementation` file-level 检测。
+- 从 Deferred 中选择下一阶段深化项；优先考虑高价值、低误报的核心审查检测能力或输出体量校准。
 
 Deferred:
 
@@ -176,6 +177,7 @@ Deferred:
 
 - 实现第一批 AI 特有信号中的 `near_duplicate`。
 - `shadow_implementation` v1 已作为封版后深化项落地；增量范围控制和专用 fix-advice 已补齐，后续再评估 file-level 检测。
+- `near_duplicate` 已扩展到 diff/since changed-file scope，仍保持 exact normalized AST fingerprint。
 
 验收：
 

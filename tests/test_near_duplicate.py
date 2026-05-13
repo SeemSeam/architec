@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from architec.code_review.near_duplicate import near_duplicate_concerns
+from architec.code_review.near_duplicate import near_duplicate_concerns, near_duplicate_scan
 
 
 def test_near_duplicate_concerns_detects_normalized_duplicate_functions(tmp_path) -> None:
@@ -133,3 +133,47 @@ def outer_two(records):
     symbols = {concern["location"]["symbol"] for concern in concerns}
     assert "outer_two.inner_two" in symbols
     assert all(not symbol.startswith("_fn.") for symbol in symbols)
+
+
+def test_near_duplicate_scoped_changed_file_is_primary_even_when_sorted_first(tmp_path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "a_changed.py").write_text(
+        """
+def changed_impl(value):
+    total = 0
+    for item in value:
+        if item > 10:
+            total += item * 2
+        else:
+            total += item
+    return total
+""",
+        encoding="utf-8",
+    )
+    (source / "z_existing.py").write_text(
+        """
+def existing_impl(records):
+    result = 0
+    for row in records:
+        if row > 99:
+            result += row * 2
+        else:
+            result += row
+    return result
+""",
+        encoding="utf-8",
+    )
+
+    scan = near_duplicate_scan(tmp_path, changed_files=["src/a_changed.py"])
+
+    assert scan["scoped_to_changed_files"] is True
+    assert scan["changed_file_total"] == 1
+    assert scan["candidate_total_before_scope"] == 1
+    concerns = scan["concerns"]
+    assert len(concerns) == 1
+    concern = concerns[0]
+    assert concern["location"]["path"] == "src/a_changed.py"
+    assert concern["location"]["symbol"] == "changed_impl"
+    assert concern["references"][0]["path"] == "src/z_existing.py"
+    assert concern["references"][0]["symbol"] == "existing_impl"

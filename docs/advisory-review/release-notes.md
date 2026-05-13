@@ -179,6 +179,8 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 `fix-advice` now has a dedicated advisory branch for `shadow-implementation` concerns. It consumes `references[].role: "existing_implementation"` to compare the suspected shadow implementation with the existing function or class, while keeping the output non-executable and neutral about which implementation is correct.
 
+`code-review --diff` and `code-review --since <ref>` now also run exact `near_duplicate` detection in changed-file-scoped mode. They report duplication only when the primary `location.path` is changed; `references[]` may point at unchanged existing code.
+
 ## Advisory-Only Boundary
 
 The new review surface follows these boundaries:

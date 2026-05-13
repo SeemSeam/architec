@@ -76,6 +76,50 @@ def _analysis_report() -> dict[str, object]:
     }
 
 
+def _empty_review_report() -> dict[str, object]:
+    return {
+        "scores": {},
+        "summary": {},
+        "cleanup": {},
+        "archive_candidates": {},
+        "semantic_judge": {},
+        "hotspots": [],
+        "topology": {},
+        "artifacts": {},
+    }
+
+
+def _write_near_duplicate_project(tmp_path) -> None:
+    source = tmp_path / "src"
+    source.mkdir(exist_ok=True)
+    (source / "existing.py").write_text(
+        """
+def existing_impl(value):
+    total = 0
+    for item in value:
+        if item > 10:
+            total += item * 2
+        else:
+            total += item
+    return total
+""",
+        encoding="utf-8",
+    )
+    (source / "changed.py").write_text(
+        """
+def changed_impl(records):
+    result = 0
+    for row in records:
+        if row > 99:
+            result += row * 2
+        else:
+            result += row
+    return result
+""",
+        encoding="utf-8",
+    )
+
+
 def test_run_code_review_full_reuses_full_analysis_and_maps_cleanup_concern(tmp_path, monkeypatch) -> None:
     calls: list[dict[str, object]] = []
 
@@ -629,6 +673,90 @@ def test_code_review_full_adds_near_duplicate_signal_and_concern(tmp_path, monke
     assert result["concerns"][0]["references"][0]["path"] == "src/a.py"
     signal = next(item for item in result["signals"] if item["kind"] == "near_duplicate")
     assert signal["metrics"] == {"concern_total": 1}
+
+
+def test_code_review_diff_adds_changed_file_scoped_near_duplicate_signal(tmp_path, monkeypatch) -> None:
+    _write_near_duplicate_project(tmp_path)
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/changed.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    concern = next(item for item in result["concerns"] if item["kind"] == "duplication")
+    assert concern["location"]["path"] == "src/changed.py"
+    assert concern["references"][0]["path"] == "src/existing.py"
+    signal = next(item for item in result["signals"] if item["kind"] == "near_duplicate")
+    assert signal["summary"] == "1 near-duplicate function concerns detected in changed files."
+    assert signal["metrics"] == {
+        "concern_total": 1,
+        "scoped_to_changed_files": True,
+        "changed_file_total": 1,
+        "candidate_total_before_scope": 1,
+    }
+
+
+def test_code_review_since_adds_changed_file_scoped_near_duplicate_signal(tmp_path, monkeypatch) -> None:
+    _write_near_duplicate_project(tmp_path)
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/changed.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_since(tmp_path, ref="main")
+
+    concern = next(item for item in result["concerns"] if item["kind"] == "duplication")
+    assert concern["location"]["path"] == "src/changed.py"
+    assert concern["references"][0]["path"] == "src/existing.py"
+    signal = next(item for item in result["signals"] if item["kind"] == "near_duplicate")
+    assert signal["metrics"]["scoped_to_changed_files"] is True
+    assert signal["metrics"]["changed_file_total"] == 1
+
+
+def test_code_review_diff_without_scoped_near_duplicate_omits_signal(tmp_path, monkeypatch) -> None:
+    _write_near_duplicate_project(tmp_path)
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/unrelated.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    assert all(item["kind"] != "duplication" for item in result["concerns"])
+    assert all(item["kind"] != "near_duplicate" for item in result["signals"])
+
+
+def test_code_review_since_bad_ref_does_not_run_near_duplicate_detector(tmp_path, monkeypatch) -> None:
+    def raise_bad_ref(*args, **kwargs):
+        raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
+
+    def fail_near_duplicate(*args, **kwargs):
+        raise AssertionError("near duplicate detector should not run")
+
+    monkeypatch.setattr(code_review, "run_analysis", raise_bad_ref)
+    monkeypatch.setattr(code_review, "near_duplicate_scan", fail_near_duplicate)
+
+    result = code_review.run_code_review_since(tmp_path, ref="missing")
+
+    assert result["review_type"] == "since"
+    assert result["concerns"] == []
+    assert result["signals"] == []
 
 
 def test_code_review_full_output_avoids_gate_terms(tmp_path, monkeypatch) -> None:

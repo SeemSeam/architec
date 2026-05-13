@@ -9,13 +9,13 @@
 - `near_duplicate`：AST 或 token 指纹命中的近重复函数、类或文件。
 - `shadow_implementation`：新增代码与已有能力高度相似，但没有复用既有入口。
 
-`near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：当前只在全量审查中检测 Python 函数/方法的规范化 AST 重复，优先低误报。
+`near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：检测 Python 函数/方法的规范化 AST 重复，优先低误报。diff/since changed-file scope 见 [decisions/026-near-duplicate-diff-since-scope.md](../decisions/026-near-duplicate-diff-since-scope.md)。
 
 `shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。当前检测 Python 函数和类级跨文件相似实现，优先高精度。
 
 `shadow_implementation` v1 不是：
 
-- `near_duplicate` 的替代。完全相同的规范化 AST 仍由 `near_duplicate` 报告。
+- `near_duplicate` 的替代。完全相同的规范化 AST 仍由 `near_duplicate` 报告；增量模式只报告 primary location 位于 changed files 的重复函数。
 - 合法 adapter、wrapper、facade 或兼容入口。
 - 测试 fixture、生成代码、vendor 代码或 build artifact 检查。
 - 全仓历史债务信号；`--diff` / `--since` 只报告 location 位于 changed files 的 concern。

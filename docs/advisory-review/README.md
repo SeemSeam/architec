@@ -29,6 +29,7 @@
 - `shadow_implementation` class-level v1 扩展到 Python 类级候选，仍只在全量审查中输出。见 [023-shadow-implementation-class-v1.md](decisions/023-shadow-implementation-class-v1.md)。
 - `shadow_implementation` diff/since scope 只报告 changed-file primary concerns，引用可指向未变更实现。见 [024-shadow-implementation-diff-since-scope.md](decisions/024-shadow-implementation-diff-since-scope.md)。
 - `fix-advice` 为 `shadow-implementation` concern 输出专用 advisory options，消费 `references[].role: "existing_implementation"`。见 [025-shadow-implementation-fix-advice.md](decisions/025-shadow-implementation-fix-advice.md)。
+- `near_duplicate` diff/since scope 只报告 changed-file primary duplication concern，reference 可指向未变更实现。见 [026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
 
 ## 目录
 

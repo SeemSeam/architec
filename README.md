@@ -198,6 +198,11 @@ Diff and since reviews use the same base LLM preflight as full review. If a
 structured CodeReviewResult explaining the unresolved range instead of falling
 back to a full review.
 
+Exact `near_duplicate` detection and conservative `shadow_implementation`
+detection both support changed-file-scoped diff/since review: the primary
+concern location is in the changed files, while structured references can point
+to unchanged existing implementations.
+
 Generated `concern_id` values in current code-review output are fact-based identifiers, not display positions. `fix-advice` reports a CLI error for missing, invalid, or non-object review JSON; a valid review with no concerns still produces an empty suggestions list. `fix-advice` has dedicated advisory branches for duplication and shadow-implementation concerns when the review includes structured reference locations.
 
 Plan review:
