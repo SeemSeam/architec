@@ -96,6 +96,34 @@ def test_near_duplicate_concerns_ignores_small_boilerplate(tmp_path) -> None:
     assert near_duplicate_concerns(tmp_path) == []
 
 
+def test_near_duplicate_concerns_ignore_generated_state_dirs(tmp_path) -> None:
+    ccb_dir = tmp_path / ".ccb" / "agents" / "agent1" / "provider-state"
+    generated_dir = tmp_path / "generated"
+    src_dir = tmp_path / "src"
+    ccb_dir.mkdir(parents=True)
+    generated_dir.mkdir()
+    src_dir.mkdir()
+    duplicate = """
+def duplicated_impl(value):
+    total = 0
+    for item in value:
+        if item > 10:
+            total += item * 2
+        else:
+            total += item
+    if total > 100:
+        total -= 5
+    return total
+"""
+    (ccb_dir / "a.py").write_text(duplicate, encoding="utf-8")
+    (ccb_dir / "b.py").write_text(duplicate.replace("duplicated_impl", "duplicated_copy"), encoding="utf-8")
+    (generated_dir / "a.py").write_text(duplicate, encoding="utf-8")
+    (generated_dir / "b.py").write_text(duplicate.replace("duplicated_impl", "generated_copy"), encoding="utf-8")
+    (src_dir / "normal.py").write_text("def unique_impl(value):\n    return value\n", encoding="utf-8")
+
+    assert near_duplicate_concerns(tmp_path) == []
+
+
 def test_near_duplicate_fingerprinting_does_not_mutate_nested_symbol_names(tmp_path) -> None:
     (tmp_path / "a.py").write_text(
         """

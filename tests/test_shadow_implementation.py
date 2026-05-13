@@ -411,6 +411,20 @@ def test_shadow_implementation_file_dry_run_ignores_small_modules(tmp_path) -> N
     assert result["by_exclusion"]["too_small"] == 2
 
 
+def test_shadow_implementation_file_dry_run_ignores_ccb_state_modules(tmp_path) -> None:
+    source = tmp_path / ".ccb" / "agents" / "agent1" / "provider-state"
+    source.mkdir(parents=True)
+    (source / "policy_existing.py").write_text(_module_text(), encoding="utf-8")
+    (source / "policy_candidate.py").write_text(_module_text(), encoding="utf-8")
+
+    result = shadow_implementation_file_dry_run(tmp_path)
+
+    assert result["candidate_total"] == 0
+    assert result["pair_total"] == 0
+    assert result["reported_total"] == 0
+    assert result["candidates"] == []
+
+
 def test_shadow_implementation_concerns_detect_policy_like_classes(tmp_path) -> None:
     _write_shadow_policy_classes(tmp_path)
 
@@ -437,6 +451,105 @@ def test_shadow_implementation_concerns_detect_policy_like_classes(tmp_path) -> 
     assert "shadow_implementation.scope=class" in concern["evidence"]
     assert any(item.startswith("shadow_implementation.api_similarity=") for item in concern["evidence"])
     assert any(item.startswith("shadow_implementation.member_counts=") for item in concern["evidence"])
+
+
+def test_shadow_implementation_concerns_ignore_ccb_state_functions_and_classes(tmp_path) -> None:
+    _write_shadow_policy_project_with_paths(
+        tmp_path,
+        existing_path=".ccb/agents/agent1/provider-state/base_policy.py",
+        candidate_path=".ccb/agents/agent1/provider-state/generated_policy.py",
+    )
+    state_dir = tmp_path / ".ccb" / "agents" / "agent1" / "provider-state"
+    (state_dir / "base_class.py").write_text(
+        """
+class ComponentPolicyReviewer:
+    def __init__(self, rules, defaults, audit_log):
+        self.rules = list(rules)
+        self.defaults = dict(defaults)
+        self.audit_log = audit_log
+
+    def collect_allowed_components(self, component, context):
+        allowed = []
+        denied = []
+        for rule in self.rules:
+            if rule.get("disabled"):
+                continue
+            target = rule.get("component", "*")
+            if target not in ("*", component):
+                continue
+            decision = rule.get("decision", self.defaults.get(target, "deny"))
+            if decision == "allow":
+                allowed.append(rule.get("name", target))
+            elif decision == "deny":
+                denied.append(rule.get("name", target))
+        if context.get("maintenance"):
+            denied.append("maintenance")
+        if context.get("owner") == component:
+            allowed.append("owner")
+        return allowed, denied
+
+    def is_component_allowed(self, component, context):
+        allowed, denied = self.collect_allowed_components(component, context)
+        self.audit_log.append({"component": component, "allowed": len(allowed), "denied": len(denied)})
+        return bool(allowed) and not denied
+
+    def explain_component_policy(self, component, context):
+        allowed, denied = self.collect_allowed_components(component, context)
+        notes = []
+        for name in allowed:
+            notes.append(f"allow:{name}")
+        for name in denied:
+            notes.append(f"deny:{name}")
+        return notes
+""",
+        encoding="utf-8",
+    )
+    (state_dir / "candidate_class.py").write_text(
+        """
+class ComponentPolicyInspector:
+    def __init__(self, rules, defaults, events):
+        self.entries = list(rules)
+        self.defaults = dict(defaults)
+        self.events = events
+
+    def collect_allowed_components(self, component, context):
+        accepted = []
+        rejected = []
+        for entry in self.entries:
+            if entry.get("disabled"):
+                continue
+            scope = entry.get("component", "*")
+            if scope != "*" and scope != component:
+                continue
+            marker = entry.get("decision", self.defaults.get(scope, "deny"))
+            if marker == "allow":
+                accepted.append(entry.get("name", scope))
+            elif marker == "deny":
+                rejected.append(entry.get("name", scope))
+        if context.get("maintenance"):
+            rejected.append("maintenance")
+        if context.get("owner") == component:
+            accepted.append("owner")
+        return accepted, rejected
+
+    def is_component_allowed(self, component, context):
+        accepted, rejected = self.collect_allowed_components(component, context)
+        self.events.append({"component": component, "allowed": len(accepted), "denied": len(rejected)})
+        return len(accepted) > 0 and len(rejected) == 0
+
+    def explain_component_policy(self, component, context):
+        accepted, rejected = self.collect_allowed_components(component, context)
+        details = []
+        for name in accepted:
+            details.append(f"allow:{name}")
+        for name in rejected:
+            details.append(f"deny:{name}")
+        return details
+""",
+        encoding="utf-8",
+    )
+
+    assert shadow_implementation_concerns(tmp_path) == []
 
 
 def test_shadow_implementation_concern_id_is_stable(tmp_path) -> None:

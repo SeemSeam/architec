@@ -15,6 +15,8 @@ from typing import Any, Iterable
 
 SKIP_DIRS = {
     ".architec",
+    ".cache",
+    ".ccb",
     ".git",
     ".hippocampus",
     ".mypy_cache",
@@ -24,14 +26,24 @@ SKIP_DIRS = {
     ".venv",
     "__pycache__",
     "build",
+    "coverage",
     "dist",
     "env",
     "fixtures",
     "generated",
     "htmlcov",
+    "local-test-env",
     "node_modules",
+    "out",
+    "release-flow-test",
+    "site-packages",
+    "target",
+    "temp",
     "test",
     "tests",
+    "third-party",
+    "third_party",
+    "tmp",
     "venv",
     "vendor",
 }
@@ -235,7 +247,11 @@ def _is_adapter_like(tokens: set[str]) -> bool:
 def _iter_python_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for path in root.rglob("*.py"):
-        if any(part in SKIP_DIRS for part in path.parts):
+        try:
+            parts = path.relative_to(root).parts
+        except ValueError:
+            parts = path.parts
+        if any(part in SKIP_DIRS for part in parts[:-1]):
             continue
         files.append(path)
     return sorted(files)

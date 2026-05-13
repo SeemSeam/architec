@@ -36,6 +36,7 @@
 - `fix-advice --review <review.json>` 是推荐入口，`--for` 保留为兼容别名。见 [030-fix-advice-review-flag.md](decisions/030-fix-advice-review-flag.md)。
 - `shadow_implementation` file-level 只做 internal dry-run metrics，不进入 CodeReviewResult。见 [031-shadow-implementation-file-dry-run.md](decisions/031-shadow-implementation-file-dry-run.md)。
 - `shadow_implementation` file-level 根仓采样噪声过高，public signal 继续 deferred。见 [032-shadow-implementation-file-public-signal-deferred.md](decisions/032-shadow-implementation-file-public-signal-deferred.md)。
+- AI signal scanners 默认排除本地 agent state、generated artifacts、vendor、fixtures、tests 和 cache 目录。见 [033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md)。
 
 ## 目录
 

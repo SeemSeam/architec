@@ -24,6 +24,7 @@
 误报控制：
 
 - 只扫描 Python 源文件，跳过 tests、fixtures、generated、vendor、build、dist、虚拟环境和本地生成目录。
+- AI signal scanners 还默认排除 `.ccb` provider-state、本地 release/install test artifacts、cache 目录和 dependency copies；见 [decisions/033-ai-signal-source-scope-exclusions.md](../decisions/033-ai-signal-source-scope-exclusions.md)。
 - 只报告跨文件函数，不报告同文件 nested helper。
 - 函数节点数至少 45。
 - 类节点数至少 90，且需要 API/member shape 相似。
@@ -33,7 +34,7 @@
 
 File/module-level shadow implementation 目前只提供 internal dry-run helper，用于观察候选噪声。dry-run 会比较模块 public API tokens、top-level symbol shape、AST feature vector、import tokens 和 role tokens，并排除 adapter/wrapper/facade/compat/shim、tests/fixtures/generated/vendor/build/dist/venv 以及 helper/support/views/sections/runtime/payload/registry 等常见合法拆分模块。dry-run 不写入 `signals[]` 或 `concerns[]`，也不新增 `symbol_kind: "module"` 的公开 concern。
 
-当前仓库根采样结论见 [decisions/032-shadow-implementation-file-public-signal-deferred.md](../decisions/032-shadow-implementation-file-public-signal-deferred.md)：`Path(".")` dry-run 的 top 20 候选全部来自 `.ccb` provider-state / plugin 副本，`src/architec` 辅助采样没有 module pair。因此 file-level public signal 继续 deferred；下一步应先解决 source-root scoping、真实 positive fixture 和 provider/plugin variant taxonomy。
+当前仓库根采样结论见 [decisions/032-shadow-implementation-file-public-signal-deferred.md](../decisions/032-shadow-implementation-file-public-signal-deferred.md)：`Path(".")` dry-run 的 top 20 候选全部来自 `.ccb` provider-state / plugin 副本，`src/architec` 辅助采样没有 module pair。因此 file-level public signal 继续 deferred。Decision 033 已补齐 source/generated-state exclusion；后续重新评估仍需要真实 positive fixture 和 provider/plugin variant taxonomy。
 
 优先原因：
 

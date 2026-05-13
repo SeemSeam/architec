@@ -55,11 +55,14 @@ Keep the dry-run helper for calibration, but do not add:
 - `concerns[]` entries with `location.symbol_kind: "module"`;
 - fix-advice behavior for module-level shadow implementation.
 
+## Follow-Up
+
+Decision 033 later added default source/generated-state exclusions for AI signal scanners, including `.ccb` and release-flow-test artifacts. That closes the generated-state exclusion precondition from this sampling round, but it does not by itself justify public module-level concerns.
+
 ## Preconditions For Reconsideration
 
 Revisit public signal exposure only after at least these are true:
 
-- project-local generated and agent-state directories such as `.ccb` are excluded from module dry-run scanning, or callers can provide a source-root scope;
 - real positive fixtures exist from maintained project source, not copied external plugin assets;
 - role taxonomy distinguishes intentional provider/backend/plugin variants from shadow reimplementation;
 - module public API extraction separates stable API surface from script utility functions;
