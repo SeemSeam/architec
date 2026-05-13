@@ -411,9 +411,13 @@ def _signals(report: dict[str, Any], concerns: list[dict[str, Any]]) -> list[dic
     shadow_items = _shadow_implementation_items(concerns)
     if shadow_items:
         by_role: dict[str, int] = {}
+        by_symbol_kind: dict[str, int] = {}
         for concern in shadow_items:
             role = _shadow_role(concern)
             by_role[role] = by_role.get(role, 0) + 1
+            location = _dict(concern.get("location"))
+            symbol_kind = str(location.get("symbol_kind", "") or "unknown")
+            by_symbol_kind[symbol_kind] = by_symbol_kind.get(symbol_kind, 0) + 1
         high_confidence_total = sum(
             1
             for concern in shadow_items
@@ -427,6 +431,7 @@ def _signals(report: dict[str, Any], concerns: list[dict[str, Any]]) -> list[dic
                     "candidate_total": len(shadow_items),
                     "high_confidence_total": high_confidence_total,
                     "by_role": dict(sorted(by_role.items())),
+                    "by_symbol_kind": dict(sorted(by_symbol_kind.items())),
                 },
             }
         )

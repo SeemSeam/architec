@@ -2,6 +2,8 @@
 
 Date: 2026-05-13
 
+Superseded in part by [023-shadow-implementation-class-v1.md](023-shadow-implementation-class-v1.md) for class-level detection.
+
 ## Context
 
 `near_duplicate` catches exact normalized AST repetition, but AI-assisted code can also produce a second implementation that is structurally and semantically close to an existing one without being an exact duplicate.

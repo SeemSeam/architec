@@ -26,6 +26,7 @@
 - advisory diff/since code-review 使用轻量 LLM preflight，不再要求 `architect_component_scoring`。见 [020-diff-preflight-policy.md](decisions/020-diff-preflight-policy.md)。
 - `code-review --since <ref>` 对不可解析 range 返回结构化 CodeReviewResult 降级对象。见 [021-since-range-error-semantics.md](decisions/021-since-range-error-semantics.md)。
 - `shadow_implementation` v1 采用保守 Python 函数级静态检测，只在全量审查中输出。见 [022-shadow-implementation-v1-scope.md](decisions/022-shadow-implementation-v1-scope.md)。
+- `shadow_implementation` class-level v1 扩展到 Python 类级候选，仍只在全量审查中输出。见 [023-shadow-implementation-class-v1.md](decisions/023-shadow-implementation-class-v1.md)。
 
 ## 目录
 

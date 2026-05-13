@@ -11,7 +11,7 @@
 
 `near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：当前只在全量审查中检测 Python 函数/方法的规范化 AST 重复，优先低误报。
 
-`shadow_implementation` v1 的范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)：当前只在全量审查中检测 Python 函数级跨文件相似实现，优先高精度。
+`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。当前只在全量审查中检测 Python 函数和类级跨文件相似实现，优先高精度。
 
 `shadow_implementation` v1 不是：
 
@@ -19,12 +19,14 @@
 - 合法 adapter、wrapper、facade 或兼容入口。
 - 测试 fixture、生成代码、vendor 代码或 build artifact 检查。
 - 增量审查信号；`--diff` / `--since` 暂不启用。
+- 文件级模糊相似检查；当前只覆盖函数和类。
 
 误报控制：
 
 - 只扫描 Python 源文件，跳过 tests、fixtures、generated、vendor、build、dist、虚拟环境和本地生成目录。
 - 只报告跨文件函数，不报告同文件 nested helper。
 - 函数节点数至少 45。
+- 类节点数至少 90，且需要 API/member shape 相似。
 - 需要共享角色 token、名称 token overlap、签名相似度、AST feature cosine 和无直接复用边共同满足阈值。
 - 输出 top candidates，并在 concern 中保留 `existing_implementation` 结构化 reference。
 

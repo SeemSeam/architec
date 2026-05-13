@@ -57,7 +57,7 @@
 }
 ```
 
-例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 使用 `role: "reference"` 指向 reference implementation。`shadow-implementation` concern 的 `location` 指向疑似 shadow implementation，`references[]` 使用 `role: "existing_implementation"` 指向可对照的已有实现。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
+例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 使用 `role: "reference"` 指向 reference implementation。`shadow-implementation` concern 的 `location` 指向疑似 shadow implementation，`references[]` 使用 `role: "existing_implementation"` 指向可对照的已有实现；函数级 concern 使用 `location.symbol_kind: "function"`，类级 concern 使用 `location.symbol_kind: "class"`。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
 
 最低验收：
 

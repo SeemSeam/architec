@@ -59,7 +59,7 @@ archi code-review --since <ref> .
 全量审查中的 AI/vibe coding 信号当前包括：
 
 - `near_duplicate`：规范化 AST 指纹重复，输出 `duplication` concern。
-- `shadow_implementation`：函数级跨文件相似实现，输出 `shadow-implementation` concern，并通过 `references[]` 标出 `existing_implementation`。
+- `shadow_implementation`：函数级和类级跨文件相似实现，输出 `shadow-implementation` concern，并通过 `references[]` 标出 `existing_implementation`。
 
 这两类信号暂不在 `--diff` / `--since` 中启用，避免把历史债务混入增量结果。
 

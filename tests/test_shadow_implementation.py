@@ -21,7 +21,7 @@ def _empty_report() -> dict[str, object]:
 
 def _write_shadow_policy_project(tmp_path) -> None:
     policy_dir = tmp_path / "src" / "policy"
-    policy_dir.mkdir(parents=True)
+    policy_dir.mkdir(parents=True, exist_ok=True)
     (policy_dir / "base_policy.py").write_text(
         """
 def component_allow_policy(component, rules, context):
@@ -98,6 +98,99 @@ def component_access_policy(component, rules, context):
     )
 
 
+def _write_shadow_policy_classes(tmp_path) -> None:
+    policy_dir = tmp_path / "src" / "policy"
+    policy_dir.mkdir(parents=True, exist_ok=True)
+    (policy_dir / "base_class.py").write_text(
+        """
+class ComponentPolicyReviewer:
+    def __init__(self, rules, defaults, audit_log):
+        self.rules = list(rules)
+        self.defaults = dict(defaults)
+        self.audit_log = audit_log
+
+    def collect_allowed_components(self, component, context):
+        allowed = []
+        denied = []
+        for rule in self.rules:
+            if rule.get("disabled"):
+                continue
+            target = rule.get("component", "*")
+            if target not in ("*", component):
+                continue
+            decision = rule.get("decision", self.defaults.get(target, "deny"))
+            if decision == "allow":
+                allowed.append(rule.get("name", target))
+            elif decision == "deny":
+                denied.append(rule.get("name", target))
+        if context.get("maintenance"):
+            denied.append("maintenance")
+        if context.get("owner") == component:
+            allowed.append("owner")
+        return allowed, denied
+
+    def is_component_allowed(self, component, context):
+        allowed, denied = self.collect_allowed_components(component, context)
+        self.audit_log.append({"component": component, "allowed": len(allowed), "denied": len(denied)})
+        return bool(allowed) and not denied
+
+    def explain_component_policy(self, component, context):
+        allowed, denied = self.collect_allowed_components(component, context)
+        notes = []
+        for name in allowed:
+            notes.append(f"allow:{name}")
+        for name in denied:
+            notes.append(f"deny:{name}")
+        return notes
+""",
+        encoding="utf-8",
+    )
+    (policy_dir / "candidate_class.py").write_text(
+        """
+class ComponentPolicyInspector:
+    def __init__(self, rules, defaults, events):
+        self.entries = list(rules)
+        self.defaults = dict(defaults)
+        self.events = events
+
+    def collect_allowed_components(self, component, context):
+        accepted = []
+        rejected = []
+        for entry in self.entries:
+            if entry.get("disabled"):
+                continue
+            scope = entry.get("component", "*")
+            if scope != "*" and scope != component:
+                continue
+            marker = entry.get("decision", self.defaults.get(scope, "deny"))
+            if marker == "allow":
+                accepted.append(entry.get("name", scope))
+            elif marker == "deny":
+                rejected.append(entry.get("name", scope))
+        if context.get("maintenance"):
+            rejected.append("maintenance")
+        if context.get("owner") == component:
+            accepted.append("owner")
+        return accepted, rejected
+
+    def is_component_allowed(self, component, context):
+        accepted, rejected = self.collect_allowed_components(component, context)
+        self.events.append({"component": component, "allowed": len(accepted), "denied": len(rejected)})
+        return len(accepted) > 0 and len(rejected) == 0
+
+    def explain_component_policy(self, component, context):
+        accepted, rejected = self.collect_allowed_components(component, context)
+        details = []
+        for name in accepted:
+            details.append(f"allow:{name}")
+        for name in rejected:
+            details.append(f"deny:{name}")
+        return details
+""",
+        encoding="utf-8",
+    )
+
+
 def test_shadow_implementation_concerns_detect_policy_like_functions(tmp_path) -> None:
     _write_shadow_policy_project(tmp_path)
 
@@ -123,11 +216,56 @@ def test_shadow_implementation_concerns_detect_policy_like_functions(tmp_path) -
     assert all(not item.startswith("Add ") for item in concern["evidence"])
 
 
+def test_shadow_implementation_concerns_detect_policy_like_classes(tmp_path) -> None:
+    _write_shadow_policy_classes(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+    concern = next(item for item in concerns if item["location"]["symbol_kind"] == "class")
+
+    assert concern["kind"] == "shadow-implementation"
+    assert concern["concern_id"].startswith("code-review:shadow-implementation:")
+    assert concern["location"] == {
+        "path": "src/policy/candidate_class.py",
+        "line": 2,
+        "symbol": "ComponentPolicyInspector",
+        "symbol_kind": "class",
+    }
+    assert concern["references"] == [
+        {
+            "role": "existing_implementation",
+            "path": "src/policy/base_class.py",
+            "line": 2,
+            "symbol": "ComponentPolicyReviewer",
+            "symbol_kind": "class",
+        }
+    ]
+    assert "shadow_implementation.scope=class" in concern["evidence"]
+    assert any(item.startswith("shadow_implementation.api_similarity=") for item in concern["evidence"])
+    assert any(item.startswith("shadow_implementation.member_counts=") for item in concern["evidence"])
+
+
 def test_shadow_implementation_concern_id_is_stable(tmp_path) -> None:
     _write_shadow_policy_project(tmp_path)
 
     first = shadow_implementation_concerns(tmp_path)
     second = shadow_implementation_concerns(tmp_path)
+
+    assert [item["concern_id"] for item in first] == [item["concern_id"] for item in second]
+
+
+def test_shadow_implementation_class_concern_id_is_stable(tmp_path) -> None:
+    _write_shadow_policy_classes(tmp_path)
+
+    first = [
+        item
+        for item in shadow_implementation_concerns(tmp_path)
+        if item["location"]["symbol_kind"] == "class"
+    ]
+    second = [
+        item
+        for item in shadow_implementation_concerns(tmp_path)
+        if item["location"]["symbol_kind"] == "class"
+    ]
 
     assert [item["concern_id"] for item in first] == [item["concern_id"] for item in second]
 
@@ -169,6 +307,75 @@ def component_permission_policy(service, entries, metadata):
     )
 
     assert shadow_implementation_concerns(tmp_path) == []
+
+
+def test_shadow_implementation_ignores_exact_duplicate_class(tmp_path) -> None:
+    (tmp_path / "a_policy.py").write_text(
+        """
+class ComponentPolicyReviewer:
+    def __init__(self, rules, defaults):
+        self.rules = list(rules)
+        self.defaults = dict(defaults)
+
+    def collect_allowed_components(self, component, context):
+        allowed = []
+        denied = []
+        for rule in self.rules:
+            if rule.get("disabled"):
+                continue
+            target = rule.get("component", "*")
+            if target not in ("*", component):
+                continue
+            decision = rule.get("decision", self.defaults.get(target, "deny"))
+            if decision == "allow":
+                allowed.append(rule.get("name", target))
+            elif decision == "deny":
+                denied.append(rule.get("name", target))
+        if context.get("maintenance"):
+            denied.append("maintenance")
+        return allowed, denied
+
+    def is_component_allowed(self, component, context):
+        allowed, denied = self.collect_allowed_components(component, context)
+        return bool(allowed) and not denied
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "b_policy.py").write_text(
+        """
+class ComponentPolicyInspector:
+    def __init__(self, entries, fallback):
+        self.entries = list(entries)
+        self.fallback = dict(fallback)
+
+    def collect_allowed_components(self, service, metadata):
+        matches = []
+        warnings = []
+        for item in self.entries:
+            if item.get("disabled"):
+                continue
+            target = item.get("component", "*")
+            if target not in ("*", service):
+                continue
+            decision = item.get("decision", self.fallback.get(target, "deny"))
+            if decision == "allow":
+                matches.append(item.get("name", target))
+            elif decision == "deny":
+                warnings.append(item.get("name", target))
+        if metadata.get("maintenance"):
+            warnings.append("maintenance")
+        return matches, warnings
+
+    def is_component_allowed(self, service, metadata):
+        matches, warnings = self.collect_allowed_components(service, metadata)
+        return bool(matches) and not warnings
+""",
+        encoding="utf-8",
+    )
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert all(item["location"]["symbol_kind"] != "class" for item in concerns)
 
 
 def test_shadow_implementation_ignores_delegating_wrapper(tmp_path) -> None:
@@ -222,6 +429,34 @@ def component_permission_policy(component, rules, context):
     assert shadow_implementation_concerns(tmp_path) == []
 
 
+def test_shadow_implementation_ignores_delegating_wrapper_class(tmp_path) -> None:
+    _write_shadow_policy_classes(tmp_path)
+    (tmp_path / "src" / "policy" / "adapter_class.py").write_text(
+        """
+from base_class import ComponentPolicyReviewer
+
+
+class ComponentPolicyAdapter:
+    def __init__(self, rules, defaults, audit_log):
+        self.reviewer = ComponentPolicyReviewer(rules, defaults, audit_log)
+
+    def collect_allowed_components(self, component, context):
+        return self.reviewer.collect_allowed_components(component, context)
+
+    def is_component_allowed(self, component, context):
+        return self.reviewer.is_component_allowed(component, context)
+
+    def explain_component_policy(self, component, context):
+        return self.reviewer.explain_component_policy(component, context)
+""",
+        encoding="utf-8",
+    )
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert all(item["location"]["path"] != "src/policy/adapter_class.py" for item in concerns)
+
+
 def test_shadow_implementation_ignores_small_report_helpers(tmp_path) -> None:
     (tmp_path / "a_report.py").write_text(
         """
@@ -245,6 +480,33 @@ def _report_chunk(title, lines):
     assert shadow_implementation_concerns(tmp_path) == []
 
 
+def test_shadow_implementation_ignores_small_class(tmp_path) -> None:
+    (tmp_path / "a_policy.py").write_text(
+        """
+class ComponentPolicyOne:
+    def __init__(self, value):
+        self.value = value
+
+    def is_component_allowed(self, component):
+        return component == self.value
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "b_policy.py").write_text(
+        """
+class ComponentPolicyTwo:
+    def __init__(self, value):
+        self.value = value
+
+    def is_component_allowed(self, component):
+        return component == self.value
+""",
+        encoding="utf-8",
+    )
+
+    assert shadow_implementation_concerns(tmp_path) == []
+
+
 def test_code_review_full_includes_shadow_signal_and_concern(tmp_path, monkeypatch) -> None:
     _write_shadow_policy_project(tmp_path)
     monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_report())
@@ -258,11 +520,31 @@ def test_code_review_full_includes_shadow_signal_and_concern(tmp_path, monkeypat
         "candidate_total": 3,
         "high_confidence_total": 3,
         "by_role": {"policy": 3},
+        "by_symbol_kind": {"function": 3},
     }
+
+
+def test_code_review_full_includes_class_shadow_signal_and_concern(tmp_path, monkeypatch) -> None:
+    _write_shadow_policy_classes(tmp_path)
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_report())
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    concern = next(
+        item
+        for item in result["concerns"]
+        if item["kind"] == "shadow-implementation" and item["location"]["symbol_kind"] == "class"
+    )
+    assert concern["references"][0]["role"] == "existing_implementation"
+    signal = next(item for item in result["signals"] if item["kind"] == "shadow_implementation")
+    assert signal["metrics"]["by_symbol_kind"]["class"] == 1
+    assert signal["metrics"]["candidate_total"] >= 1
+    assert signal["metrics"]["high_confidence_total"] >= 1
 
 
 def test_code_review_diff_and_since_do_not_include_shadow_signal(tmp_path, monkeypatch) -> None:
     _write_shadow_policy_project(tmp_path)
+    _write_shadow_policy_classes(tmp_path)
     monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_report())
 
     diff_result = code_review.run_code_review_diff(tmp_path)

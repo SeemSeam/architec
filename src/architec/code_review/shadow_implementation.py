@@ -95,8 +95,10 @@ ADAPTER_TOKENS = {
 }
 
 MIN_NODE_COUNT = 45
+MIN_CLASS_NODE_COUNT = 90
 MIN_NAME_OVERLAP = 0.45
 MIN_SIGNATURE_SIMILARITY = 0.6
+MIN_CLASS_API_SIMILARITY = 0.6
 MIN_AST_SIMILARITY = 0.82
 MIN_CONFIDENCE = 0.78
 
@@ -119,6 +121,9 @@ class _FunctionCandidate:
     calls: frozenset[str]
     attrs: frozenset[str]
     imports: frozenset[str]
+    api_tokens: frozenset[str] = frozenset()
+    member_tokens: frozenset[str] = frozenset()
+    member_count: int = 0
 
     @property
     def module_tokens(self) -> frozenset[str]:
@@ -126,6 +131,11 @@ class _FunctionCandidate:
 
 
 class _NormalizeAst(ast.NodeTransformer):
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:  # noqa: N802
+        node.name = "_class"
+        self.generic_visit(node)
+        return node
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:  # noqa: N802
         node.name = "_fn"
         self.generic_visit(node)
@@ -264,6 +274,14 @@ def _signature_similarity(left: _FunctionCandidate, right: _FunctionCandidate) -
     return (0.6 * arity) + (0.4 * token_overlap)
 
 
+def _class_api_similarity(left: _FunctionCandidate, right: _FunctionCandidate) -> float:
+    largest = max(left.member_count, right.member_count, 1)
+    member_count_similarity = 1.0 - (abs(left.member_count - right.member_count) / largest)
+    api_similarity = _jaccard(left.api_tokens, right.api_tokens)
+    member_similarity = _jaccard(left.member_tokens, right.member_tokens)
+    return (0.45 * api_similarity) + (0.35 * member_similarity) + (0.2 * member_count_similarity)
+
+
 def _module_imports(tree: ast.AST) -> frozenset[str]:
     imports: set[str] = set()
     for node in ast.walk(tree):
@@ -371,6 +389,104 @@ def _collect_functions(path: Path, root: Path) -> list[_FunctionCandidate]:
     return found
 
 
+def _class_members(node: ast.ClassDef) -> tuple[frozenset[str], frozenset[str], int, frozenset[str], int]:
+    api_tokens: set[str] = set()
+    member_tokens: set[str] = set()
+    initializer_tokens: frozenset[str] = frozenset()
+    initializer_count = 0
+    member_count = 0
+    for child in node.body:
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if child.name.startswith("__") and child.name != "__init__":
+                continue
+            member_count += 1
+            method_tokens = _meaningful_tokens(child.name)
+            api_tokens.update(method_tokens)
+            member_tokens.update(method_tokens)
+            signature_tokens, parameter_count = _signature_tokens(child)
+            member_tokens.update(signature_tokens)
+            if child.name == "__init__":
+                initializer_tokens = signature_tokens
+                initializer_count = parameter_count
+        elif isinstance(child, (ast.Assign, ast.AnnAssign)):
+            targets = child.targets if isinstance(child, ast.Assign) else [child.target]
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    member_tokens.update(_meaningful_tokens(target.id))
+                elif isinstance(target, ast.Attribute):
+                    member_tokens.update(_meaningful_tokens(target.attr))
+    return (
+        frozenset(api_tokens),
+        frozenset(member_tokens),
+        member_count,
+        initializer_tokens,
+        initializer_count,
+    )
+
+
+def _collect_classes(path: Path, root: Path) -> list[_FunctionCandidate]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return []
+    relpath = path.relative_to(root).as_posix()
+    imports = _module_imports(tree)
+    found: list[_FunctionCandidate] = []
+
+    class Visitor(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.class_depth = 0
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+            if self.class_depth:
+                return
+            self.class_depth += 1
+            try:
+                size = _node_count(node)
+                if size < MIN_CLASS_NODE_COUNT:
+                    return
+                symbol_tokens = _meaningful_tokens(node.name)
+                path_tokens = _meaningful_tokens(relpath)
+                all_tokens = set(symbol_tokens) | set(path_tokens)
+                if _is_adapter_like(all_tokens):
+                    return
+                roles = _role_tokens(all_tokens)
+                if not roles:
+                    return
+                api_tokens, member_tokens, member_count, initializer_tokens, initializer_count = _class_members(node)
+                if member_count < 2:
+                    return
+                names, calls, attrs = _references(node)
+                found.append(
+                    _FunctionCandidate(
+                        path=relpath,
+                        line=int(getattr(node, "lineno", 0) or 0),
+                        symbol=node.name,
+                        symbol_kind="class",
+                        node_count=size,
+                        fingerprint=_fingerprint(node),
+                        name_tokens=symbol_tokens,
+                        all_tokens=frozenset(all_tokens),
+                        role_tokens=roles,
+                        signature_tokens=initializer_tokens,
+                        parameter_count=initializer_count,
+                        feature_vector=_feature_vector(node),
+                        names=names,
+                        calls=calls,
+                        attrs=attrs,
+                        imports=imports,
+                        api_tokens=api_tokens,
+                        member_tokens=member_tokens,
+                        member_count=member_count,
+                    )
+                )
+            finally:
+                self.class_depth -= 1
+
+    Visitor().visit(tree)
+    return found
+
+
 def _has_reuse_edge(source: _FunctionCandidate, target: _FunctionCandidate) -> bool:
     target_leaf = target.symbol.rsplit(".", 1)[-1].lower()
     target_tokens = {
@@ -399,6 +515,16 @@ def _confidence(name_overlap: float, signature_similarity: float, ast_similarity
     return round(min(confidence, 0.97), 2)
 
 
+def _class_confidence(name_overlap: float, api_similarity: float, ast_similarity: float) -> float:
+    confidence = (
+        0.78
+        + max(ast_similarity - MIN_AST_SIMILARITY, 0.0) * 0.4
+        + max(api_similarity - MIN_CLASS_API_SIMILARITY, 0.0) * 0.25
+        + max(name_overlap - MIN_NAME_OVERLAP, 0.0) * 0.2
+    )
+    return round(min(confidence, 0.97), 2)
+
+
 def _stable_concern_id(
     duplicate: _FunctionCandidate,
     existing: _FunctionCandidate,
@@ -410,21 +536,28 @@ def _stable_concern_id(
 ) -> str:
     payload = {
         "kind": "shadow-implementation",
+        "scope": duplicate.symbol_kind,
         "duplicate": {
             "path": duplicate.path,
             "line": duplicate.line,
             "symbol": duplicate.symbol,
+            "symbol_kind": duplicate.symbol_kind,
         },
         "existing": {
             "path": existing.path,
             "line": existing.line,
             "symbol": existing.symbol,
+            "symbol_kind": existing.symbol_kind,
         },
         "role": role,
         "name_overlap": round(name_overlap, 4),
-        "signature_similarity": round(signature_similarity, 4),
         "ast_similarity": round(ast_similarity, 4),
     }
+    if duplicate.symbol_kind == "class":
+        payload["api_similarity"] = round(signature_similarity, 4)
+        payload["member_counts"] = [duplicate.member_count, existing.member_count]
+    else:
+        payload["signature_similarity"] = round(signature_similarity, 4)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
     return f"code-review:shadow-implementation:{digest}"
@@ -444,15 +577,30 @@ def _build_concern(
     ast_similarity: float,
 ) -> dict[str, Any]:
     existing, duplicate = sorted([left, right], key=_candidate_key)
-    confidence = _confidence(name_overlap, signature_similarity, ast_similarity)
-    evidence = [
-        f"shadow_implementation.name_overlap={name_overlap:.2f}",
-        f"shadow_implementation.signature_similarity={signature_similarity:.2f}",
-        f"shadow_implementation.ast_similarity={ast_similarity:.2f}",
-        f"shadow_implementation.role={role}",
-        "shadow_implementation.reuse_edge=false",
-        f"shadow_implementation.node_counts={duplicate.node_count}/{existing.node_count}",
-    ]
+    if duplicate.symbol_kind == "class":
+        confidence = _class_confidence(name_overlap, signature_similarity, ast_similarity)
+        evidence = [
+            "shadow_implementation.scope=class",
+            f"shadow_implementation.name_overlap={name_overlap:.2f}",
+            f"shadow_implementation.api_similarity={signature_similarity:.2f}",
+            f"shadow_implementation.ast_similarity={ast_similarity:.2f}",
+            f"shadow_implementation.role={role}",
+            "shadow_implementation.reuse_edge=false",
+            f"shadow_implementation.node_counts={duplicate.node_count}/{existing.node_count}",
+            f"shadow_implementation.member_counts={duplicate.member_count}/{existing.member_count}",
+        ]
+        root_cause = "Class appears similar to an existing implementation without a direct reuse edge."
+    else:
+        confidence = _confidence(name_overlap, signature_similarity, ast_similarity)
+        evidence = [
+            f"shadow_implementation.name_overlap={name_overlap:.2f}",
+            f"shadow_implementation.signature_similarity={signature_similarity:.2f}",
+            f"shadow_implementation.ast_similarity={ast_similarity:.2f}",
+            f"shadow_implementation.role={role}",
+            "shadow_implementation.reuse_edge=false",
+            f"shadow_implementation.node_counts={duplicate.node_count}/{existing.node_count}",
+        ]
+        root_cause = "Function appears similar to an existing implementation without a direct reuse edge."
     return {
         "concern_id": _stable_concern_id(
             duplicate,
@@ -471,7 +619,7 @@ def _build_concern(
             "symbol": duplicate.symbol,
             "symbol_kind": duplicate.symbol_kind,
         },
-        "root_cause": "Function appears similar to an existing implementation without a direct reuse edge.",
+        "root_cause": root_cause,
         "evidence": evidence,
         "references": [
             {
@@ -490,6 +638,8 @@ def _build_concern(
 def _shadow_pair(left: _FunctionCandidate, right: _FunctionCandidate) -> dict[str, Any] | None:
     if left.path == right.path:
         return None
+    if left.symbol_kind != right.symbol_kind:
+        return None
     if left.fingerprint == right.fingerprint:
         return None
     common_roles = left.role_tokens & right.role_tokens
@@ -498,16 +648,26 @@ def _shadow_pair(left: _FunctionCandidate, right: _FunctionCandidate) -> dict[st
     name_overlap = _jaccard(left.name_tokens, right.name_tokens)
     if name_overlap < MIN_NAME_OVERLAP:
         return None
-    signature_similarity = _signature_similarity(left, right)
-    if signature_similarity < MIN_SIGNATURE_SIMILARITY:
-        return None
+    if left.symbol_kind == "class":
+        signature_similarity = _class_api_similarity(left, right)
+        if signature_similarity < MIN_CLASS_API_SIMILARITY:
+            return None
+    else:
+        signature_similarity = _signature_similarity(left, right)
+        if signature_similarity < MIN_SIGNATURE_SIMILARITY:
+            return None
     ast_similarity = _cosine(left.feature_vector, right.feature_vector)
     if ast_similarity < MIN_AST_SIMILARITY:
         return None
     if _has_reuse_edge(left, right) or _has_reuse_edge(right, left):
         return None
     role = _primary_role(common_roles)
-    if _confidence(name_overlap, signature_similarity, ast_similarity) < MIN_CONFIDENCE:
+    confidence = (
+        _class_confidence(name_overlap, signature_similarity, ast_similarity)
+        if left.symbol_kind == "class"
+        else _confidence(name_overlap, signature_similarity, ast_similarity)
+    )
+    if confidence < MIN_CONFIDENCE:
         return None
     return _build_concern(
         left,
@@ -528,6 +688,7 @@ def shadow_implementation_concerns(
     candidates: list[_FunctionCandidate] = []
     for path in _iter_python_files(root):
         candidates.extend(_collect_functions(path, root))
+        candidates.extend(_collect_classes(path, root))
 
     concerns: list[dict[str, Any]] = []
     for left, right in combinations(sorted(candidates, key=_candidate_key), 2):

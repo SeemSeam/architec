@@ -8,7 +8,7 @@
 
 - 无发现场景文案进一步标准化。
 - JSON 主体 20KB 目标在中大型仓库中的体量校准。
-- `shadow_implementation` class-level / file-level 检测与 diff/since 范围控制。
+- `shadow_implementation` file-level 检测与 diff/since 范围控制。
 - `fix-advice` 是否为 `shadow-implementation` 增加专用 advisory options。
 - `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - TypeScript/Go 多语言调研。
