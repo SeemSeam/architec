@@ -85,6 +85,7 @@ Done:
 - `code-review` 完整 generated concerns artifact 已落地：成功路径写 `.architec/code-review-concerns.json`，见 [decisions/029-code-review-full-concerns-artifact.md](decisions/029-code-review-full-concerns-artifact.md)。
 - `fix-advice --review <review.json>` 已成为推荐入口，`--for` 保留为兼容别名，见 [decisions/030-fix-advice-review-flag.md](decisions/030-fix-advice-review-flag.md)。
 - `shadow_implementation` file-level 已进入 internal dry-run calibration：当前只输出 helper metrics，不接入 CodeReviewResult，见 [decisions/031-shadow-implementation-file-dry-run.md](decisions/031-shadow-implementation-file-dry-run.md)。
+- `shadow_implementation` file-level dry-run 已在当前仓库采样：根仓 top candidates 被 `.ccb` provider-state/plugin 副本主导，`src/architec` 无 module pair，因此 public signal 继续 deferred，见 [decisions/032-shadow-implementation-file-public-signal-deferred.md](decisions/032-shadow-implementation-file-public-signal-deferred.md)。
 
 In Progress:
 
@@ -92,12 +93,12 @@ In Progress:
 
 Next:
 
-- 使用 `shadow_implementation` file-level dry-run helper 采样真实项目噪声，再决定是否正式接入 CodeReviewResult。
+- 若继续推进 file-level shadow，先做 source-root scoping / generated-state exclusion 和真实 positive fixture 收集；否则从 Deferred 中选择下一项。
 
 Deferred:
 
 - 无发现场景文案进一步标准化。
-- `shadow_implementation` file-level 正式接入 CodeReviewResult。
+- `shadow_implementation` file-level 正式接入 CodeReviewResult（等待 source-root scoping、真实 positive fixtures 和 variant taxonomy）。
 - 多语言支持。
 - 自建运行时信号采集。
 - 用户自定义脚本化规则平台。

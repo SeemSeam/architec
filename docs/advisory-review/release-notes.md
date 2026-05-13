@@ -183,6 +183,8 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 File/module-level `shadow_implementation` remains dry-run calibration only. The internal helper can summarize module candidate pairs for noise analysis, but `code-review` does not expose module-level shadow signals or concerns.
 
+Current repository sampling kept that boundary: root-scope dry-run candidates were dominated by `.ccb` provider-state and plugin copies, while `src/architec` had no reported module pairs. Public module-level shadow concerns remain deferred.
+
 `CodeReviewResult.concerns[]` now uses portfolio ranking for the displayed top concerns. Severity level remains the first ordering boundary, and same-level results prefer a mix of concern kinds before filling remaining slots with the same kind. `summary.concern_total` remains the pre-display total.
 
 CodeReviewResult now records `summary.payload_bytes` as a compact main-payload estimate and applies a conservative display guard to oversized concern evidence, references, blast radius, and one-level signal metric maps. Truncation metadata is recorded in `artifacts.payload_truncation`.
