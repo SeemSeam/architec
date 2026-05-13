@@ -81,6 +81,7 @@ Done:
 - `fix-advice` 已为 `shadow-implementation` concern 增加专用 advisory options，消费 `references[].role: "existing_implementation"`，见 [decisions/025-shadow-implementation-fix-advice.md](decisions/025-shadow-implementation-fix-advice.md)。
 - `near_duplicate` diff/since scope 已收敛：增量审查只报告 changed-file primary duplication concern，见 [decisions/026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
 - `code-review` top concerns 已改为 portfolio ranking：severity 优先，同 level 内优先展示不同 concern kind，见 [decisions/027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
+- `code-review` JSON 主体体量 guard 已落地：记录 `summary.payload_bytes`，并对过长展示字段写入 truncation metadata，见 [decisions/028-code-review-json-payload-budget.md](decisions/028-code-review-json-payload-budget.md)。
 
 In Progress:
 
@@ -88,12 +89,11 @@ In Progress:
 
 Next:
 
-- 从 Deferred 中选择下一阶段深化项；优先考虑高价值、低误报的核心审查检测能力或输出体量校准。
+- 从 Deferred 中选择下一阶段深化项；优先考虑高价值、低误报的核心审查检测能力。
 
 Deferred:
 
 - 无发现场景文案进一步标准化。
-- JSON 主体 20KB 目标在中大型仓库中的体量校准。
 - `shadow_implementation` file-level 检测。
 - `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - 多语言支持。

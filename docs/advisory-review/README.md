@@ -31,6 +31,7 @@
 - `fix-advice` 为 `shadow-implementation` concern 输出专用 advisory options，消费 `references[].role: "existing_implementation"`。见 [025-shadow-implementation-fix-advice.md](decisions/025-shadow-implementation-fix-advice.md)。
 - `near_duplicate` diff/since scope 只报告 changed-file primary duplication concern，reference 可指向未变更实现。见 [026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
 - `code-review` top concerns 使用 portfolio ranking，在同一 severity 内优先展示不同 kind。见 [027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
+- `code-review` 主 JSON payload 使用保守体量 guard，记录 `summary.payload_bytes` 和可选 truncation metadata。见 [028-code-review-json-payload-budget.md](decisions/028-code-review-json-payload-budget.md)。
 
 ## 目录
 

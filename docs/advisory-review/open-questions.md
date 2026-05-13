@@ -7,7 +7,6 @@
 以下方向已转入 roadmap Deferred，不作为当前封版阻塞项：
 
 - 无发现场景文案进一步标准化。
-- JSON 主体 20KB 目标在中大型仓库中的体量校准。
 - `shadow_implementation` file-level 检测。
 - `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - TypeScript/Go 多语言调研。

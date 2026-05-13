@@ -113,6 +113,7 @@
 - `top_concern_total`：主输出 `concerns[]` 中展示的 concern 数量。
 - `concern_limit`：当前 top-N 上限。
 - `signal_kinds`：本次输出中出现的 signal kind 列表。
+- `payload_bytes`：不含 `artifacts` 的主 JSON compact encoding 估算字节数，用于观察输出体量。
 
 `concerns[]` 是默认展示 portfolio，不是完整 concern truth。排序先保留 severity level 优先级，再在同一 level 内尽量展示不同 kind；需要完整集合的消费者应结合 artifacts 或扩展输出，而不是只读取 top-N。
 
@@ -140,6 +141,8 @@
 ```
 
 `evidence[]` 的条目从当前 `concerns[]` 派生。完整事实仍以 `concerns[].evidence` 为准；`evidence[]` 只提供便于 agent 快速扫描和引用的索引视图。
+
+为控制主 JSON 体量，展示层会限制每条 concern 的 `evidence`、`references` 和 `blast_radius` 条数，并限制过长的一层 signal metric map。发生截断时，`artifacts.payload_truncation` 记录原始条数和保留条数。该截断不改变 `concern_id`，也不改变 `summary.concern_total`。
 
 ## FixAdviceResult
 
@@ -201,7 +204,7 @@
 
 ## 输出体量
 
-- JSON 主体不含 artifacts 的目标大小小于 20KB。
+- JSON 主体不含 artifacts 的目标大小小于 20KB；这是 advisory target，不是 hard gate。
 - 默认只保留 top concerns 的完整 evidence，建议 N 不超过 5。
 - 超出体量时，详细 findings、完整 evidence 和大图数据写入 artifacts，主输出保留摘要和路径。
 - Markdown/HTML 可以更完整，但也应默认突出 top concerns。

@@ -579,6 +579,117 @@ def test_ranked_concerns_order_is_deterministic() -> None:
     assert [item["concern_id"] for item in first] == [item["concern_id"] for item in second]
 
 
+def test_code_review_payload_guard_truncates_large_concern_fields() -> None:
+    concern_id = "code-review:duplication:stable"
+    result = {
+        "mode": "code_review",
+        "review_type": "full",
+        "scores": {},
+        "summary": {
+            "headline": "Full code review complete",
+            "concern_total": 1,
+            "top_concern_total": 1,
+            "concern_limit": 5,
+            "signal_kinds": ["near_duplicate"],
+        },
+        "findings": [],
+        "signals": [
+            {
+                "kind": "near_duplicate",
+                "summary": "many duplicates",
+                "metrics": {"by_path": {f"src/{index:02d}.py": index for index in range(20)}},
+            }
+        ],
+        "evidence": [],
+        "concerns": [
+            {
+                "concern_id": concern_id,
+                "kind": "duplication",
+                "level": "caution",
+                "confidence": 0.9,
+                "location": {"path": "src/changed.py", "line": 2, "symbol": "changed"},
+                "root_cause": "test",
+                "evidence": [f"fact={index}" for index in range(20)],
+                "references": [
+                    {"role": "reference", "path": f"src/ref{index}.py", "line": index}
+                    for index in range(5)
+                ],
+                "blast_radius": [f"src/blast{index}.py" for index in range(12)],
+            }
+        ],
+        "artifacts": {},
+    }
+
+    finalized = code_review._finalize_payload(copy.deepcopy(result))
+
+    concern = finalized["concerns"][0]
+    assert concern["concern_id"] == concern_id
+    assert len(concern["evidence"]) == 8
+    assert len(concern["references"]) == 3
+    assert len(concern["blast_radius"]) == 8
+    assert len(finalized["evidence"][0]["facts"]) == 8
+    assert finalized["signals"][0]["metrics"]["by_path"] == {
+        f"src/{index:02d}.py": index
+        for index in range(12)
+    }
+    truncation = finalized["artifacts"]["payload_truncation"]
+    assert {item["field"] for item in truncation["concerns"]} == {
+        "evidence",
+        "references",
+        "blast_radius",
+    }
+    assert truncation["signals"] == [
+        {"signal": "near_duplicate", "metric": "by_path", "original_total": 20, "kept": 12}
+    ]
+    assert finalized["summary"]["payload_bytes"] > 0
+
+
+def test_code_review_payload_guard_keeps_small_result_metadata_clean(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["payload_bytes"] > 0
+    assert "payload_truncation" not in result["artifacts"]
+
+
+def test_code_review_payload_guard_does_not_change_concern_id() -> None:
+    raw = {
+        "mode": "code_review",
+        "review_type": "full",
+        "scores": {},
+        "summary": {
+            "headline": "Full code review complete",
+            "concern_total": 1,
+            "top_concern_total": 1,
+            "concern_limit": 5,
+            "signal_kinds": [],
+        },
+        "findings": [],
+        "signals": [],
+        "evidence": [],
+        "concerns": [
+            {
+                "concern_id": "code-review:cleanup:abc123",
+                "kind": "cleanup",
+                "level": "caution",
+                "confidence": 0.7,
+                "location": {"path": "src/cleanup.py"},
+                "root_cause": "test",
+                "evidence": [f"fact={index}" for index in range(30)],
+                "blast_radius": [f"src/file{index}.py" for index in range(30)],
+            }
+        ],
+        "artifacts": {},
+    }
+
+    first = code_review._finalize_payload(copy.deepcopy(raw))
+    second = code_review._finalize_payload(copy.deepcopy(raw))
+
+    assert first["concerns"][0]["concern_id"] == "code-review:cleanup:abc123"
+    assert second["concerns"][0]["concern_id"] == first["concerns"][0]["concern_id"]
+
+
 def test_code_review_file_concern_ids_are_stable_across_candidate_order(tmp_path, monkeypatch) -> None:
     report_a = {
         "scores": {},

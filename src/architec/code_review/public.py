@@ -14,6 +14,10 @@ from architec.support.io_utils import ProgressFn, clamp
 
 CONCERN_LIMIT = 5
 CONCERN_KIND_SOFT_CAP = 2
+CONCERN_EVIDENCE_LIMIT = 8
+CONCERN_BLAST_RADIUS_LIMIT = 8
+CONCERN_REFERENCES_LIMIT = 3
+SIGNAL_METRIC_DICT_LIMIT = 12
 
 
 def _list(value: object) -> list[Any]:
@@ -321,6 +325,116 @@ def _ranked_concerns(concerns: list[dict[str, Any]], *, limit: int = 5) -> list[
                     break
         selected.extend(level_selected)
     return selected[:limit]
+
+
+def _truncate_list_field(
+    item: dict[str, Any],
+    field: str,
+    *,
+    limit: int,
+    concern_id: str,
+    metadata: list[dict[str, Any]],
+) -> None:
+    values = _list(item.get(field))
+    if len(values) <= limit:
+        return
+    item[field] = values[:limit]
+    metadata.append(
+        {
+            "concern_id": concern_id,
+            "field": field,
+            "original_total": len(values),
+            "kept": limit,
+        }
+    )
+
+
+def _compact_concern_payload(
+    concerns: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    compacted: list[dict[str, Any]] = []
+    metadata: list[dict[str, Any]] = []
+    for concern in concerns:
+        item = dict(concern)
+        concern_id = str(item.get("concern_id", "") or "")
+        _truncate_list_field(
+            item,
+            "evidence",
+            limit=CONCERN_EVIDENCE_LIMIT,
+            concern_id=concern_id,
+            metadata=metadata,
+        )
+        _truncate_list_field(
+            item,
+            "blast_radius",
+            limit=CONCERN_BLAST_RADIUS_LIMIT,
+            concern_id=concern_id,
+            metadata=metadata,
+        )
+        _truncate_list_field(
+            item,
+            "references",
+            limit=CONCERN_REFERENCES_LIMIT,
+            concern_id=concern_id,
+            metadata=metadata,
+        )
+        compacted.append(item)
+    return compacted, metadata
+
+
+def _compact_signal_payload(
+    signals: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    compacted: list[dict[str, Any]] = []
+    metadata: list[dict[str, Any]] = []
+    for signal in signals:
+        item = dict(signal)
+        kind = str(item.get("kind", "") or "")
+        metrics = _dict(item.get("metrics"))
+        compact_metrics: dict[str, Any] = {}
+        for key, value in metrics.items():
+            if isinstance(value, dict) and len(value) > SIGNAL_METRIC_DICT_LIMIT:
+                sorted_items = sorted(value.items(), key=lambda entry: str(entry[0]))
+                compact_metrics[key] = dict(sorted_items[:SIGNAL_METRIC_DICT_LIMIT])
+                metadata.append(
+                    {
+                        "signal": kind,
+                        "metric": str(key),
+                        "original_total": len(value),
+                        "kept": SIGNAL_METRIC_DICT_LIMIT,
+                    }
+                )
+            else:
+                compact_metrics[key] = value
+        item["metrics"] = compact_metrics
+        compacted.append(item)
+    return compacted, metadata
+
+
+def _payload_bytes(result: dict[str, Any]) -> int:
+    payload = {key: value for key, value in result.items() if key != "artifacts"}
+    return len(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+
+
+def _finalize_payload(result: dict[str, Any]) -> dict[str, Any]:
+    concerns, concern_truncation = _compact_concern_payload(_list(result.get("concerns")))
+    signals, signal_truncation = _compact_signal_payload(_list(result.get("signals")))
+    result["concerns"] = concerns
+    result["signals"] = signals
+    result["evidence"] = _evidence(concerns)
+    if concern_truncation or signal_truncation:
+        artifacts = _dict(result.get("artifacts"))
+        result["artifacts"] = artifacts
+        metadata: dict[str, Any] = {}
+        if concern_truncation:
+            metadata["concerns"] = concern_truncation
+        if signal_truncation:
+            metadata["signals"] = signal_truncation
+        artifacts["payload_truncation"] = metadata
+    summary = _dict(result.get("summary"))
+    result["summary"] = summary
+    summary["payload_bytes"] = _payload_bytes(result)
+    return result
 
 
 def _near_duplicate_total(concerns: list[dict[str, Any]]) -> int:
@@ -676,7 +790,7 @@ def _result_from_report(
         near_duplicate_scope=near_duplicate_scope,
         shadow_scan=shadow_scan,
     )
-    return {
+    result = {
         "mode": "code_review",
         "review_type": review_type,
         "scores": _dict(report.get("scores")),
@@ -690,10 +804,11 @@ def _result_from_report(
         ),
         "findings": [],
         "signals": signals,
-        "evidence": _evidence(concerns),
+        "evidence": [],
         "concerns": concerns,
         "artifacts": _dict(report.get("artifacts")),
     }
+    return _finalize_payload(result)
 
 
 def _with_review_event(project_root: str | Path, result: dict[str, Any]) -> dict[str, Any]:
