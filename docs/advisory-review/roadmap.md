@@ -87,6 +87,7 @@ Done:
 - `shadow_implementation` file-level 已进入 internal dry-run calibration：当前只输出 helper metrics，不接入 CodeReviewResult，见 [decisions/031-shadow-implementation-file-dry-run.md](decisions/031-shadow-implementation-file-dry-run.md)。
 - `shadow_implementation` file-level dry-run 已在当前仓库采样：根仓 top candidates 被 `.ccb` provider-state/plugin 副本主导，`src/architec` 无 module pair，因此 public signal 继续 deferred，见 [decisions/032-shadow-implementation-file-public-signal-deferred.md](decisions/032-shadow-implementation-file-public-signal-deferred.md)。
 - AI signal scanners 已补 source/generated-state exclusion：`near_duplicate` 和 `shadow_implementation` 默认跳过 `.ccb`、release-flow-test、generated/vendor/test/cache 等目录，见 [decisions/033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md)。
+- 公开 advisory 命令 empty/degraded 文案已标准化：no-finding、no-events、合法空 suggestions 和 unable-to-analyze 输入降级保持中性表达，见 [decisions/034-advisory-empty-state-wording.md](decisions/034-advisory-empty-state-wording.md)。
 
 In Progress:
 
@@ -98,7 +99,6 @@ Next:
 
 Deferred:
 
-- 无发现场景文案进一步标准化。
 - `shadow_implementation` file-level 正式接入 CodeReviewResult（等待真实 positive fixtures 和 variant taxonomy）。
 - 多语言支持。
 - 自建运行时信号采集。

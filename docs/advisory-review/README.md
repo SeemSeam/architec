@@ -37,6 +37,7 @@
 - `shadow_implementation` file-level 只做 internal dry-run metrics，不进入 CodeReviewResult。见 [031-shadow-implementation-file-dry-run.md](decisions/031-shadow-implementation-file-dry-run.md)。
 - `shadow_implementation` file-level 根仓采样噪声过高，public signal 继续 deferred。见 [032-shadow-implementation-file-public-signal-deferred.md](decisions/032-shadow-implementation-file-public-signal-deferred.md)。
 - AI signal scanners 默认排除本地 agent state、generated artifacts、vendor、fixtures、tests 和 cache 目录。见 [033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md)。
+- 公开 advisory 命令的 empty/degraded 文案使用中性 no-finding / unable-to-analyze 表述。见 [034-advisory-empty-state-wording.md](decisions/034-advisory-empty-state-wording.md)。
 
 ## 目录
 

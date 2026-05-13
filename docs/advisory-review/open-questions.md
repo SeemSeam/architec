@@ -6,6 +6,5 @@
 
 以下方向已转入 roadmap Deferred，不作为当前封版阻塞项：
 
-- 无发现场景文案进一步标准化。
 - `shadow_implementation` file-level 是否正式接入 CodeReviewResult 已决策为继续 deferred。source/generated-state exclusion 已由 [033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md) 补齐；重新评估前仍需要真实 positive fixtures 和更清晰的 provider/plugin variant taxonomy，见 [decisions/032-shadow-implementation-file-public-signal-deferred.md](decisions/032-shadow-implementation-file-public-signal-deferred.md)。
 - TypeScript/Go 多语言调研。

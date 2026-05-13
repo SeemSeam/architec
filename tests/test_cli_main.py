@@ -11,7 +11,7 @@ from architec.auth.guard import ArchitecAuthRequiredError
 
 def _code_review_result(review_type: str) -> dict[str, object]:
     headline = (
-        "No new architecture concerns were identified in this diff."
+        "No new architecture concerns were identified in the selected diff."
         if review_type == "diff"
         else "Full code review complete"
     )
@@ -406,7 +406,7 @@ def test_main_legacy_diff_routes_to_code_review_diff_args(monkeypatch, tmp_path,
     assert cli.main() == 0
     captured = capsys.readouterr()
     assert "archi [3/3] running diff code review" in captured.err
-    assert "No new architecture concerns were identified in this diff." in captured.out
+    assert "No new architecture concerns were identified in the selected diff." in captured.out
     assert calls[0] == "auth"
     assert calls[1] == ("bundle", str(tmp_path))
     assert calls[2][0] == "llm"
@@ -877,7 +877,7 @@ def test_main_code_review_diff_outputs_json_contract(monkeypatch, tmp_path, caps
         "mode": "code_review",
         "review_type": "diff",
         "scores": {"incremental": 88.0},
-        "summary": {"headline": "No new architecture concerns were identified in this diff."},
+        "summary": {"headline": "No new architecture concerns were identified in the selected diff."},
         "findings": [],
         "signals": [],
         "evidence": [],
@@ -911,7 +911,7 @@ def test_main_code_review_diff_outputs_json_contract(monkeypatch, tmp_path, caps
     payload = json.loads(captured.out)
     assert payload["mode"] == "code_review"
     assert payload["review_type"] == "diff"
-    assert payload["summary"]["headline"] == "No new architecture concerns were identified in this diff."
+    assert payload["summary"]["headline"] == "No new architecture concerns were identified in the selected diff."
     assert payload["concerns"] == []
     assert calls[0] == "auth"
     assert calls[1] == ("bundle", str(tmp_path))
@@ -932,7 +932,7 @@ def test_main_code_review_since_outputs_json_contract(monkeypatch, tmp_path, cap
         "mode": "code_review",
         "review_type": "since",
         "scores": {"incremental": 88.0},
-        "summary": {"headline": "No new architecture concerns were identified since main."},
+        "summary": {"headline": "No new architecture concerns were identified in the selected since range."},
         "findings": [],
         "signals": [],
         "evidence": [],
@@ -962,7 +962,7 @@ def test_main_code_review_since_outputs_json_contract(monkeypatch, tmp_path, cap
     payload = json.loads(captured.out)
     assert payload["mode"] == "code_review"
     assert payload["review_type"] == "since"
-    assert payload["summary"]["headline"] == "No new architecture concerns were identified since main."
+    assert payload["summary"]["headline"] == "No new architecture concerns were identified in the selected since range."
     assert payload["concerns"] == []
     assert calls[0] == "auth"
     assert calls[1] == ("bundle", str(tmp_path))

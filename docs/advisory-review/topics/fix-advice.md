@@ -84,6 +84,7 @@ archi fix-advice --review <review.json>
 
 ## 空/降级输出
 
-- 如果 review 结果没有 concern，输出空 `suggestions` 和摘要说明。
+- 如果 review 结果没有 concern，或当前 filters 没有匹配 concern，输出空 `suggestions` 和中性摘要：`No fix advice suggestions were generated for this review.`
+- 空 `suggestions` 会在 `summary.reason` 中说明 review has no matching concerns for the selected filters，不暗示 review 没有问题。
 - 如果某个 concern 没有足够证据生成修复建议，保留该 concern 的引用，并说明 `insufficient_evidence_for_fix_advice`。
 - 如果 `--review <review.json>` 或兼容别名 `--for <review.json>` 指向不存在的文件、无效 JSON，或顶层不是 object，CLI 返回错误，不静默生成空建议。

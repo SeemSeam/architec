@@ -85,8 +85,10 @@ File/module-level `shadow_implementation` 目前只保留为 internal dry-run ca
 
 ## 空/降级输出
 
-- 如果增量审查没有发现新增或恶化的问题，输出空 `findings` 和明确摘要：`No new architecture concerns were identified in this diff.`
+- 如果增量审查没有发现新增或恶化的问题，输出空 `findings` 和明确摘要：`No new architecture concerns were identified in the selected diff.`
+- `--since <ref>` 的合法空结果使用 `No new architecture concerns were identified in the selected since range.`
 - 如果 `--since <ref>` 的引用或 range 不可解析，输出结构化 CodeReviewResult 降级对象，不回退到全量审查或无关工作树 diff。
+- since range 降级 headline 使用 `Unable to analyze the requested since range.`，并在 `summary.reason` 中说明 requested range could not be resolved。
 - 如果关联方案指纹不可读取，只跳过方案一致性观察，保留普通 code-review 输出。
 
 ## LLM Preflight

@@ -34,8 +34,9 @@ archi status --snapshot
 ## 空/降级输出
 
 - 首次运行且没有快照时，展示当前状态，并提示可用 `status --snapshot` 记录状态锚点。
-- 没有历史事件时，`--trend` 输出空趋势和说明，不合成趋势。
-- 没有 full code-review event 时，`scores` 为空，并在 `trend.score_source` 中标记为 `none`。
+- 没有历史事件时，`--trend` 输出空趋势和中性说明：`No review events were recorded.`，不合成趋势。
+- 没有 full code-review event 时，`scores` 为空，并在 `trend.score_source` 中标记为 `none`；summary 使用 `No full code-review events were recorded for status scores.`
+- 这些 empty states 不是项目健康 verdict，只说明当前事件输入不足或未记录。
 
 ## 事件流
 

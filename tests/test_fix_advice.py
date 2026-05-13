@@ -368,7 +368,12 @@ def test_run_fix_advice_empty_concerns_is_normal_result(tmp_path) -> None:
 
     assert result["mode"] == "fix_advice"
     assert result["summary"]["suggestion_total"] == 0
+    assert result["summary"]["headline"] == "No fix advice suggestions were generated for this review."
+    assert result["summary"]["reason"] == "The review has no matching concerns for the selected filters."
     assert result["suggestions"] == []
+    encoded = json.dumps(result["summary"], sort_keys=True).lower()
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "clean", "safe"):
+        assert term not in encoded
 
 
 def test_run_fix_advice_does_not_write_review_event(tmp_path) -> None:

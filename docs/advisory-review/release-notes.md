@@ -187,6 +187,8 @@ Current repository sampling kept that boundary: root-scope dry-run candidates we
 
 AI signal scanners now exclude local agent state and generated-state directories by default, including `.ccb`, release-flow-test installs, caches, virtual environments, dependency copies, fixtures, generated assets, and tests. This reduces noise for public `near_duplicate` and function/class `shadow_implementation` output without changing detector thresholds.
 
+Advisory empty and degraded states now use standardized neutral wording. Diff/since no-finding headlines say no new architecture concerns were identified in the selected range, status reports no recorded events or no full score source without implying project health, and fix-advice explains legal empty suggestions as no matching concerns for the selected filters.
+
 `CodeReviewResult.concerns[]` now uses portfolio ranking for the displayed top concerns. Severity level remains the first ordering boundary, and same-level results prefer a mix of concern kinds before filling remaining slots with the same kind. `summary.concern_total` remains the pre-display total.
 
 CodeReviewResult now records `summary.payload_bytes` as a compact main-payload estimate and applies a conservative display guard to oversized concern evidence, references, blast radius, and one-level signal metric maps. Truncation metadata is recorded in `artifacts.payload_truncation`.

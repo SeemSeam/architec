@@ -307,11 +307,14 @@ def _summary(suggestions: list[dict[str, Any]], *, filtered_total: int) -> dict[
         headline = "No fix advice suggestions were generated for this review."
     else:
         headline = "Fix advice generated from review concerns."
-    return {
+    summary = {
         "headline": headline,
         "suggestion_total": len(suggestions),
         "source_concern_total": filtered_total,
     }
+    if not filtered_total:
+        summary["reason"] = "The review has no matching concerns for the selected filters."
+    return summary
 
 
 def build_fix_advice(

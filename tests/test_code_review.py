@@ -241,12 +241,15 @@ def test_run_code_review_diff_empty_concerns_uses_fixed_summary(tmp_path, monkey
     result = code_review.run_code_review_diff(tmp_path)
 
     assert result["review_type"] == "diff"
-    assert result["summary"]["headline"] == "No new architecture concerns were identified in this diff."
+    assert result["summary"]["headline"] == "No new architecture concerns were identified in the selected diff."
     assert result["summary"]["concern_total"] == 0
     assert result["summary"]["top_concern_total"] == 0
     assert result["summary"]["concern_limit"] == 5
     assert result["concerns"] == []
     assert result["findings"] == []
+    encoded = json.dumps({"headline": result["summary"]["headline"]}, sort_keys=True).lower()
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "clean", "safe"):
+        assert term not in encoded
 
 
 def test_run_code_review_since_reuses_diff_analysis_args(tmp_path, monkeypatch) -> None:
@@ -298,12 +301,15 @@ def test_run_code_review_since_empty_concerns_uses_fixed_summary(tmp_path, monke
     result = code_review.run_code_review_since(tmp_path, ref="main")
 
     assert result["review_type"] == "since"
-    assert result["summary"]["headline"] == "No new architecture concerns were identified since main."
+    assert result["summary"]["headline"] == "No new architecture concerns were identified in the selected since range."
     assert result["summary"]["concern_total"] == 0
     assert result["summary"]["top_concern_total"] == 0
     assert result["summary"]["concern_limit"] == 5
     assert result["concerns"] == []
     assert result["findings"] == []
+    encoded = json.dumps({"headline": result["summary"]["headline"]}, sort_keys=True).lower()
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "clean", "safe"):
+        assert term not in encoded
 
 
 def test_run_code_review_since_unresolved_ref_degrades_to_result(tmp_path, monkeypatch) -> None:
@@ -316,7 +322,7 @@ def test_run_code_review_since_unresolved_ref_degrades_to_result(tmp_path, monke
 
     assert result["mode"] == "code_review"
     assert result["review_type"] == "since"
-    assert result["summary"]["headline"] == "Unable to analyze changes since missing-ref."
+    assert result["summary"]["headline"] == "Unable to analyze the requested since range."
     assert result["summary"]["reason"] == "The requested since range could not be resolved."
     assert result["summary"]["concern_total"] == 0
     assert result["summary"]["top_concern_total"] == 0
@@ -324,6 +330,15 @@ def test_run_code_review_since_unresolved_ref_degrades_to_result(tmp_path, monke
     assert result["concerns"] == []
     assert result["findings"] == []
     assert result["artifacts"] == {}
+    encoded = json.dumps(
+        {
+            "headline": result["summary"]["headline"],
+            "reason": result["summary"]["reason"],
+        },
+        sort_keys=True,
+    ).lower()
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "clean", "safe"):
+        assert term not in encoded
 
 
 def test_run_code_review_since_git_range_error_degrades_to_result(tmp_path, monkeypatch) -> None:
@@ -336,7 +351,7 @@ def test_run_code_review_since_git_range_error_degrades_to_result(tmp_path, monk
 
     assert result["mode"] == "code_review"
     assert result["review_type"] == "since"
-    assert result["summary"]["headline"] == "Unable to analyze changes since missing."
+    assert result["summary"]["headline"] == "Unable to analyze the requested since range."
     assert result["summary"]["reason"] == "The requested since range could not be resolved."
     assert result["concerns"] == []
     assert result["findings"] == []

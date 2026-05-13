@@ -681,11 +681,11 @@ def _summary(
     since_ref: str = "",
 ) -> dict[str, Any]:
     if review_type == "since" and not concerns:
-        headline = f"No new architecture concerns were identified since {since_ref}."
+        headline = "No new architecture concerns were identified in the selected since range."
     elif review_type == "since":
         headline = f"Since code review complete for {since_ref}."
     elif review_type == "diff" and not concerns:
-        headline = "No new architecture concerns were identified in this diff."
+        headline = "No new architecture concerns were identified in the selected diff."
     elif review_type == "diff":
         headline = "Diff code review complete"
     else:
@@ -705,7 +705,7 @@ def _empty_since_range_result(ref: str) -> dict[str, Any]:
         "review_type": "since",
         "scores": {},
         "summary": {
-            "headline": f"Unable to analyze changes since {ref}.",
+            "headline": "Unable to analyze the requested since range.",
             "reason": "The requested since range could not be resolved.",
             "concern_total": 0,
             "top_concern_total": 0,
