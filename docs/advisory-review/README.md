@@ -32,6 +32,7 @@
 - `near_duplicate` diff/since scope 只报告 changed-file primary duplication concern，reference 可指向未变更实现。见 [026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
 - `code-review` top concerns 使用 portfolio ranking，在同一 severity 内优先展示不同 kind。见 [027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
 - `code-review` 主 JSON payload 使用保守体量 guard，记录 `summary.payload_bytes` 和可选 truncation metadata。见 [028-code-review-json-payload-budget.md](decisions/028-code-review-json-payload-budget.md)。
+- `code-review` 成功路径写出完整 generated concerns artifact，top-level `concerns[]` 只作为展示组合。见 [029-code-review-full-concerns-artifact.md](decisions/029-code-review-full-concerns-artifact.md)。
 
 ## 目录
 

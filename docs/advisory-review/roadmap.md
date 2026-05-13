@@ -82,6 +82,7 @@ Done:
 - `near_duplicate` diff/since scope 已收敛：增量审查只报告 changed-file primary duplication concern，见 [decisions/026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
 - `code-review` top concerns 已改为 portfolio ranking：severity 优先，同 level 内优先展示不同 concern kind，见 [decisions/027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
 - `code-review` JSON 主体体量 guard 已落地：记录 `summary.payload_bytes`，并对过长展示字段写入 truncation metadata，见 [decisions/028-code-review-json-payload-budget.md](decisions/028-code-review-json-payload-budget.md)。
+- `code-review` 完整 generated concerns artifact 已落地：成功路径写 `.architec/code-review-concerns.json`，见 [decisions/029-code-review-full-concerns-artifact.md](decisions/029-code-review-full-concerns-artifact.md)。
 
 In Progress:
 

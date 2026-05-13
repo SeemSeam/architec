@@ -144,6 +144,8 @@
 
 为控制主 JSON 体量，展示层会限制每条 concern 的 `evidence`、`references` 和 `blast_radius` 条数，并限制过长的一层 signal metric map。发生截断时，`artifacts.payload_truncation` 记录原始条数和保留条数。该截断不改变 `concern_id`，也不改变 `summary.concern_total`。
 
+成功 code-review 会把 payload guard 前的完整 generated concerns 写到 `.architec/code-review-concerns.json`，top-level `artifacts.code_review_concerns_json` 记录路径。写入失败对 `OSError` fail-open，并记录 `artifacts.code_review_concerns_error`。
+
 ## FixAdviceResult
 
 ```json

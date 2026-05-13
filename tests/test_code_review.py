@@ -340,6 +340,7 @@ def test_run_code_review_since_git_range_error_degrades_to_result(tmp_path, monk
     assert result["summary"]["reason"] == "The requested since range could not be resolved."
     assert result["concerns"] == []
     assert result["findings"] == []
+    assert result["artifacts"] == {}
 
 
 def test_run_code_review_since_unrelated_runtime_error_is_not_swallowed(tmp_path, monkeypatch) -> None:
@@ -498,6 +499,17 @@ def test_run_code_review_full_limits_ranked_concerns_to_top_five(tmp_path, monke
     assert result["summary"]["concern_limit"] == 5
     paths = [item["location"]["path"] for item in result["concerns"]]
     assert paths == ["src/a.py", "src/b.py", "src/c.py", "src/d.py", "src/g.py"]
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert result["artifacts"]["code_review_concerns_json"] == str(
+        tmp_path / ".architec" / "code-review-concerns.json"
+    )
+    assert artifact["mode"] == "code_review"
+    assert artifact["review_type"] == "full"
+    assert artifact["concern_total"] == 7
+    assert artifact["top_concern_total"] == 5
+    assert len(artifact["concerns"]) == 7
 
 
 def _ranking_concern(kind: str, path: str, confidence: float, *, level: str = "caution") -> dict[str, object]:
@@ -688,6 +700,83 @@ def test_code_review_payload_guard_does_not_change_concern_id() -> None:
 
     assert first["concerns"][0]["concern_id"] == "code-review:cleanup:abc123"
     assert second["concerns"][0]["concern_id"] == first["concerns"][0]["concern_id"]
+
+
+def test_code_review_concerns_artifact_keeps_untruncated_generated_details(tmp_path, monkeypatch) -> None:
+    long_concern = {
+        "concern_id": "code-review:duplication:long",
+        "kind": "duplication",
+        "level": "caution",
+        "confidence": 0.9,
+        "location": {
+            "path": "src/changed.py",
+            "line": 2,
+            "symbol": "changed",
+            "symbol_kind": "function",
+        },
+        "root_cause": "test",
+        "evidence": [f"near_duplicate.fact={index}" for index in range(20)],
+        "references": [
+            {"role": "reference", "path": f"src/ref{index}.py", "line": index}
+            for index in range(5)
+        ],
+        "blast_radius": [f"src/blast{index}.py" for index in range(12)],
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [long_concern])
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert len(result["concerns"][0]["evidence"]) == 8
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    artifact_concern = artifact["concerns"][0]
+    assert artifact["concern_total"] == 1
+    assert len(artifact_concern["evidence"]) == 20
+    assert len(artifact_concern["references"]) == 5
+    assert len(artifact_concern["blast_radius"]) == 12
+
+
+def test_code_review_concerns_artifact_write_os_error_is_fail_open(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+
+    def raise_os_error(*args, **kwargs):
+        raise OSError("artifact disk full")
+
+    monkeypatch.setattr(code_review, "write_json", raise_os_error)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["mode"] == "code_review"
+    assert result["artifacts"]["code_review_concerns_error"] == "artifact disk full"
+    assert "code_review_concerns_json" not in result["artifacts"]
+
+
+def test_code_review_concerns_artifact_non_os_error_is_not_swallowed(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+
+    def raise_bug(*args, **kwargs):
+        raise ValueError("artifact serialization bug")
+
+    monkeypatch.setattr(code_review, "write_json", raise_bug)
+
+    with pytest.raises(ValueError, match="artifact serialization bug"):
+        code_review.run_code_review_full(tmp_path)
+
+
+def test_code_review_diff_and_since_write_concerns_artifact(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+
+    diff_result = code_review.run_code_review_diff(tmp_path)
+    since_result = code_review.run_code_review_since(tmp_path, ref="main")
+
+    artifact_path = tmp_path / ".architec" / "code-review-concerns.json"
+    assert diff_result["artifacts"]["code_review_concerns_json"] == str(artifact_path)
+    assert since_result["artifacts"]["code_review_concerns_json"] == str(artifact_path)
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact["review_type"] == "since"
+    assert artifact["concerns"] == []
 
 
 def test_code_review_file_concern_ids_are_stable_across_candidate_order(tmp_path, monkeypatch) -> None:
@@ -947,6 +1036,7 @@ def test_code_review_since_bad_ref_does_not_run_near_duplicate_detector(tmp_path
     assert result["review_type"] == "since"
     assert result["concerns"] == []
     assert result["signals"] == []
+    assert result["artifacts"] == {}
 
 
 def test_code_review_full_output_avoids_gate_terms(tmp_path, monkeypatch) -> None:

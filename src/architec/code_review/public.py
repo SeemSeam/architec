@@ -9,7 +9,7 @@ from architec.analysis.public import run_analysis
 from architec.code_review.near_duplicate import near_duplicate_concerns, near_duplicate_scan
 from architec.code_review.shadow_implementation import shadow_implementation_scan
 from architec.events.public import append_review_event
-from architec.support.io_utils import ProgressFn, clamp
+from architec.support.io_utils import ProgressFn, clamp, write_json
 
 
 CONCERN_LIMIT = 5
@@ -18,6 +18,7 @@ CONCERN_EVIDENCE_LIMIT = 8
 CONCERN_BLAST_RADIUS_LIMIT = 8
 CONCERN_REFERENCES_LIMIT = 3
 SIGNAL_METRIC_DICT_LIMIT = 12
+CONCERNS_ARTIFACT_FILE = "code-review-concerns.json"
 
 
 def _list(value: object) -> list[Any]:
@@ -437,6 +438,38 @@ def _finalize_payload(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _write_concerns_artifact(
+    project_root: str | Path | None,
+    result: dict[str, Any],
+    generated_concerns: list[dict[str, Any]],
+) -> None:
+    if project_root is None:
+        return
+    artifacts = _dict(result.get("artifacts"))
+    result["artifacts"] = artifacts
+    summary = _dict(result.get("summary"))
+    artifact = {
+        "mode": str(result.get("mode", "") or ""),
+        "review_type": str(result.get("review_type", "") or ""),
+        "concern_total": len(generated_concerns),
+        "concern_limit": int(summary.get("concern_limit", CONCERN_LIMIT) or CONCERN_LIMIT),
+        "top_concern_total": int(summary.get("top_concern_total", 0) or 0),
+        "scores": _dict(result.get("scores")),
+        "summary": {
+            "headline": str(summary.get("headline", "") or ""),
+            "signal_kinds": _list(summary.get("signal_kinds")),
+        },
+        "concerns": generated_concerns,
+    }
+    path = Path(project_root) / ".architec" / CONCERNS_ARTIFACT_FILE
+    try:
+        write_json(path, artifact)
+    except OSError as exc:
+        artifacts["code_review_concerns_error"] = str(exc)
+    else:
+        artifacts["code_review_concerns_json"] = str(path)
+
+
 def _near_duplicate_total(concerns: list[dict[str, Any]]) -> int:
     return sum(
         1
@@ -808,6 +841,7 @@ def _result_from_report(
         "concerns": concerns,
         "artifacts": _dict(report.get("artifacts")),
     }
+    _write_concerns_artifact(project_root, result, generated_concerns)
     return _finalize_payload(result)
 
 

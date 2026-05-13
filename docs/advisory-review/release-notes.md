@@ -185,6 +185,8 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 CodeReviewResult now records `summary.payload_bytes` as a compact main-payload estimate and applies a conservative display guard to oversized concern evidence, references, blast radius, and one-level signal metric maps. Truncation metadata is recorded in `artifacts.payload_truncation`.
 
+Successful code-review runs now write `.architec/code-review-concerns.json` and expose it as `artifacts.code_review_concerns_json`. This artifact contains the complete generated concerns before top-level display truncation. Write failures are fail-open for `OSError` and are recorded as `artifacts.code_review_concerns_error`.
+
 ## Advisory-Only Boundary
 
 The new review surface follows these boundaries:
