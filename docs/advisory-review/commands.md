@@ -7,7 +7,7 @@ archi plan-review <plan.md>
 archi code-review --full .
 archi code-review --diff .
 archi code-review --since <ref> .
-archi fix-advice --for <review.json>
+archi fix-advice --review <review.json>
 archi status --trend
 archi status --snapshot
 ```
@@ -27,7 +27,7 @@ archi status --snapshot
 | `code-review --full` | 全量审查 | 与 `--diff` / `--since` 互斥 | 读项目，写报告 | 面向当前快照，展示整体健康状态和当前薄弱点。 |
 | `code-review --diff` | 当前 diff 审查 | 与 `--full` / `--since` 互斥 | 读工作树 diff，写报告 | 只分析本次改动引入或恶化的问题。 |
 | `code-review --since <ref>` | 指定引用后的增量审查 | 与 `--full` / `--diff` 互斥 | 读指定范围，写报告 | 只分析指定范围内的结构变化。 |
-| `fix-advice --for <review.json>` | 修复建议 | 不适用 | 读 review，写建议报告 | 不生成 patch，不执行修改。 |
+| `fix-advice --review <review.json>` | 修复建议 | 不适用 | 读 review，写建议报告 | 不生成 patch，不执行修改；`--for <review.json>` 保留为兼容别名。 |
 | `status --trend` | 趋势视图 | 可与只读选项组合 | 读历史事件和快照 | 展示跨时间变化，不审查具体改动。 |
 | `status --snapshot` | 记录快照 | 与纯只读语义区分 | 读当前状态，写快照 | 这是写操作，用于记录状态锚点。 |
 
@@ -58,7 +58,7 @@ archi status --snapshot
 | `archi baseline` | parser 已移除 | 快照迁移到 `archi status --snapshot`。 |
 | `archi cleanup` | parser 已移除 | cleanup / archive 成为 `archi code-review --full .` 审查报告中的 signals 和 file-level concerns。 |
 | `archi archive` | `code-review` signal | archive 成为审查报告中的一类信号。 |
-| `archi autofix` | parser 已移除 | 迁移到 `archi fix-advice --for <review.json>`；只给修复建议，不自动落地。 |
+| `archi autofix` | parser 已移除 | 迁移到 `archi fix-advice --review <review.json>`；只给修复建议，不自动落地。`--for <review.json>` 仍兼容旧脚本。 |
 | `archi autofix --apply` | parser 已移除 | 不再提供自动修改行为。 |
 
 迁移原则：

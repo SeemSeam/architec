@@ -1,6 +1,6 @@
 # Architec 持续结构净化最终方案
 
-> Historical / archived: 本文记录 advisory-review 迁移前的 cleanup、autofix、baseline、gate 设计与验收背景，不代表当前 CLI。当前公开入口是 `archi code-review --full .`、`archi code-review --diff .`、`archi fix-advice --for <review.json>`、`archi status --snapshot` 和 `archi plan-review <plan.md>`；legacy command parsers 和 wrapper public APIs 已退役。
+> Historical / archived: 本文记录 advisory-review 迁移前的 cleanup、autofix、baseline、gate 设计与验收背景，不代表当前 CLI。当前公开入口是 `archi code-review --full .`、`archi code-review --diff .`、`archi fix-advice --review <review.json>`、`archi status --snapshot` 和 `archi plan-review <plan.md>`；`--for <review.json>` 仍是 `fix-advice` 的兼容别名；legacy command parsers 和 wrapper public APIs 已退役。
 
 本文档是 `archi + hippo` 持续结构净化能力线的最终收敛版本。
 

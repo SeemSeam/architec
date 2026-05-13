@@ -8,5 +8,4 @@
 
 - 无发现场景文案进一步标准化。
 - `shadow_implementation` file-level 检测。
-- `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - TypeScript/Go 多语言调研。

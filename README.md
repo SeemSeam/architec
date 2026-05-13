@@ -240,7 +240,7 @@ The top-level `--goal` flag has been removed. Write the intent as a plan Markdow
 Legacy maintenance command parsers have been removed. Use these replacement workflows instead:
 
 - `archi cleanup .` -> `archi code-review --full .`
-- `archi autofix .` -> `archi fix-advice --for <review.json>`
+- `archi autofix .` -> `archi fix-advice --review <review.json>`
 - `archi baseline .` -> `archi status --snapshot`
 - `archi gate .` -> `archi code-review --diff . --out review.json`
 
@@ -292,7 +292,7 @@ Hippo remains the producer of input artifacts under `.hippocampus/`.
 - `--goal` has been removed from the parser; use `archi plan-review <plan.md>` for plan or intent review.
 - Default top-level mode is full advisory code review.
 - `--diff` switches the top-level alias to advisory diff code review against the working tree or an explicit git range.
-- `archi cleanup` and `archi autofix` command parsers have been removed; use `archi code-review --full .` cleanup/archive signals and `archi fix-advice --for <review.json>`.
+- `archi cleanup` and `archi autofix` command parsers have been removed; use `archi code-review --full .` cleanup/archive signals and `archi fix-advice --review <review.json>`. The older `fix-advice --for <review.json>` flag remains a compatibility alias.
 - `archi update` checks the latest public release when possible, then reruns the production installer; if the current version already matches, it simply reinstalls the latest build.
 - `archi uninstall` is a deep uninstall by default: it removes the managed launcher, install tree, bundled skills, local config dirs, and attempts to uninstall `hippocampus` and `llmgateway` from the active Python environment. Use `--yes` only for non-interactive automation.
 - repo-root `.architecture-rules.toml` can now annotate cleanup candidates via `[[shared.cleanup_metadata]]` or `[[archi.cleanup_metadata]]` with `owner`, `ttl_days`, and `expires_at`; those fields flow through cleanup/archive signals and legacy compatibility internals.

@@ -526,7 +526,7 @@ expires_at = "2026-05-01"
 
 ```bash
 archi code-review --full . --out review.json
-archi fix-advice --for review.json
+archi fix-advice --review review.json
 ```
 
 Historical note: 旧版本曾基于 archive candidate 和 semantic judge 生成 `.architec/architec-autofix-plan.json` / `.architec/architec-autofix-summary.md`，并包含 archive-move 动作模型。该 CLI 工作流已下线；cleanup 子包 wrapper API 也已退役，低层 plan / artifact helper 仍保留。
@@ -637,14 +637,15 @@ archi code-review --full . --out review.json
 
 ```bash
 archi code-review --full . --out review.json
-archi fix-advice --for review.json
+archi fix-advice --review review.json
 ```
 
 如果 review JSON 不存在、不是合法 JSON，或顶层不是 object，`fix-advice` 会返回 CLI 错误；合法 review 但没有 concerns 时会输出空 suggestions。
+`--for review.json` 仍作为兼容别名保留。
 
 ### 7.6 `archi autofix` parser 已移除
 
-请使用 `archi fix-advice --for <review.json>` 生成修复建议。
+请使用 `archi fix-advice --review <review.json>` 生成修复建议。`--for <review.json>` 仍兼容旧脚本。
 
 ### 7.7 记录当前状态快照
 

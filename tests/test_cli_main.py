@@ -179,7 +179,7 @@ def test_build_fix_advice_parser_accepts_review_and_focus_options():
     parser = cli.build_fix_advice_parser()
     assert parser.prog == "archi fix-advice"
     args = parser.parse_args([
-        "--for",
+        "--review",
         "review.json",
         "--focus-file",
         "src/core.py",
@@ -195,6 +195,31 @@ def test_build_fix_advice_parser_accepts_review_and_focus_options():
     assert args.focus_kind == "hotspot"
     assert args.concern_id == "code-review:hotspot:1"
     assert args.out == "/tmp/fix.json"
+
+
+def test_build_fix_advice_parser_accepts_for_compat_alias():
+    parser = cli.build_fix_advice_parser()
+
+    args = parser.parse_args(["--for", "review.json"])
+
+    assert args.review == "review.json"
+
+
+def test_build_fix_advice_parser_rejects_review_and_for_together(capsys):
+    parser = cli.build_fix_advice_parser()
+
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["--review", "new.json", "--for", "old.json"])
+
+    assert exc.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
+
+
+def test_build_fix_advice_parser_help_marks_for_as_compat_alias():
+    help_text = cli.build_fix_advice_parser().format_help()
+
+    assert "--review" in help_text
+    assert "compatibility alias for --review" in help_text
 
 
 def test_main_rejects_base_without_diff(monkeypatch, capsys):
@@ -521,7 +546,7 @@ def test_main_legacy_full_and_diff_outputs_avoid_gate_terms(monkeypatch, tmp_pat
     ("argv", "removed_name", "replacement"),
     [
         (["archi", "cleanup"], "cleanup", "archi code-review --full ."),
-        (["archi", "autofix"], "autofix", "archi fix-advice --for <review.json>"),
+        (["archi", "autofix"], "autofix", "archi fix-advice --review <review.json>"),
         (["archi", "baseline"], "baseline", "archi status --snapshot"),
         (["archi", "gate"], "gate", "archi code-review --diff . --out review.json"),
     ],
@@ -544,7 +569,7 @@ def test_main_removed_legacy_tokens_are_friendly_errors(monkeypatch, capsys, arg
     ("argv", "replacement"),
     [
         (["archi", "cleanup", "."], "archi code-review --full ."),
-        (["archi", "autofix", "--apply", "."], "archi fix-advice --for <review.json>"),
+        (["archi", "autofix", "--apply", "."], "archi fix-advice --review <review.json>"),
         (["archi", "baseline", "--out", "baseline.json", "."], "archi status --snapshot"),
         (["archi", "gate", "--out", "gate.json", "."], "archi code-review --diff . --out review.json"),
     ],
@@ -681,7 +706,8 @@ def test_main_fix_advice_outputs_json_and_skips_auth_bundle_and_llm(monkeypatch,
         "suggestions": [],
         "artifacts": {},
     }
-    monkeypatch.setattr(sys, "argv", ["archi", "fix-advice", "--for", "review.json", "--focus-kind", "cleanup"])
+    calls: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(sys, "argv", ["archi", "fix-advice", "--review", "review.json", "--focus-kind", "cleanup"])
     monkeypatch.setattr(cli, "handle_auth_command", lambda argv: pytest.fail("auth status should not run"))
     monkeypatch.setattr(cli, "require_authorized_session", lambda: pytest.fail("auth should not run"))
     monkeypatch.setattr(cli, "inspect_bundle", lambda path: pytest.fail("bundle check should not run"))
@@ -689,13 +715,17 @@ def test_main_fix_advice_outputs_json_and_skips_auth_bundle_and_llm(monkeypatch,
     monkeypatch.setattr(
         cli,
         "run_fix_advice",
-        lambda review, *, focus_file="", focus_kind="", concern_id="": result,
+        lambda review, *, focus_file="", focus_kind="", concern_id="": calls.append(
+            (str(review), focus_file, focus_kind)
+        )
+        or result,
     )
 
     assert cli.main() == 0
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert payload["mode"] == "fix_advice"
+    assert calls == [("review.json", "", "cleanup")]
     assert "archi fix-advice [1/1] reading review" in captured.err
 
 

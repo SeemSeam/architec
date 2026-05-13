@@ -83,6 +83,7 @@ Done:
 - `code-review` top concerns 已改为 portfolio ranking：severity 优先，同 level 内优先展示不同 concern kind，见 [decisions/027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
 - `code-review` JSON 主体体量 guard 已落地：记录 `summary.payload_bytes`，并对过长展示字段写入 truncation metadata，见 [decisions/028-code-review-json-payload-budget.md](decisions/028-code-review-json-payload-budget.md)。
 - `code-review` 完整 generated concerns artifact 已落地：成功路径写 `.architec/code-review-concerns.json`，见 [decisions/029-code-review-full-concerns-artifact.md](decisions/029-code-review-full-concerns-artifact.md)。
+- `fix-advice --review <review.json>` 已成为推荐入口，`--for` 保留为兼容别名，见 [decisions/030-fix-advice-review-flag.md](decisions/030-fix-advice-review-flag.md)。
 
 In Progress:
 
@@ -96,7 +97,6 @@ Deferred:
 
 - 无发现场景文案进一步标准化。
 - `shadow_implementation` file-level 检测。
-- `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - 多语言支持。
 - 自建运行时信号采集。
 - 用户自定义脚本化规则平台。

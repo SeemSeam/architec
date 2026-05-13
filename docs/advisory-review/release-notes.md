@@ -81,7 +81,7 @@ Legacy maintenance command parsers have been removed after the soft-cut migratio
 
 `archi cleanup` is no longer a supported command parser. Use `archi code-review --full .` and read cleanup/archive signals from CodeReviewResult.
 
-`archi autofix` is no longer a supported command parser, including dry-run and `--apply` forms. Use `archi fix-advice --for <review.json>`.
+`archi autofix` is no longer a supported command parser, including dry-run and `--apply` forms. Use `archi fix-advice --review <review.json>`.
 
 `archi gate` is no longer a supported command parser. Use advisory `archi code-review --diff .` output; it is not a merge decision.
 
@@ -94,7 +94,7 @@ The cleanup subpackage wrapper APIs have been retired:
 - `architec.cleanup.run_cleanup`
 - `architec.cleanup.run_autofix`
 
-Use `archi code-review --full .` for cleanup/archive advisory signals and `archi fix-advice --for <review.json>` for repair guidance. Lower-level cleanup inventory, archive, semantic judge, autofix plan, and artifact helpers remain available for internal compatibility.
+Use `archi code-review --full .` for cleanup/archive advisory signals and `archi fix-advice --review <review.json>` for repair guidance. Lower-level cleanup inventory, archive, semantic judge, autofix plan, and artifact helpers remain available for internal compatibility.
 
 The root legacy public APIs have also been retired:
 
@@ -148,7 +148,7 @@ archi plan-review <plan.md>
 archi code-review --full .
 archi code-review --diff .
 archi code-review --since <ref> .
-archi fix-advice --for <review.json>
+archi fix-advice --review <review.json>
 ```
 
 `plan-review` reads a Markdown plan and reports understood intent, changed areas, dependencies, concerns, suggested adjustments, and a plan fingerprint.
@@ -159,7 +159,7 @@ Successful code-review runs append a compact ReviewEvent to `.architec/review-ev
 
 `archi status --trend` and `archi status --snapshot` are advisory project-health modes. Existing `archi status` and `archi status --json` remain auth/session status commands.
 
-`fix-advice` reads a saved review JSON and returns independent repair-direction suggestions for its concerns. It does not output executable changes and does not provide an apply mode.
+`fix-advice` reads a saved review JSON and returns independent repair-direction suggestions for its concerns. It does not output executable changes and does not provide an apply mode. `--review <review.json>` is the canonical flag; `--for <review.json>` remains a compatibility alias.
 
 ## Status And Review Events
 

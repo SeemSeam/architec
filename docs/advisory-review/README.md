@@ -33,6 +33,7 @@
 - `code-review` top concerns 使用 portfolio ranking，在同一 severity 内优先展示不同 kind。见 [027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
 - `code-review` 主 JSON payload 使用保守体量 guard，记录 `summary.payload_bytes` 和可选 truncation metadata。见 [028-code-review-json-payload-budget.md](decisions/028-code-review-json-payload-budget.md)。
 - `code-review` 成功路径写出完整 generated concerns artifact，top-level `concerns[]` 只作为展示组合。见 [029-code-review-full-concerns-artifact.md](decisions/029-code-review-full-concerns-artifact.md)。
+- `fix-advice --review <review.json>` 是推荐入口，`--for` 保留为兼容别名。见 [030-fix-advice-review-flag.md](decisions/030-fix-advice-review-flag.md)。
 
 ## 目录
 
@@ -69,7 +70,7 @@ archi plan-review <plan.md>
 archi code-review --full .
 archi code-review --diff .
 archi code-review --since <ref> .
-archi fix-advice --for <review.json>
+archi fix-advice --review <review.json>
 archi status --trend
 archi status --snapshot
 ```

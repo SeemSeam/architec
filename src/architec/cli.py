@@ -414,7 +414,9 @@ def build_status_parser() -> argparse.ArgumentParser:
 
 def build_fix_advice_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='archi fix-advice', description='Archi fix advice CLI')
-    _add_argument(parser, '--for', dest='review', required=True, help='review JSON file to read')
+    review_group = parser.add_mutually_exclusive_group(required=True)
+    review_group.add_argument('--review', dest='review', help='review JSON file to read')
+    review_group.add_argument('--for', dest='review', help='compatibility alias for --review')
     _add_argument(parser, '--focus-file', default='', help='only include concerns whose path contains this text')
     _add_argument(parser, '--focus-kind', default='', help='only include concerns of this kind')
     _add_argument(parser, '--concern-id', default='', help='only include one concern id')
@@ -516,7 +518,7 @@ def _validate_code_review_args(args: argparse.Namespace) -> int | None:
 
 _REMOVED_LEGACY_COMMAND_REPLACEMENTS = {
     "cleanup": "archi code-review --full .",
-    "autofix": "archi fix-advice --for <review.json>",
+    "autofix": "archi fix-advice --review <review.json>",
     "baseline": "archi status --snapshot",
     "gate": "archi code-review --diff . --out review.json",
 }
