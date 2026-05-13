@@ -13,6 +13,7 @@ from architec.support.io_utils import ProgressFn, clamp
 
 
 CONCERN_LIMIT = 5
+CONCERN_KIND_SOFT_CAP = 2
 
 
 def _list(value: object) -> list[Any]:
@@ -273,7 +274,7 @@ def _topology_concern(
 def _ranked_concerns(concerns: list[dict[str, Any]], *, limit: int = 5) -> list[dict[str, Any]]:
     level_weight = {"high-concern": 3, "caution": 2, "info": 1}
 
-    def sort_key(item: dict[str, Any]) -> tuple[int, float, int, str]:
+    def base_key(item: dict[str, Any]) -> tuple[int, float, int, str]:
         location = _dict(item.get("location"))
         path = str(location.get("path", "") or "")
         return (
@@ -283,7 +284,43 @@ def _ranked_concerns(concerns: list[dict[str, Any]], *, limit: int = 5) -> list[
             path,
         )
 
-    return sorted(concerns, key=sort_key, reverse=True)[:limit]
+    sorted_concerns = sorted(
+        concerns,
+        key=lambda item: (-base_key(item)[0], -base_key(item)[1], -base_key(item)[2], base_key(item)[3]),
+    )
+    levels = sorted(
+        {level_weight.get(str(item.get("level", "") or ""), 0) for item in sorted_concerns},
+        reverse=True,
+    )
+    selected: list[dict[str, Any]] = []
+    for level in levels:
+        if len(selected) >= limit:
+            break
+        group = [
+            item
+            for item in sorted_concerns
+            if level_weight.get(str(item.get("level", "") or ""), 0) == level
+        ]
+        level_selected: list[dict[str, Any]] = []
+        by_kind: dict[str, int] = {}
+        for item in group:
+            kind = str(item.get("kind", "") or "unknown")
+            if by_kind.get(kind, 0) >= CONCERN_KIND_SOFT_CAP:
+                continue
+            level_selected.append(item)
+            by_kind[kind] = by_kind.get(kind, 0) + 1
+            if len(selected) + len(level_selected) >= limit:
+                break
+        if len(selected) + len(level_selected) < limit:
+            selected_ids = {id(item) for item in level_selected}
+            for item in group:
+                if id(item) in selected_ids:
+                    continue
+                level_selected.append(item)
+                if len(selected) + len(level_selected) >= limit:
+                    break
+        selected.extend(level_selected)
+    return selected[:limit]
 
 
 def _near_duplicate_total(concerns: list[dict[str, Any]]) -> int:

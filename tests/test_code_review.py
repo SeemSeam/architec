@@ -497,7 +497,86 @@ def test_run_code_review_full_limits_ranked_concerns_to_top_five(tmp_path, monke
     assert result["summary"]["top_concern_total"] == 5
     assert result["summary"]["concern_limit"] == 5
     paths = [item["location"]["path"] for item in result["concerns"]]
-    assert paths == ["src/a.py", "src/b.py", "src/c.py", "src/d.py", "src/e.py"]
+    assert paths == ["src/a.py", "src/b.py", "src/c.py", "src/d.py", "src/g.py"]
+
+
+def _ranking_concern(kind: str, path: str, confidence: float, *, level: str = "caution") -> dict[str, object]:
+    return {
+        "concern_id": f"code-review:{kind}:{path}",
+        "kind": kind,
+        "level": level,
+        "confidence": confidence,
+        "location": {"path": path, "line": 0, "symbol": "", "symbol_kind": "module"},
+        "root_cause": "test concern",
+        "evidence": [f"test.path={path}"],
+    }
+
+
+def test_ranked_concerns_diversifies_kind_within_same_level() -> None:
+    ranked = code_review._ranked_concerns(
+        [
+            _ranking_concern("duplication", "src/dup1.py", 0.99),
+            _ranking_concern("duplication", "src/dup2.py", 0.98),
+            _ranking_concern("duplication", "src/dup3.py", 0.97),
+            _ranking_concern("duplication", "src/dup4.py", 0.96),
+            _ranking_concern("boundary", "src/boundary.py", 0.50),
+            _ranking_concern("hotspot", "src/hotspot.py", 0.40),
+            _ranking_concern("cleanup", "src/cleanup.py", 0.30),
+        ],
+        limit=5,
+    )
+
+    kinds = [str(item["kind"]) for item in ranked]
+    assert len(ranked) == 5
+    assert kinds.count("duplication") == 2
+    assert {"boundary", "hotspot", "cleanup"}.issubset(kinds)
+
+
+def test_ranked_concerns_does_not_promote_lower_level_for_diversity() -> None:
+    ranked = code_review._ranked_concerns(
+        [
+            _ranking_concern("duplication", f"src/high{i}.py", 0.99 - i * 0.01, level="high-concern")
+            for i in range(5)
+        ]
+        + [
+            _ranking_concern("boundary", "src/boundary.py", 0.99, level="caution"),
+            _ranking_concern("hotspot", "src/hotspot.py", 0.98, level="caution"),
+        ],
+        limit=5,
+    )
+
+    assert len(ranked) == 5
+    assert {str(item["level"]) for item in ranked} == {"high-concern"}
+    assert [str(item["kind"]) for item in ranked] == ["duplication"] * 5
+
+
+def test_ranked_concerns_single_kind_still_fills_limit() -> None:
+    ranked = code_review._ranked_concerns(
+        [
+            _ranking_concern("duplication", f"src/dup{i}.py", 0.99 - i * 0.01)
+            for i in range(7)
+        ],
+        limit=5,
+    )
+
+    assert len(ranked) == 5
+    assert [str(item["kind"]) for item in ranked] == ["duplication"] * 5
+
+
+def test_ranked_concerns_order_is_deterministic() -> None:
+    concerns = [
+        _ranking_concern("duplication", "src/dup1.py", 0.99),
+        _ranking_concern("duplication", "src/dup2.py", 0.98),
+        _ranking_concern("duplication", "src/dup3.py", 0.97),
+        _ranking_concern("boundary", "src/boundary.py", 0.50),
+        _ranking_concern("hotspot", "src/hotspot.py", 0.40),
+        _ranking_concern("cleanup", "src/cleanup.py", 0.30),
+    ]
+
+    first = code_review._ranked_concerns(concerns, limit=5)
+    second = code_review._ranked_concerns(list(reversed(concerns)), limit=5)
+
+    assert [item["concern_id"] for item in first] == [item["concern_id"] for item in second]
 
 
 def test_code_review_file_concern_ids_are_stable_across_candidate_order(tmp_path, monkeypatch) -> None:

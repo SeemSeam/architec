@@ -80,6 +80,7 @@ Done:
 - `shadow_implementation` diff/since scope 已收敛：增量审查只报告 changed-file primary shadow concern，见 [decisions/024-shadow-implementation-diff-since-scope.md](decisions/024-shadow-implementation-diff-since-scope.md)。
 - `fix-advice` 已为 `shadow-implementation` concern 增加专用 advisory options，消费 `references[].role: "existing_implementation"`，见 [decisions/025-shadow-implementation-fix-advice.md](decisions/025-shadow-implementation-fix-advice.md)。
 - `near_duplicate` diff/since scope 已收敛：增量审查只报告 changed-file primary duplication concern，见 [decisions/026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
+- `code-review` top concerns 已改为 portfolio ranking：severity 优先，同 level 内优先展示不同 concern kind，见 [decisions/027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
 
 In Progress:
 

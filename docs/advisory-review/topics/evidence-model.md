@@ -114,6 +114,8 @@
 - `concern_limit`：当前 top-N 上限。
 - `signal_kinds`：本次输出中出现的 signal kind 列表。
 
+`concerns[]` 是默认展示 portfolio，不是完整 concern truth。排序先保留 severity level 优先级，再在同一 level 内尽量展示不同 kind；需要完整集合的消费者应结合 artifacts 或扩展输出，而不是只读取 top-N。
+
 `signals[]` 统一结构：
 
 ```json

@@ -93,13 +93,13 @@ advisory code-review 的 full、diff、since 模式使用同一组基础 LLM pre
 
 ## 排序和边界
 
-concern 排序由影响面、置信度和趋势共同决定。可修复性属于 `fix-advice` 范畴，不作为 `code-review` 排序因子。
+concern 排序使用 portfolio ranking。排序先按 severity level 分层，低 level 不会只因多样性排到高 level 前面；同一 level 内按 confidence、是否有 path、path 做确定性基础排序，并在第一轮展示中对每个 kind 使用 soft cap，优先让 top-N 覆盖不同风险维度。可修复性属于 `fix-advice` 范畴，不作为 `code-review` 排序因子。
 
 `code-review --full` 展示当前快照的薄弱模块；`status` 展示薄弱模块如何随时间变化。
 
 ## 输出计数
 
-`concerns[]` 默认只展示 top concerns。`summary.concern_total` 记录截断前总数，`summary.top_concern_total` 记录本次展示数量，`summary.concern_limit` 记录 top-N 上限。
+`concerns[]` 默认只展示 top concerns portfolio，不代表唯一完整真相。`summary.concern_total` 记录截断前总数，`summary.top_concern_total` 记录本次展示数量，`summary.concern_limit` 记录 top-N 上限。
 
 `signals[]` 只用 `kind`、`summary`、`metrics` 三个通用字段；信号专属数据放进 `metrics`，避免每类 signal 发明不同顶层字段。
 

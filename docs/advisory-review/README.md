@@ -30,6 +30,7 @@
 - `shadow_implementation` diff/since scope 只报告 changed-file primary concerns，引用可指向未变更实现。见 [024-shadow-implementation-diff-since-scope.md](decisions/024-shadow-implementation-diff-since-scope.md)。
 - `fix-advice` 为 `shadow-implementation` concern 输出专用 advisory options，消费 `references[].role: "existing_implementation"`。见 [025-shadow-implementation-fix-advice.md](decisions/025-shadow-implementation-fix-advice.md)。
 - `near_duplicate` diff/since scope 只报告 changed-file primary duplication concern，reference 可指向未变更实现。见 [026-near-duplicate-diff-since-scope.md](decisions/026-near-duplicate-diff-since-scope.md)。
+- `code-review` top concerns 使用 portfolio ranking，在同一 severity 内优先展示不同 kind。见 [027-code-review-concern-ranking-diversity.md](decisions/027-code-review-concern-ranking-diversity.md)。
 
 ## 目录
 

@@ -181,6 +181,8 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 `code-review --diff` and `code-review --since <ref>` now also run exact `near_duplicate` detection in changed-file-scoped mode. They report duplication only when the primary `location.path` is changed; `references[]` may point at unchanged existing code.
 
+`CodeReviewResult.concerns[]` now uses portfolio ranking for the displayed top concerns. Severity level remains the first ordering boundary, and same-level results prefer a mix of concern kinds before filling remaining slots with the same kind. `summary.concern_total` remains the pre-display total.
+
 ## Advisory-Only Boundary
 
 The new review surface follows these boundaries:

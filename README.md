@@ -203,6 +203,9 @@ detection both support changed-file-scoped diff/since review: the primary
 concern location is in the changed files, while structured references can point
 to unchanged existing implementations.
 
+Displayed top concerns use portfolio ranking: severity remains first, and
+same-level concerns prefer a mix of kinds before filling remaining slots.
+
 Generated `concern_id` values in current code-review output are fact-based identifiers, not display positions. `fix-advice` reports a CLI error for missing, invalid, or non-object review JSON; a valid review with no concerns still produces an empty suggestions list. `fix-advice` has dedicated advisory branches for duplication and shadow-implementation concerns when the review includes structured reference locations.
 
 Plan review:
