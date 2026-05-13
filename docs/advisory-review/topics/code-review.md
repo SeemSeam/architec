@@ -47,7 +47,7 @@ archi code-review --since <ref> .
 - 按组件或包聚合的健康状态。
 - 当前快照里的薄弱模块列表。
 - 主要结构热点。
-- cleanup、archive、重复实现、边界漂移等信号。
+- cleanup、archive、重复实现、shadow implementation、边界漂移等信号。
 
 全量审查可以给出结构叙事：
 
@@ -55,6 +55,13 @@ archi code-review --since <ref> .
 - 最薄弱模块在项目里的相对位置。
 - 2-3 条值得关注的结构叙事。
 - top concerns，完整清单放 artifacts。
+
+全量审查中的 AI/vibe coding 信号当前包括：
+
+- `near_duplicate`：规范化 AST 指纹重复，输出 `duplication` concern。
+- `shadow_implementation`：函数级跨文件相似实现，输出 `shadow-implementation` concern，并通过 `references[]` 标出 `existing_implementation`。
+
+这两类信号暂不在 `--diff` / `--since` 中启用，避免把历史债务混入增量结果。
 
 ## 增量审查
 

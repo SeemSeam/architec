@@ -7,6 +7,7 @@ from typing import Any
 
 from architec.analysis.public import run_analysis
 from architec.code_review.near_duplicate import near_duplicate_concerns
+from architec.code_review.shadow_implementation import shadow_implementation_concerns
 from architec.events.public import append_review_event
 from architec.support.io_utils import ProgressFn, clamp
 
@@ -295,6 +296,23 @@ def _near_duplicate_total(concerns: list[dict[str, Any]]) -> int:
     )
 
 
+def _shadow_implementation_items(concerns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        concern
+        for concern in concerns
+        if isinstance(concern, dict)
+        and str(concern.get("kind", "") or "") == "shadow-implementation"
+    ]
+
+
+def _shadow_role(concern: dict[str, Any]) -> str:
+    for item in _list(concern.get("evidence")):
+        text = str(item)
+        if text.startswith("shadow_implementation.role="):
+            return text.split("=", 1)[1] or "unknown"
+    return "unknown"
+
+
 def _signals(report: dict[str, Any], concerns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     signals: list[dict[str, Any]] = []
     cleanup = _dict(report.get("cleanup"))
@@ -388,6 +406,28 @@ def _signals(report: dict[str, Any], concerns: list[dict[str, Any]]) -> list[dic
                 "kind": "near_duplicate",
                 "summary": f"{near_duplicate_total} near-duplicate function concerns detected.",
                 "metrics": {"concern_total": near_duplicate_total},
+            }
+        )
+    shadow_items = _shadow_implementation_items(concerns)
+    if shadow_items:
+        by_role: dict[str, int] = {}
+        for concern in shadow_items:
+            role = _shadow_role(concern)
+            by_role[role] = by_role.get(role, 0) + 1
+        high_confidence_total = sum(
+            1
+            for concern in shadow_items
+            if _safe_confidence(concern.get("confidence"), 0.0) >= 0.78
+        )
+        signals.append(
+            {
+                "kind": "shadow_implementation",
+                "summary": f"{len(shadow_items)} shadow implementation candidates detected.",
+                "metrics": {
+                    "candidate_total": len(shadow_items),
+                    "high_confidence_total": high_confidence_total,
+                    "by_role": dict(sorted(by_role.items())),
+                },
             }
         )
     return signals
@@ -490,12 +530,18 @@ def _result_from_report(
         if review_type == "full" and project_root is not None
         else []
     )
+    shadow_concerns = (
+        shadow_implementation_concerns(project_root)
+        if review_type == "full" and project_root is not None
+        else []
+    )
     generated_concerns = [
         *_cleanup_concerns(report),
         *_archive_concerns(report),
         *_hotspot_concerns(report),
         *_topology_concerns(report),
         *duplicate_concerns,
+        *shadow_concerns,
     ]
     concerns = _ranked_concerns(generated_concerns, limit=CONCERN_LIMIT)
     signals = _signals(report, generated_concerns)

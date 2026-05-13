@@ -25,6 +25,7 @@
 - status trend 使用最近 100 条 review events，scores 来自最近 full code-review event；`fix-advice` 不写 event。见 [019-status-event-semantics.md](decisions/019-status-event-semantics.md)。
 - advisory diff/since code-review 使用轻量 LLM preflight，不再要求 `architect_component_scoring`。见 [020-diff-preflight-policy.md](decisions/020-diff-preflight-policy.md)。
 - `code-review --since <ref>` 对不可解析 range 返回结构化 CodeReviewResult 降级对象。见 [021-since-range-error-semantics.md](decisions/021-since-range-error-semantics.md)。
+- `shadow_implementation` v1 采用保守 Python 函数级静态检测，只在全量审查中输出。见 [022-shadow-implementation-v1-scope.md](decisions/022-shadow-implementation-v1-scope.md)。
 
 ## 目录
 

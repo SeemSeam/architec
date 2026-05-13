@@ -74,6 +74,8 @@ Done:
 - diff/since LLM preflight 精简决策已记录，见 [decisions/020-diff-preflight-policy.md](decisions/020-diff-preflight-policy.md)；advisory diff/since 不再要求 `architect_component_scoring` preflight。
 - since range error 语义已记录，见 [decisions/021-since-range-error-semantics.md](decisions/021-since-range-error-semantics.md)；不可解析 ref/range 返回结构化 CodeReviewResult 降级对象。
 - advisory-review open questions 已清空，剩余非封版方向移入 Deferred。
+- `shadow_implementation` v1 范围已收敛为全量审查里的 Python 函数级跨文件相似实现，见 [decisions/022-shadow-implementation-v1-scope.md](decisions/022-shadow-implementation-v1-scope.md)。
+- `shadow_implementation` v1 已落地到 `code-review --full`：输出 `shadow-implementation` concern 和 `shadow_implementation` signal，增量模式暂不启用。
 
 In Progress:
 
@@ -81,13 +83,15 @@ In Progress:
 
 Next:
 
-- 封版后按优先级从 Deferred 中选择下一阶段深化项。
+- 从 Deferred 中选择下一阶段深化项；优先考虑继续增强核心审查能力，而不是回到已退役 legacy workflow。
 
 Deferred:
 
 - 无发现场景文案进一步标准化。
 - JSON 主体 20KB 目标在中大型仓库中的体量校准。
-- `shadow_implementation` 阈值调研。
+- `shadow_implementation` class-level / file-level 检测。
+- `shadow_implementation` diff/since 变更范围控制。
+- `fix-advice` 是否为 `shadow-implementation` 增加专用 advisory options。
 - `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - 多语言支持。
 - 自建运行时信号采集。
@@ -170,7 +174,7 @@ Deferred:
 深化线：
 
 - 实现第一批 AI 特有信号中的 `near_duplicate`。
-- 若时间允许，补 `shadow_implementation` 的初版启发式。
+- `shadow_implementation` v1 已作为封版后深化项落地；后续再评估专用 fix-advice 和增量范围控制。
 
 验收：
 
@@ -198,7 +202,7 @@ Deferred:
 
 如果工期吃紧，优先保主线。深化线按以下顺序降级：
 
-- 先推迟 `shadow_implementation`。
+- 先推迟 `shadow_implementation` 的 class-level、file-level、diff/since 和 fix-advice 深化。
 - 再推迟趋势归因细化。
 - 最后推迟 plan fingerprint 的精细一致性观察。
 

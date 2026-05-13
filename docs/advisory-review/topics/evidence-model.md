@@ -36,7 +36,7 @@
 字段说明：
 
 - `concern_id`：concern 的引用标识，不表达排序位置。当前 code-review 生成的 id 使用 `code-review:<kind>:<hash>`，hash 来自 kind、source mapper、primary location、facts 和可用 reference/fingerprint 等事实。旧 review 中没有稳定 hash 格式的 id 仍合法。
-- `kind`：关注点类型，例如 `boundary`、`duplication`、`hotspot`、`cleanup`、`stability`、`missing-context`。
+- `kind`：关注点类型，例如 `boundary`、`duplication`、`shadow-implementation`、`hotspot`、`cleanup`、`stability`、`missing-context`。
 - `level`：关注级别，不代表门禁裁决。
 - `confidence`：0 到 1 的证据置信度。
 - `location`：尽量定位到文件、行、符号或 import 边。
@@ -49,7 +49,7 @@
 
 ```json
 {
-  "role": "reference",
+  "role": "reference|existing_implementation",
   "path": "",
   "line": 0,
   "symbol": "",
@@ -57,7 +57,7 @@
 }
 ```
 
-例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 指向 reference implementation。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
+例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 使用 `role: "reference"` 指向 reference implementation。`shadow-implementation` concern 的 `location` 指向疑似 shadow implementation，`references[]` 使用 `role: "existing_implementation"` 指向可对照的已有实现。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
 
 最低验收：
 

@@ -11,11 +11,28 @@
 
 `near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：当前只在全量审查中检测 Python 函数/方法的规范化 AST 重复，优先低误报。
 
+`shadow_implementation` v1 的范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)：当前只在全量审查中检测 Python 函数级跨文件相似实现，优先高精度。
+
+`shadow_implementation` v1 不是：
+
+- `near_duplicate` 的替代。完全相同的规范化 AST 仍由 `near_duplicate` 报告。
+- 合法 adapter、wrapper、facade 或兼容入口。
+- 测试 fixture、生成代码、vendor 代码或 build artifact 检查。
+- 增量审查信号；`--diff` / `--since` 暂不启用。
+
+误报控制：
+
+- 只扫描 Python 源文件，跳过 tests、fixtures、generated、vendor、build、dist、虚拟环境和本地生成目录。
+- 只报告跨文件函数，不报告同文件 nested helper。
+- 函数节点数至少 45。
+- 需要共享角色 token、名称 token overlap、签名相似度、AST feature cosine 和无直接复用边共同满足阈值。
+- 输出 top candidates，并在 concern 中保留 `existing_implementation` 结构化 reference。
+
 优先原因：
 
 - 这两类是 vibe coding 最常见的“新写而不复用”腐烂形态。
 - 证据相对可解释，可指向具体函数、类或文件。
-- 适合增量审查，只报告本次新增或恶化的重复/影子实现。
+- 适合先在全量审查中建立高置信观察，再评估增量范围控制。
 
 ## 第二批信号
 
