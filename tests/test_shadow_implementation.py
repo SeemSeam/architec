@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 
 import architec.code_review.public as code_review
-from architec.code_review.shadow_implementation import shadow_implementation_concerns
+from architec.code_review.shadow_implementation import (
+    shadow_implementation_concerns,
+    shadow_implementation_file_dry_run,
+)
 
 
 def _empty_report() -> dict[str, object]:
@@ -246,6 +249,88 @@ class ComponentPolicyInspector:
     )
 
 
+def _module_text(*, import_existing: bool = False) -> str:
+    reuse = "import policy_existing\n" if import_existing else ""
+    reuse_call = (
+        "    policy_existing.evaluate_component_policy(component, rules, context)\n"
+        if import_existing
+        else ""
+    )
+    return f"""
+import json
+from collections import defaultdict
+from pathlib import Path
+{reuse}
+
+def load_policy_rules(path):
+    raw = Path(path).read_text(encoding="utf-8")
+    data = json.loads(raw)
+    rules = []
+    for item in data.get("rules", []):
+        if not item.get("disabled"):
+            rules.append(dict(item))
+    return rules
+
+def normalize_policy_rules(rules):
+    normalized = []
+    for rule in rules:
+        entry = dict(rule)
+        entry["component"] = entry.get("component", "*")
+        entry["decision"] = entry.get("decision", "deny")
+        entry["name"] = entry.get("name", entry["component"])
+        normalized.append(entry)
+    return normalized
+
+def evaluate_component_policy(component, rules, context):
+{reuse_call}    allowed = []
+    denied = []
+    for rule in normalize_policy_rules(rules):
+        target = rule.get("component")
+        if target not in ("*", component):
+            continue
+        decision = rule.get("decision")
+        if decision == "allow":
+            allowed.append(rule.get("name", target))
+        elif decision == "deny":
+            denied.append(rule.get("name", target))
+    if context.get("maintenance"):
+        denied.append("maintenance")
+    if context.get("owner") == component:
+        allowed.append("owner")
+    return bool(allowed) and not denied
+
+def explain_policy_decision(component, rules, context):
+    details = []
+    grouped = defaultdict(list)
+    for rule in normalize_policy_rules(rules):
+        grouped[rule.get("decision", "deny")].append(rule.get("name", component))
+    for decision, names in sorted(grouped.items()):
+        for name in names:
+            details.append(f"{{decision}}:{{name}}")
+    if context.get("maintenance"):
+        details.append("deny:maintenance")
+    return details
+
+def summarize_policy_audit(events):
+    summary = defaultdict(int)
+    for event in events:
+        summary[event.get("decision", "unknown")] += 1
+        if event.get("component"):
+            summary[event.get("component")] += 1
+    return dict(summary)
+"""
+
+
+def _write_file_shadow_policy_modules(tmp_path, *, import_existing: bool = False) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "policy_existing.py").write_text(_module_text(), encoding="utf-8")
+    (source / "policy_candidate.py").write_text(
+        _module_text(import_existing=import_existing),
+        encoding="utf-8",
+    )
+
+
 def test_shadow_implementation_concerns_detect_policy_like_functions(tmp_path) -> None:
     _write_shadow_policy_project(tmp_path)
 
@@ -269,6 +354,61 @@ def test_shadow_implementation_concerns_detect_policy_like_functions(tmp_path) -
     assert "shadow_implementation.role=policy" in concern["evidence"]
     assert "shadow_implementation.reuse_edge=false" in concern["evidence"]
     assert all(not item.startswith("Add ") for item in concern["evidence"])
+
+
+def test_shadow_implementation_file_dry_run_reports_policy_module_pair(tmp_path) -> None:
+    _write_file_shadow_policy_modules(tmp_path)
+
+    result = shadow_implementation_file_dry_run(tmp_path)
+
+    assert result["mode"] == "dry_run"
+    assert result["candidate_total"] == 2
+    assert result["pair_total"] == 1
+    candidate = result["candidates"][0]
+    assert candidate["left"]["path"] == "src/policy_candidate.py"
+    assert candidate["right"]["path"] == "src/policy_existing.py"
+    assert candidate["role"] == "policy"
+    assert candidate["metrics"]["public_api_overlap"] >= 0.55
+    assert candidate["metrics"]["symbol_shape_similarity"] >= 0.65
+    assert candidate["metrics"]["ast_similarity"] >= 0.88
+    assert candidate["metrics"]["import_similarity"] >= 0.45
+    assert "shadow_implementation.file.reuse_edge=false" in candidate["facts"]
+
+
+def test_shadow_implementation_file_dry_run_ignores_reusing_module(tmp_path) -> None:
+    _write_file_shadow_policy_modules(tmp_path, import_existing=True)
+
+    result = shadow_implementation_file_dry_run(tmp_path)
+
+    assert result["candidate_total"] == 2
+    assert result["pair_total"] == 0
+    assert result["candidates"] == []
+
+
+def test_shadow_implementation_file_dry_run_excludes_report_view_split_modules(tmp_path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "report_views.py").write_text(_module_text().replace("policy", "report"), encoding="utf-8")
+    (source / "report_sections.py").write_text(_module_text().replace("policy", "report"), encoding="utf-8")
+
+    result = shadow_implementation_file_dry_run(tmp_path)
+
+    assert result["candidate_total"] == 0
+    assert result["pair_total"] == 0
+    assert result["by_exclusion"]["split_module_name"] == 2
+
+
+def test_shadow_implementation_file_dry_run_ignores_small_modules(tmp_path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "policy_a.py").write_text("def load_policy_rules(path):\n    return []\n", encoding="utf-8")
+    (source / "policy_b.py").write_text("def load_policy_rules(path):\n    return []\n", encoding="utf-8")
+
+    result = shadow_implementation_file_dry_run(tmp_path)
+
+    assert result["candidate_total"] == 0
+    assert result["pair_total"] == 0
+    assert result["by_exclusion"]["too_small"] == 2
 
 
 def test_shadow_implementation_concerns_detect_policy_like_classes(tmp_path) -> None:
@@ -620,18 +760,29 @@ def test_code_review_full_includes_class_shadow_signal_and_concern(tmp_path, mon
     assert signal["metrics"]["high_confidence_total"] >= 1
 
 
-def test_code_review_diff_and_since_do_not_include_shadow_signal(tmp_path, monkeypatch) -> None:
+def test_code_review_outputs_do_not_include_file_level_shadow_dry_run(tmp_path, monkeypatch) -> None:
     _write_shadow_policy_project(tmp_path)
     _write_shadow_policy_classes(tmp_path)
-    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_report())
+    report = {
+        **_empty_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/policy/generated_policy.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
 
+    full_result = code_review.run_code_review_full(tmp_path)
     diff_result = code_review.run_code_review_diff(tmp_path)
     since_result = code_review.run_code_review_since(tmp_path, ref="main")
 
-    assert all(item["kind"] != "shadow-implementation" for item in diff_result["concerns"])
-    assert all(item["kind"] != "shadow-implementation" for item in since_result["concerns"])
-    assert all(item["kind"] != "shadow_implementation" for item in diff_result["signals"])
-    assert all(item["kind"] != "shadow_implementation" for item in since_result["signals"])
+    for result in (full_result, diff_result, since_result):
+        shadow_concerns = [item for item in result["concerns"] if item["kind"] == "shadow-implementation"]
+        assert shadow_concerns
+        assert all(item["location"]["symbol_kind"] != "module" for item in shadow_concerns)
+        payload = json.dumps(result, sort_keys=True)
+        assert "shadow_implementation.file." not in payload
 
 
 def test_code_review_diff_includes_changed_file_scoped_shadow_signal(tmp_path, monkeypatch) -> None:

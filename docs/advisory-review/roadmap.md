@@ -84,6 +84,7 @@ Done:
 - `code-review` JSON 主体体量 guard 已落地：记录 `summary.payload_bytes`，并对过长展示字段写入 truncation metadata，见 [decisions/028-code-review-json-payload-budget.md](decisions/028-code-review-json-payload-budget.md)。
 - `code-review` 完整 generated concerns artifact 已落地：成功路径写 `.architec/code-review-concerns.json`，见 [decisions/029-code-review-full-concerns-artifact.md](decisions/029-code-review-full-concerns-artifact.md)。
 - `fix-advice --review <review.json>` 已成为推荐入口，`--for` 保留为兼容别名，见 [decisions/030-fix-advice-review-flag.md](decisions/030-fix-advice-review-flag.md)。
+- `shadow_implementation` file-level 已进入 internal dry-run calibration：当前只输出 helper metrics，不接入 CodeReviewResult，见 [decisions/031-shadow-implementation-file-dry-run.md](decisions/031-shadow-implementation-file-dry-run.md)。
 
 In Progress:
 
@@ -91,12 +92,12 @@ In Progress:
 
 Next:
 
-- 从 Deferred 中选择下一阶段深化项；优先考虑高价值、低误报的核心审查检测能力。
+- 使用 `shadow_implementation` file-level dry-run helper 采样真实项目噪声，再决定是否正式接入 CodeReviewResult。
 
 Deferred:
 
 - 无发现场景文案进一步标准化。
-- `shadow_implementation` file-level 检测。
+- `shadow_implementation` file-level 正式接入 CodeReviewResult。
 - 多语言支持。
 - 自建运行时信号采集。
 - 用户自定义脚本化规则平台。
@@ -178,7 +179,7 @@ Deferred:
 深化线：
 
 - 实现第一批 AI 特有信号中的 `near_duplicate`。
-- `shadow_implementation` v1 已作为封版后深化项落地；增量范围控制和专用 fix-advice 已补齐，后续再评估 file-level 检测。
+- `shadow_implementation` v1 已作为封版后深化项落地；增量范围控制和专用 fix-advice 已补齐，file-level 当前仅做 dry-run calibration。
 - `near_duplicate` 已扩展到 diff/since changed-file scope，仍保持 exact normalized AST fingerprint。
 
 验收：

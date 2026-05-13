@@ -63,6 +63,8 @@ archi code-review --since <ref> .
 
 `near_duplicate` 和 `shadow_implementation` 在增量模式中只报告 `location.path` 位于 changed files 的 concern，`references[]` 可以指向未变更的 existing/reference implementation。`near_duplicate` 不因为 reference path changed 而报告历史旧账。
 
+File/module-level `shadow_implementation` 目前只保留为 internal dry-run calibration helper。它不会被 `code-review` 调用，不会产生 `signals[]`，也不会产生 `location.symbol_kind: "module"` 的 `shadow-implementation` concern。
+
 ## 增量审查
 
 增量审查语境：

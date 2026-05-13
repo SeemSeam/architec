@@ -57,7 +57,7 @@
 }
 ```
 
-例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 使用 `role: "reference"` 指向 reference implementation。`shadow-implementation` concern 的 `location` 指向疑似 shadow implementation，`references[]` 使用 `role: "existing_implementation"` 指向可对照的已有实现；函数级 concern 使用 `location.symbol_kind: "function"`，类级 concern 使用 `location.symbol_kind: "class"`。`fix-advice` 按 role 区分 duplication reference 和 shadow existing implementation，不把两者混用。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
+例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 使用 `role: "reference"` 指向 reference implementation。`shadow-implementation` concern 的 `location` 指向疑似 shadow implementation，`references[]` 使用 `role: "existing_implementation"` 指向可对照的已有实现；函数级 concern 使用 `location.symbol_kind: "function"`，类级 concern 使用 `location.symbol_kind: "class"`。file/module-level shadow implementation 目前只做 internal dry-run metrics，不进入 ReviewConcern，也不新增 `symbol_kind: "module"` 的 shadow concern。`fix-advice` 按 role 区分 duplication reference 和 shadow existing implementation，不把两者混用。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
 
 在 diff/since scoped review 中，`shadow-implementation` 和 `near_duplicate` 的 `location.path` 必须位于 changed files；`references[]` 可以指向未变更文件。对应 signal metrics 使用 `scoped_to_changed_files`、`changed_file_total` 和 `candidate_total_before_scope` 标识它不是全仓总量。`near_duplicate` 的 scope 条件只看 primary `location.path`，不因为 reference path changed 而报告历史旧账。
 

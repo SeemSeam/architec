@@ -93,9 +93,27 @@ ADAPTER_TOKENS = {
     "shim",
     "wrapper",
 }
+MODULE_SPLIT_TOKENS = {
+    "helper",
+    "helpers",
+    "payload",
+    "registry",
+    "runtime",
+    "section",
+    "sections",
+    "support",
+    "view",
+    "views",
+}
 
 MIN_NODE_COUNT = 45
 MIN_CLASS_NODE_COUNT = 90
+MIN_MODULE_NODE_COUNT = 220
+MIN_MODULE_PUBLIC_SYMBOLS = 5
+MIN_MODULE_API_OVERLAP = 0.55
+MIN_MODULE_SHAPE_SIMILARITY = 0.65
+MIN_MODULE_AST_SIMILARITY = 0.88
+MIN_MODULE_IMPORT_SIMILARITY = 0.45
 MIN_NAME_OVERLAP = 0.45
 MIN_SIGNATURE_SIMILARITY = 0.6
 MIN_CLASS_API_SIMILARITY = 0.6
@@ -136,6 +154,21 @@ class _ShadowMatch:
     name_overlap: float
     signature_similarity: float
     ast_similarity: float
+
+
+@dataclass(frozen=True)
+class _ModuleCandidate:
+    path: str
+    node_count: int
+    public_symbol_count: int
+    role_tokens: frozenset[str]
+    public_api_tokens: frozenset[str]
+    symbol_shape_tokens: frozenset[str]
+    feature_vector: dict[str, float]
+    imports: frozenset[str]
+    names: frozenset[str]
+    calls: frozenset[str]
+    attrs: frozenset[str]
 
 
 class _NormalizeAst(ast.NodeTransformer):
@@ -495,6 +528,75 @@ def _collect_classes(path: Path, root: Path) -> list[_FunctionCandidate]:
     return found
 
 
+def _public_top_level_symbols(tree: ast.Module) -> tuple[list[ast.AST], frozenset[str], frozenset[str]]:
+    nodes: list[ast.AST] = []
+    api_tokens: set[str] = set()
+    shape_tokens: set[str] = set()
+    for child in tree.body:
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            name = child.name
+            if name.startswith("_"):
+                continue
+            nodes.append(child)
+            tokens = _meaningful_tokens(name)
+            api_tokens.update(tokens)
+            kind = "class" if isinstance(child, ast.ClassDef) else "function"
+            shape_tokens.add(kind)
+            shape_tokens.update(f"{kind}:{token}" for token in tokens)
+    return nodes, frozenset(api_tokens), frozenset(shape_tokens)
+
+
+def _module_candidate(path: Path, root: Path) -> tuple[_ModuleCandidate | None, str]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return None, "parse_error"
+    relpath = path.relative_to(root).as_posix()
+    nodes, public_api_tokens, symbol_shape_tokens = _public_top_level_symbols(tree)
+    public_symbol_count = len(nodes)
+    node_count = _node_count(tree)
+    if node_count < MIN_MODULE_NODE_COUNT and public_symbol_count < MIN_MODULE_PUBLIC_SYMBOLS:
+        return None, "too_small"
+    path_tokens = _meaningful_tokens(relpath)
+    all_tokens = set(path_tokens) | set(public_api_tokens)
+    if _is_adapter_like(all_tokens):
+        return None, "adapter_like"
+    if all_tokens & MODULE_SPLIT_TOKENS:
+        return None, "split_module_name"
+    roles = _role_tokens(all_tokens)
+    if not roles:
+        return None, "no_role"
+    names, calls, attrs = _references(tree)
+    return (
+        _ModuleCandidate(
+            path=relpath,
+            node_count=node_count,
+            public_symbol_count=public_symbol_count,
+            role_tokens=roles,
+            public_api_tokens=public_api_tokens,
+            symbol_shape_tokens=symbol_shape_tokens,
+            feature_vector=_feature_vector(tree),
+            imports=_module_imports(tree),
+            names=names,
+            calls=calls,
+            attrs=attrs,
+        ),
+        "",
+    )
+
+
+def _collect_module_candidates(root: Path) -> tuple[list[_ModuleCandidate], dict[str, int]]:
+    candidates: list[_ModuleCandidate] = []
+    by_exclusion: dict[str, int] = {}
+    for path in _iter_python_files(root):
+        candidate, reason = _module_candidate(path, root)
+        if candidate is None:
+            by_exclusion[reason] = by_exclusion.get(reason, 0) + 1
+            continue
+        candidates.append(candidate)
+    return candidates, by_exclusion
+
+
 def _has_reuse_edge(source: _FunctionCandidate, target: _FunctionCandidate) -> bool:
     target_leaf = target.symbol.rsplit(".", 1)[-1].lower()
     target_tokens = {
@@ -504,6 +606,69 @@ def _has_reuse_edge(source: _FunctionCandidate, target: _FunctionCandidate) -> b
     }
     references = set(source.calls) | set(source.attrs) | set(source.names) | set(source.imports)
     return bool(target_tokens & references)
+
+
+def _module_has_reuse_edge(source: _ModuleCandidate, target: _ModuleCandidate) -> bool:
+    target_stem = Path(target.path).stem.lower()
+    target_tokens = set(_tokens(target_stem))
+    references = set(source.imports) | set(source.names) | set(source.calls) | set(source.attrs)
+    return bool({target_stem, *target_tokens} & references)
+
+
+def _module_shape_similarity(left: _ModuleCandidate, right: _ModuleCandidate) -> float:
+    largest = max(left.public_symbol_count, right.public_symbol_count, 1)
+    count_similarity = 1.0 - (abs(left.public_symbol_count - right.public_symbol_count) / largest)
+    shape_similarity = _jaccard(left.symbol_shape_tokens, right.symbol_shape_tokens)
+    return (0.7 * shape_similarity) + (0.3 * count_similarity)
+
+
+def _module_pair_summary(left: _ModuleCandidate, right: _ModuleCandidate) -> dict[str, Any] | None:
+    if left.path == right.path:
+        return None
+    common_roles = left.role_tokens & right.role_tokens
+    if not common_roles:
+        return None
+    api_overlap = _jaccard(left.public_api_tokens, right.public_api_tokens)
+    if api_overlap < MIN_MODULE_API_OVERLAP:
+        return None
+    shape_similarity = _module_shape_similarity(left, right)
+    if shape_similarity < MIN_MODULE_SHAPE_SIMILARITY:
+        return None
+    ast_similarity = _cosine(left.feature_vector, right.feature_vector)
+    if ast_similarity < MIN_MODULE_AST_SIMILARITY:
+        return None
+    import_similarity = _jaccard(left.imports, right.imports)
+    if import_similarity < MIN_MODULE_IMPORT_SIMILARITY:
+        return None
+    if _module_has_reuse_edge(left, right) or _module_has_reuse_edge(right, left):
+        return None
+    role = _primary_role(common_roles)
+    return {
+        "left": {
+            "path": left.path,
+            "node_count": left.node_count,
+            "public_symbol_count": left.public_symbol_count,
+        },
+        "right": {
+            "path": right.path,
+            "node_count": right.node_count,
+            "public_symbol_count": right.public_symbol_count,
+        },
+        "role": role,
+        "metrics": {
+            "public_api_overlap": round(api_overlap, 3),
+            "symbol_shape_similarity": round(shape_similarity, 3),
+            "ast_similarity": round(ast_similarity, 3),
+            "import_similarity": round(import_similarity, 3),
+        },
+        "reason": "module-level shadow candidate for dry-run calibration",
+        "facts": [
+            f"shadow_implementation.file.role={role}",
+            "shadow_implementation.file.reuse_edge=false",
+            f"shadow_implementation.file.node_counts={left.node_count}/{right.node_count}",
+            f"shadow_implementation.file.public_symbol_counts={left.public_symbol_count}/{right.public_symbol_count}",
+        ],
+    }
 
 
 def _primary_role(roles: set[str] | frozenset[str]) -> str:
@@ -809,4 +974,43 @@ def shadow_implementation_concerns(
     )
 
 
-__all__ = ["shadow_implementation_concerns", "shadow_implementation_scan"]
+def shadow_implementation_file_dry_run(
+    project_root: str | Path,
+    *,
+    limit: int = 20,
+) -> dict[str, Any]:
+    root = Path(project_root)
+    candidates, by_exclusion = _collect_module_candidates(root)
+    pairs: list[dict[str, Any]] = []
+    for left, right in combinations(sorted(candidates, key=lambda item: item.path), 2):
+        summary = _module_pair_summary(left, right)
+        if summary is not None:
+            pairs.append(summary)
+    sorted_pairs = sorted(
+        pairs,
+        key=lambda item: (
+            -float(
+                item.get("metrics", {}).get("ast_similarity", 0.0)
+                if isinstance(item.get("metrics"), dict)
+                else 0.0
+            ),
+            str(item.get("left", {}).get("path", "") if isinstance(item.get("left"), dict) else ""),
+            str(item.get("right", {}).get("path", "") if isinstance(item.get("right"), dict) else ""),
+        ),
+    )
+    return {
+        "mode": "dry_run",
+        "candidate_total": len(candidates),
+        "pair_total": len(pairs),
+        "reported_total": min(len(pairs), limit),
+        "candidates": sorted_pairs[:limit],
+        "excluded_total": sum(by_exclusion.values()),
+        "by_exclusion": dict(sorted(by_exclusion.items())),
+    }
+
+
+__all__ = [
+    "shadow_implementation_concerns",
+    "shadow_implementation_file_dry_run",
+    "shadow_implementation_scan",
+]

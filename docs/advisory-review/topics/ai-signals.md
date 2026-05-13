@@ -11,7 +11,7 @@
 
 `near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：检测 Python 函数/方法的规范化 AST 重复，优先低误报。diff/since changed-file scope 见 [decisions/026-near-duplicate-diff-since-scope.md](../decisions/026-near-duplicate-diff-since-scope.md)。
 
-`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。当前检测 Python 函数和类级跨文件相似实现，优先高精度。
+`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。file-level dry-run calibration 见 [decisions/031-shadow-implementation-file-dry-run.md](../decisions/031-shadow-implementation-file-dry-run.md)。当前公开检测 Python 函数和类级跨文件相似实现，优先高精度。
 
 `shadow_implementation` v1 不是：
 
@@ -19,7 +19,7 @@
 - 合法 adapter、wrapper、facade 或兼容入口。
 - 测试 fixture、生成代码、vendor 代码或 build artifact 检查。
 - 全仓历史债务信号；`--diff` / `--since` 只报告 location 位于 changed files 的 concern。
-- 文件级模糊相似检查；当前只覆盖函数和类。
+- 文件级公开 concern；当前 CodeReviewResult 只覆盖函数和类。
 
 误报控制：
 
@@ -30,6 +30,8 @@
 - 需要共享角色 token、名称 token overlap、签名相似度、AST feature cosine 和无直接复用边共同满足阈值。
 - 输出 top candidates，并在 concern 中保留 `existing_implementation` 结构化 reference。
 - 增量模式中 `references[]` 可以指向未变更文件，但 `location.path` 必须属于 changed files。
+
+File/module-level shadow implementation 目前只提供 internal dry-run helper，用于观察候选噪声。dry-run 会比较模块 public API tokens、top-level symbol shape、AST feature vector、import tokens 和 role tokens，并排除 adapter/wrapper/facade/compat/shim、tests/fixtures/generated/vendor/build/dist/venv 以及 helper/support/views/sections/runtime/payload/registry 等常见合法拆分模块。dry-run 不写入 `signals[]` 或 `concerns[]`，也不新增 `symbol_kind: "module"` 的公开 concern。
 
 优先原因：
 

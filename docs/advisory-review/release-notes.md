@@ -181,6 +181,8 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 `code-review --diff` and `code-review --since <ref>` now also run exact `near_duplicate` detection in changed-file-scoped mode. They report duplication only when the primary `location.path` is changed; `references[]` may point at unchanged existing code.
 
+File/module-level `shadow_implementation` remains dry-run calibration only. The internal helper can summarize module candidate pairs for noise analysis, but `code-review` does not expose module-level shadow signals or concerns.
+
 `CodeReviewResult.concerns[]` now uses portfolio ranking for the displayed top concerns. Severity level remains the first ordering boundary, and same-level results prefer a mix of concern kinds before filling remaining slots with the same kind. `summary.concern_total` remains the pre-display total.
 
 CodeReviewResult now records `summary.payload_bytes` as a compact main-payload estimate and applies a conservative display guard to oversized concern evidence, references, blast radius, and one-level signal metric maps. Truncation metadata is recorded in `artifacts.payload_truncation`.
