@@ -15,25 +15,26 @@ Given:
 
 Macro-first guidance:
 - Prioritize findings 1-4 and 6 above convention-only issues.
-- Do not block solely for style/convention when boundary/safety are sound.
+- Do not turn style or convention observations into merge decisions.
 
-## Decision Policy
-- `approve`: no critical finding and only minor warnings.
-- `needs_changes`: at least one warning with clear remediation.
-- `block`: critical boundary/safety/regression issue.
+## Advisory Policy
+- Report concrete architecture concerns with file-level evidence when possible.
+- Use advisory levels such as `high-concern`, `caution`, or `info`.
+- Do not decide whether the change should merge.
+- Do not generate patches or automatic repair steps.
 
 Return JSON:
 {
   "summary": "string",
-  "decision": "approve|needs_changes|block",
-  "findings": [
+  "concerns": [
     {
-      "severity": "critical|warning|info",
+      "level": "high-concern|caution|info",
       "path": "string",
       "line": 0,
       "issue": "string",
-      "recommendation": "string"
+      "evidence": ["string"],
+      "next_steps_hint": "string"
     }
   ],
-  "follow_up_tests": ["string"]
+  "follow_up_checks": ["string"]
 }

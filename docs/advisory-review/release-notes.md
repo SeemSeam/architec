@@ -1,6 +1,7 @@
 # Advisory Review Migration Notes
 
 Date: 2026-05-12
+Updated: 2026-05-13
 
 ## Summary
 
@@ -21,7 +22,7 @@ These remain supported aliases, but their underlying result is now a CodeReviewR
 - `archi --diff .` maps to `archi code-review --diff .`.
 - `archi --diff --base <base> --head <head> .` maps to diff code review with that range.
 
-The human stdout summary still uses the existing top-level summary printer, so it may be shorter than the previous analysis summary.
+The human stdout summary now highlights CodeReviewResult concern counts, top concerns, and signal summaries while keeping the JSON output shape unchanged.
 
 ## Output Shape Change
 
@@ -44,6 +45,21 @@ The CodeReviewResult shape includes:
 ```
 
 Consumers that previously parsed legacy fields such as `meta`, `recommendations`, `cleanup`, `archive_candidates`, `change_analysis`, or `feature_analysis` from top-level `--out` should migrate to `concerns`, `signals`, `evidence`, and `artifacts`.
+
+Generated code-review `concern_id` values now use fact-based deterministic ids such as `code-review:cleanup:<hash>` instead of presentation positions. Older saved review JSON remains valid input to `fix-advice`.
+
+## Final Breaking Changes Checklist
+
+- `--goal` has been removed from the top-level parser. Use `archi plan-review <plan.md>`.
+- Legacy command parsers have been removed: `archi cleanup`, `archi autofix`, `archi baseline`, and `archi gate`.
+- Legacy public APIs have been retired:
+  - cleanup subpackage wrappers: `architec.cleanup.run_cleanup`, `architec.cleanup.run_autofix`;
+  - root and subpackage wrappers: `architec.run_gate`, `architec.run_baseline`, `architec.gate.run_gate`, `architec.baseline.run_baseline`.
+- Top-level `archi .` now returns code-review-shaped output.
+- Top-level `archi --diff .` now returns diff CodeReviewResult output.
+- Top-level `--out <path>` writes CodeReviewResult JSON for full and diff review aliases.
+
+Migration targets remain advisory-only: `plan-review`, `code-review`, `fix-advice`, and `status`. They report observations and suggestions; they do not plan work, make merge decisions, or apply repairs.
 
 ## Goal Parser Removal
 
@@ -144,6 +160,18 @@ Successful code-review runs append a compact ReviewEvent to `.architec/review-ev
 `archi status --trend` and `archi status --snapshot` are advisory project-health modes. Existing `archi status` and `archi status --json` remain auth/session status commands.
 
 `fix-advice` reads a saved review JSON and returns independent repair-direction suggestions for its concerns. It does not output executable changes and does not provide an apply mode.
+
+## Status And Review Events
+
+Successful code-review runs write local review events on a fail-open basis. If event writing hits an `OSError`, the review still returns and records `artifacts.review_event_error`.
+
+`status --trend` reads the latest 100 review events. Its `scores` field comes from the most recent full code-review event; diff and since events still contribute to trend counts and weakening component observations. `fix-advice` does not write review events.
+
+## Final Advisory Checks
+
+Diff and since code-review now use the same lightweight base LLM preflight as full code-review; `architect_component_scoring` is no longer a required preflight task for advisory diff feedback.
+
+`code-review --since <ref>` returns a structured CodeReviewResult degradation when the git ref or range cannot be resolved. It does not fall back to full review or unrelated working-tree diff.
 
 ## Advisory-Only Boundary
 

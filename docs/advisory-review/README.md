@@ -20,6 +20,11 @@
 - cleanup 子包 wrapper API `run_cleanup` / `run_autofix` 已退役。见 [014-cleanup-subpackage-api-retire.md](decisions/014-cleanup-subpackage-api-retire.md)。
 - root legacy public API `architec.run_gate` / `architec.run_baseline` 已退役。见 [015-root-legacy-public-api-retire.md](decisions/015-root-legacy-public-api-retire.md)。
 - legacy parser stubs 和 `--goal` 已最终移除。见 [016-legacy-parser-removal.md](decisions/016-legacy-parser-removal.md)。
+- duplication concern 使用可选结构化 reference evidence，`fix-advice` 为 duplication 输出专用建议。见 [017-duplication-advice-reference-evidence.md](decisions/017-duplication-advice-reference-evidence.md)。
+- code-review concern id 使用基于事实的稳定标识，不表达排序位置。见 [018-concern-id-stability.md](decisions/018-concern-id-stability.md)。
+- status trend 使用最近 100 条 review events，scores 来自最近 full code-review event；`fix-advice` 不写 event。见 [019-status-event-semantics.md](decisions/019-status-event-semantics.md)。
+- advisory diff/since code-review 使用轻量 LLM preflight，不再要求 `architect_component_scoring`。见 [020-diff-preflight-policy.md](decisions/020-diff-preflight-policy.md)。
+- `code-review --since <ref>` 对不可解析 range 返回结构化 CodeReviewResult 降级对象。见 [021-since-range-error-semantics.md](decisions/021-since-range-error-semantics.md)。
 
 ## 目录
 
@@ -32,7 +37,7 @@
 | [release-notes.md](release-notes.md) | advisory-review 迁移发布说明 |
 | [roadmap.md](roadmap.md) | 4-6 周落地路线、主线与深化线 |
 | [risks.md](risks.md) | 主要风险和缓解策略 |
-| [open-questions.md](open-questions.md) | 未决项 |
+| [open-questions.md](open-questions.md) | 封版时未决项状态 |
 
 细则文件放在 `topics/`：
 
@@ -77,4 +82,4 @@ archi status --snapshot
 
 ## 状态
 
-active · updated 2026-05-12
+active · updated 2026-05-13

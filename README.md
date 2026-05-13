@@ -82,6 +82,8 @@ Runtime config lookup now prefers:
 
 Concrete model names are owned by `llmgateway`. `architec` only decides which
 tasks use the `strong` or `weak` tier.
+`architect_component_scoring` may remain configured for runtime scoring, but
+advisory diff/since preflight does not require it.
 
 Validate end-to-end from a project that already has Hippo inputs:
 
@@ -190,6 +192,13 @@ archi code-review --since main .
 ```
 
 `archi .` and `archi --diff .` are top-level aliases for code-review output. When `--out <path>` is used with those aliases, the JSON shape is CodeReviewResult rather than the legacy analysis result.
+
+Diff and since reviews use the same base LLM preflight as full review. If a
+`code-review --since <ref>` range cannot be resolved, the command returns a
+structured CodeReviewResult explaining the unresolved range instead of falling
+back to a full review.
+
+Generated `concern_id` values in current code-review output are fact-based identifiers, not display positions. `fix-advice` reports a CLI error for missing, invalid, or non-object review JSON; a valid review with no concerns still produces an empty suggestions list.
 
 Plan review:
 

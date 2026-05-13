@@ -1,5 +1,7 @@
 # Architec 持续结构净化最终方案
 
+> Historical / archived: 本文记录 advisory-review 迁移前的 cleanup、autofix、baseline、gate 设计与验收背景，不代表当前 CLI。当前公开入口是 `archi code-review --full .`、`archi code-review --diff .`、`archi fix-advice --for <review.json>`、`archi status --snapshot` 和 `archi plan-review <plan.md>`；legacy command parsers 和 wrapper public APIs 已退役。
+
 本文档是 `archi + hippo` 持续结构净化能力线的最终收敛版本。
 
 目标不是继续扩写一个抽象概念文档，而是把已经确认的设计决策、职责边界、数据契约和详细实施计划固定下来，作为后续开发的正式依据。
@@ -117,7 +119,7 @@
 
 ## 4. 当前已落地内容
 
-下列能力已完成并进入当前代码：
+下列能力曾在 progressive cleanup 阶段完成，并作为当前 advisory-review 迁移的历史背景：
 
 - `architect-metrics.json` 写入 `bundle_fingerprint`
 - `archi` 可以识别 stale metrics

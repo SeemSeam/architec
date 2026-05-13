@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
-from architec.support.io_utils import read_json
+
+class FixAdviceInputError(RuntimeError):
+    """Raised when fix-advice cannot read a usable review JSON object."""
 
 
 def _dict(value: object) -> dict[str, Any]:
@@ -61,11 +64,113 @@ def _options_for_kind(kind: str, path: str) -> list[str]:
     ]
 
 
+def _reference_from_structured(concern: dict[str, Any]) -> dict[str, Any]:
+    for item in _list(concern.get("references")):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("role", "") or "") not in {"", "reference"}:
+            continue
+        path = str(item.get("path", "") or "").strip()
+        if path:
+            return {
+                "path": path,
+                "line": int(item.get("line", 0) or 0),
+                "symbol": str(item.get("symbol", "") or "").strip(),
+                "symbol_kind": str(item.get("symbol_kind", "") or "").strip(),
+            }
+    return {}
+
+
+def _reference_from_evidence(evidence: list[str]) -> dict[str, Any]:
+    prefix = "near_duplicate.reference="
+    for item in evidence:
+        if not item.startswith(prefix):
+            continue
+        raw = item[len(prefix):]
+        parts = raw.split(":", 2)
+        if not parts or not parts[0].strip():
+            continue
+        line = 0
+        if len(parts) >= 2:
+            try:
+                line = int(parts[1])
+            except ValueError:
+                line = 0
+        return {
+            "path": parts[0].strip(),
+            "line": line,
+            "symbol": parts[2].strip() if len(parts) >= 3 else "",
+            "symbol_kind": "function",
+        }
+    return {}
+
+
+def _format_location(location: dict[str, Any]) -> str:
+    path = str(location.get("path", "") or "").strip()
+    symbol = str(location.get("symbol", "") or "").strip()
+    line = int(location.get("line", 0) or 0)
+    rendered = path or "this location"
+    if line:
+        rendered = f"{rendered}:{line}"
+    if symbol:
+        rendered = f"{rendered}:{symbol}"
+    return rendered
+
+
+def _duplication_suggestion(
+    concern: dict[str, Any],
+    *,
+    concern_id: str,
+    path: str,
+    evidence: list[str],
+) -> dict[str, Any]:
+    location = _dict(concern.get("location"))
+    duplicate = _format_location(location)
+    reference = _reference_from_structured(concern) or _reference_from_evidence(evidence)
+    if not reference:
+        return {
+            "target": path,
+            "concern": concern_id,
+            "options": [
+                f"Review the near-duplicate implementation at {duplicate}.",
+                "Identify the matching implementation before choosing reuse, extraction, or intentional divergence.",
+            ],
+            "tradeoffs": ["Evidence does not identify a reference implementation, so advice stays generic."],
+            "risks": ["Merging duplicated code without a reference can preserve the wrong behavior."],
+        }
+
+    reference_text = _format_location(reference)
+    return {
+        "target": path,
+        "concern": concern_id,
+        "options": [
+            f"Compare duplicate {duplicate} with reference {reference_text}.",
+            f"Consider routing the duplicate through the reference implementation at {reference_text} if behavior is intentionally shared.",
+            "If the two implementations should diverge, document the difference near the duplicate or in its caller-facing contract.",
+        ],
+        "tradeoffs": [
+            "Reusing the reference can reduce drift but may couple callers to one implementation boundary.",
+            "Keeping both implementations can preserve local clarity when their behavior is expected to diverge.",
+        ],
+        "risks": [
+            "Normalized AST similarity does not prove semantic equivalence.",
+            "One implementation may contain a local bug or behavior that should not be copied.",
+        ],
+    }
+
+
 def _suggestion(concern: dict[str, Any]) -> dict[str, Any]:
     concern_id = str(concern.get("concern_id", "") or "")
     kind = str(concern.get("kind", "") or "unknown")
     path = _location_path(concern)
     evidence = [str(item) for item in _list(concern.get("evidence"))]
+    if kind == "duplication":
+        return _duplication_suggestion(
+            concern,
+            concern_id=concern_id,
+            path=path,
+            evidence=evidence,
+        )
     if not evidence:
         return {
             "target": path,
@@ -130,6 +235,22 @@ def build_fix_advice(
     }
 
 
+def _read_review_json(path: Path) -> dict[str, Any]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FixAdviceInputError(f"Review JSON not found: {path}") from exc
+    except OSError as exc:
+        raise FixAdviceInputError(f"Unable to read review JSON: {path}: {exc}") from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise FixAdviceInputError(f"Invalid review JSON: {path}: {exc.msg}") from exc
+    if not isinstance(data, dict):
+        raise FixAdviceInputError(f"Review JSON must be an object: {path}")
+    return data
+
+
 def run_fix_advice(
     review_path: str | Path,
     *,
@@ -138,9 +259,9 @@ def run_fix_advice(
     concern_id: str = "",
 ) -> dict[str, Any]:
     path = Path(review_path)
-    review = read_json(path, {})
+    review = _read_review_json(path)
     return build_fix_advice(
-        _dict(review),
+        review,
         source_review=str(path),
         focus_file=focus_file,
         focus_kind=focus_kind,
@@ -148,4 +269,4 @@ def run_fix_advice(
     )
 
 
-__all__ = ["build_fix_advice", "run_fix_advice"]
+__all__ = ["FixAdviceInputError", "build_fix_advice", "run_fix_advice"]

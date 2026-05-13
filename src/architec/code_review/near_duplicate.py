@@ -95,6 +95,27 @@ def _fingerprint(node: ast.AST) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
+def _stable_concern_id(
+    duplicate: _FunctionFingerprint,
+    reference: _FunctionFingerprint,
+    fingerprint: str,
+) -> str:
+    payload = "|".join(
+        [
+            "duplication",
+            duplicate.path,
+            str(duplicate.line),
+            duplicate.symbol,
+            reference.path,
+            str(reference.line),
+            reference.symbol,
+            fingerprint,
+        ]
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+    return f"code-review:duplication:{digest}"
+
+
 def _collect_functions(path: Path, root: Path) -> list[_FunctionFingerprint]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -142,7 +163,7 @@ def near_duplicate_concerns(project_root: str | Path, *, limit: int = 20) -> lis
         for duplicate in sorted(items, key=lambda item: (item.path, item.line, item.symbol))[1:]:
             concerns.append(
                 {
-                    "concern_id": f"code-review:near-duplicate:{len(concerns) + 1}",
+                    "concern_id": _stable_concern_id(duplicate, reference, fingerprint),
                     "kind": "duplication",
                     "level": "caution",
                     "confidence": 0.9,
@@ -157,6 +178,15 @@ def near_duplicate_concerns(project_root: str | Path, *, limit: int = 20) -> lis
                         f"near_duplicate.fingerprint={fingerprint}",
                         f"near_duplicate.reference={reference.path}:{reference.line}:{reference.symbol}",
                         f"near_duplicate.node_count={duplicate.node_count}",
+                    ],
+                    "references": [
+                        {
+                            "role": "reference",
+                            "path": reference.path,
+                            "line": reference.line,
+                            "symbol": reference.symbol,
+                            "symbol_kind": "function",
+                        }
                     ],
                     "blast_radius": [duplicate.path, reference.path],
                     "next_steps_hint": "Review whether one implementation can reuse or call the other.",

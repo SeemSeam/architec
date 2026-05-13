@@ -10,6 +10,7 @@ from architec.events.public import read_review_events
 
 
 SNAPSHOT_FILE = "status-snapshot.json"
+TREND_EVENT_LIMIT = 100
 
 
 def _dict(value: object) -> dict[str, Any]:
@@ -24,8 +25,8 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _event_counts(events: list[dict[str, Any]]) -> dict[str, int]:
-    counts = Counter(str(event.get("review_type", "") or "unknown") for event in events)
+def _event_counts(events: list[dict[str, Any]], field: str) -> dict[str, int]:
+    counts = Counter(str(event.get(field, "") or "unknown") for event in events)
     return dict(sorted(counts.items()))
 
 
@@ -44,25 +45,43 @@ def _weakening_components(events: list[dict[str, Any]], *, limit: int = 5) -> li
             kinds.setdefault(path, set()).add(str(concern.get("kind", "") or "unknown"))
     return [
         {"path": path, "event_mentions": count, "kinds": sorted(kinds.get(path, set()))}
-        for path, count in counts.most_common(limit)
+        for path, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
     ]
+
+
+def _latest_full_event(events: list[dict[str, Any]]) -> dict[str, Any]:
+    for event in reversed(events):
+        if (
+            str(event.get("mode", "") or "") == "code_review"
+            and str(event.get("review_type", "") or "") == "full"
+        ):
+            return event
+    return {}
 
 
 def _status_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     latest = events[-1] if events else {}
+    score_event = _latest_full_event(events)
     latest_counts = _dict(latest.get("concern_counts"))
     trend = {
         "event_total": len(events),
-        "review_type_counts": _event_counts(events),
+        "event_limit": TREND_EVENT_LIMIT,
+        "mode_counts": _event_counts(events, "mode"),
+        "review_type_counts": _event_counts(events, "review_type"),
         "latest_generated_at": str(latest.get("generated_at", "") or ""),
         "latest_review_type": str(latest.get("review_type", "") or ""),
         "latest_concern_counts": latest_counts,
+        "score_source": "latest_full" if score_event else "none",
+        "score_source_review_type": str(score_event.get("review_type", "") or ""),
+        "score_source_generated_at": str(score_event.get("generated_at", "") or ""),
     }
     if not events:
         trend["summary"] = "No review events recorded yet."
+    elif not score_event:
+        trend["summary"] = "No full code-review event is available for status scores."
     return {
         "mode": "status",
-        "scores": _dict(latest.get("scores")),
+        "scores": _dict(score_event.get("scores")),
         "snapshot": {},
         "trend": trend,
         "weakening_components": _weakening_components(events),
@@ -71,7 +90,7 @@ def _status_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def run_status_trend(project_root: str | Path) -> dict[str, Any]:
-    events = read_review_events(project_root)
+    events = read_review_events(project_root, limit=TREND_EVENT_LIMIT)
     result = _status_from_events(events)
     result["artifacts"]["review_event_jsonl"] = str(Path(project_root) / ".architec" / "review-events.jsonl")
     return result

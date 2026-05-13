@@ -1,11 +1,11 @@
 ---
 name: archi-goal
-description: Run goal-driven architecture analysis with archi. Use when the user wants architecture guidance for a specific objective, feature direction, refactor target, or boundary-stability goal.
+description: Review a concrete architecture objective by converting it to a plan and running archi plan-review. The legacy archi --goal flag has been removed; do not use it.
 ---
 
 # archi-goal
 
-Use `archi --goal` when the user has a concrete architectural objective.
+Legacy note: `archi --goal` has been removed from the CLI parser. When the user has a concrete architectural objective, write or ask for a short Markdown plan and run `archi plan-review <plan.md>`.
 
 ## Trigger
 
@@ -17,7 +17,16 @@ Use `archi --goal` when the user has a concrete architectural objective.
 ## Command
 
 ```bash
-archi --goal "<goal>" .
+archi plan-review <plan.md>
+```
+
+The plan should include intent, expected changes, and dependencies when known.
+
+Pair with code review when broader implementation context matters:
+
+```bash
+archi code-review --full .
+archi code-review --diff .
 ```
 
 ## Read Outputs
@@ -25,24 +34,24 @@ archi --goal "<goal>" .
 - `.architec/architec-summary.md`
 - `.architec/architec-analysis.json`
 
-Focus on `feature_analysis`, `recommendations`, `topology`, and `scores`.
+Focus on `understood_plan`, `concerns`, `suggested_adjustments`, and `plan_fingerprint`.
 
 ## Output Rule
 
 - Restate the goal in architecture terms.
-- Summarize target components, placement advice, and boundary risks.
+- Summarize the understood intent, change areas, dependencies, placement advice, and boundary risks.
 - Do not paste raw JSON.
 
 ## Avoid Misuse
 
-- Do not use this skill without a concrete goal string.
-- Do not treat goal-driven placement advice as a full structural baseline; pair with `archi-full` when broader architecture context matters.
+- Do not use removed `archi --goal`.
+- Do not treat plan-review as a full structural baseline; pair with `archi-full` or `archi code-review --full .` when broader architecture context matters.
 
 ## Example Prompts
 
 - Where should this new feature go architecturally?
-- Use the goal "stabilize service boundaries" and tell me the best placement.
-- Analyze this refactor goal and identify the right target components.
+- Use a plan for "stabilize service boundaries" and tell me the best placement.
+- Analyze this refactor plan and identify the right target components.
 
 ## Standard Output Template
 

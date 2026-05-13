@@ -77,8 +77,12 @@ archi code-review --since <ref> .
 ## 空/降级输出
 
 - 如果增量审查没有发现新增或恶化的问题，输出空 `findings` 和明确摘要：`No new architecture concerns were identified in this diff.`
-- 如果缺少 diff 范围或引用不可解析，输出降级错误对象，不回退到全量审查。
+- 如果 `--since <ref>` 的引用或 range 不可解析，输出结构化 CodeReviewResult 降级对象，不回退到全量审查或无关工作树 diff。
 - 如果关联方案指纹不可读取，只跳过方案一致性观察，保留普通 code-review 输出。
+
+## LLM Preflight
+
+advisory code-review 的 full、diff、since 模式使用同一组基础 LLM preflight checks。diff/since 不额外要求 `architect_component_scoring` preflight，以保持增量反馈轻量；底层分析仍可在运行时复用 component scoring 能力。
 
 ## 排序和边界
 
@@ -91,3 +95,5 @@ concern 排序由影响面、置信度和趋势共同决定。可修复性属于
 `concerns[]` 默认只展示 top concerns。`summary.concern_total` 记录截断前总数，`summary.top_concern_total` 记录本次展示数量，`summary.concern_limit` 记录 top-N 上限。
 
 `signals[]` 只用 `kind`、`summary`、`metrics` 三个通用字段；信号专属数据放进 `metrics`，避免每类 signal 发明不同顶层字段。
+
+`concern_id` 是基于事实生成的引用标识，不代表展示顺序。当前生成格式为 `code-review:<kind>:<hash>`；hash 输入来自 mapper source、primary location、evidence，以及 duplication reference/fingerprint 等事实。

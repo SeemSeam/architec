@@ -26,3 +26,7 @@ This routing step should not introduce `_emit_json` for the top-level alias. It 
 - Human stdout becomes more advisory-only and less planning-oriented, but may lose some legacy detail until the new summary layer is improved.
 - Goal retirement remains an explicit follow-up, not an accidental side effect of routing.
 - Existing subcommands such as cleanup, autofix, baseline, gate, and plan-review are not part of this routing step.
+
+## Follow-Up
+
+2026-05-13: the top-level human summary was restored for CodeReviewResult by rendering concern counts, signals, and top concerns from the advisory output shape. The JSON routing decision is unchanged.

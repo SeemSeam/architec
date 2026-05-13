@@ -22,6 +22,7 @@ Remove the legacy parser stubs and final `--goal` flag:
 - remove `cleanup`, `autofix`, `baseline`, and `gate` command-specific parsers and routing branches;
 - remove the top-level `--goal` parser argument;
 - remove command-level and flag-level soft-cut reject helpers;
+- keep a lightweight exact-token guard for `archi cleanup`, `archi autofix`, `archi baseline`, and `archi gate` so those retired command names are not treated as project paths;
 - keep advisory commands and their output contracts unchanged.
 
 Replacement workflows remain:
@@ -43,6 +44,7 @@ This does not remove:
 
 ## Consequences
 
-- Removed commands and `--goal` now fail through normal parser error behavior rather than targeted migration messages.
+- `--goal` now fails through normal parser error behavior.
+- Retired legacy command tokens return exit code 2 with a short replacement hint before auth, bundle, LLM, or review work starts.
 - CLI code no longer carries soft-cut routing branches for retired commands.
 - User-facing live documentation should describe the commands as unavailable and point to replacement advisory workflows.

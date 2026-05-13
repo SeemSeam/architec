@@ -1,5 +1,7 @@
 # Architec 持续结构净化方案验收记录
 
+> Historical / archived: 本文记录 advisory-review 迁移前的 cleanup、autofix、baseline、gate 真实验收，不代表当前 CLI。当前公开入口是 `archi code-review --full .`、`archi code-review --diff .`、`archi fix-advice --for <review.json>`、`archi status --snapshot` 和 `archi plan-review <plan.md>`；legacy command parsers 和 wrapper public APIs 已退役。
+
 本文档记录 [`docs/progressive-architectural-cleanup.md`](./progressive-architectural-cleanup.md) 当前阶段的正式验收结论、实测命令、关键产物和剩余工作。
 
 ## 1. 验收结论
@@ -13,7 +15,7 @@
 - Phase 2.6 `autofix` 验收通过
 - Phase 2.7 `TTL / owner / expires_at` 验收通过
 
-本次验收确认：
+本次 historical 验收当时确认：
 
 - Hippo `bundle-state` freshness 契约已落地
 - Archi stale auto refresh 已落地并在真实仓库中验证

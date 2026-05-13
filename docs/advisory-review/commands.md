@@ -33,6 +33,8 @@ archi status --snapshot
 
 `status --trend` / `status --snapshot` 是 advisory project status 模式。既有 `archi status --json` 和裸 `archi status` 仍保留为 auth/session 状态查询，兼容策略见 [decisions/011-status-command-coexistence.md](decisions/011-status-command-coexistence.md)。
 
+`code-review --diff` 和 `code-review --since` 使用与 `--full` 相同的基础 LLM preflight，不额外要求 `architect_component_scoring`。当 `code-review --since <ref>` 的引用或 range 不可解析时，输出结构化 CodeReviewResult 降级对象，不回退到 full review 或无关工作树 diff。
+
 ## 规则与约束来源
 
 `plan-review` 和 `code-review` 需要知道架构边界、稳定性约束和禁向依赖。来源分三层：

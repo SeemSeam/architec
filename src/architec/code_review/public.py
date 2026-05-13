@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -36,11 +38,34 @@ def _location(path: str) -> dict[str, Any]:
     }
 
 
+def _stable_concern_id(
+    kind: str,
+    *,
+    source: str,
+    location: dict[str, Any],
+    evidence: list[str],
+) -> str:
+    payload = {
+        "kind": kind,
+        "source": source,
+        "location": {
+            "path": str(location.get("path", "") or ""),
+            "line": int(location.get("line", 0) or 0),
+            "symbol": str(location.get("symbol", "") or ""),
+            "symbol_kind": str(location.get("symbol_kind", "") or ""),
+        },
+        "evidence": sorted(str(item) for item in evidence),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+    return f"code-review:{kind}:{digest}"
+
+
 def _cleanup_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
     cleanup = _dict(report.get("cleanup"))
     candidates = _list(cleanup.get("top_candidates"))
     concerns: list[dict[str, Any]] = []
-    for index, item in enumerate(candidates[:5], start=1):
+    for item in candidates[:5]:
         if not isinstance(item, dict):
             continue
         path = str(item.get("path", "") or "").strip()
@@ -54,13 +79,19 @@ def _cleanup_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
             evidence.insert(0, f"cleanup.kind={kind}")
         if category:
             evidence.insert(0, f"cleanup.category={category}")
+        location = _location(path)
         concerns.append(
             {
-                "concern_id": f"code-review:cleanup:{index}",
+                "concern_id": _stable_concern_id(
+                    "cleanup",
+                    source="cleanup",
+                    location=location,
+                    evidence=evidence,
+                ),
                 "kind": "cleanup",
                 "level": "caution",
                 "confidence": _safe_confidence(item.get("confidence"), 0.5),
-                "location": _location(path),
+                "location": location,
                 "root_cause": f"Cleanup candidate categorized as {category}.",
                 "evidence": evidence,
                 "blast_radius": [path],
@@ -74,7 +105,7 @@ def _archive_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
     archive = _dict(report.get("archive_candidates"))
     candidates = _list(archive.get("top_candidates"))
     concerns: list[dict[str, Any]] = []
-    for index, item in enumerate(candidates[:5], start=1):
+    for item in candidates[:5]:
         if not isinstance(item, dict):
             continue
         path = str(item.get("path", "") or "").strip()
@@ -95,13 +126,19 @@ def _archive_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
         archive_path_hint = str(item.get("archive_path_hint", "") or "").strip()
         if archive_path_hint:
             evidence.append(f"archive.path_hint={archive_path_hint}")
+        location = _location(path)
         concerns.append(
             {
-                "concern_id": f"code-review:archive:{index}",
+                "concern_id": _stable_concern_id(
+                    "cleanup",
+                    source="archive",
+                    location=location,
+                    evidence=evidence,
+                ),
                 "kind": "cleanup",
                 "level": "caution",
                 "confidence": _safe_confidence(item.get("confidence"), 0.5),
-                "location": _location(path),
+                "location": location,
                 "root_cause": "File is present in the current archive candidate set.",
                 "evidence": evidence,
                 "blast_radius": [path],
@@ -113,7 +150,7 @@ def _archive_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _hotspot_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
     concerns: list[dict[str, Any]] = []
-    for index, item in enumerate(_list(report.get("hotspots"))[:8], start=1):
+    for item in _list(report.get("hotspots"))[:8]:
         if not isinstance(item, dict):
             continue
         path = str(item.get("path", "") or "").strip()
@@ -129,13 +166,19 @@ def _hotspot_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
             evidence.append(f"hotspot.component={component}")
         if metric:
             evidence.append(f"hotspot.metric={metric}")
+        location = _location(path)
         concerns.append(
             {
-                "concern_id": f"code-review:hotspot:{index}",
+                "concern_id": _stable_concern_id(
+                    "hotspot",
+                    source="hotspot",
+                    location=location,
+                    evidence=evidence,
+                ),
                 "kind": "hotspot",
                 "level": "caution",
                 "confidence": _safe_confidence(item.get("confidence"), 0.7),
-                "location": _location(path),
+                "location": location,
                 "root_cause": "File appears in the current hotspot set.",
                 "evidence": evidence,
                 "blast_radius": [path],
@@ -169,7 +212,7 @@ def _topology_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
             if not path:
                 continue
             evidence = [*base_evidence, f"topology.root_placement={field}"]
-            concerns.append(_topology_concern(len(concerns) + 1, path, evidence, topology.get("confidence")))
+            concerns.append(_topology_concern(path, evidence, topology.get("confidence")))
 
     migration = _dict(topology.get("migration_plan"))
     for item in _list(migration.get("file_moves"))[:4]:
@@ -179,13 +222,13 @@ def _topology_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
         evidence = [*base_evidence, f"topology.file_move.from={path}"]
         if isinstance(item, dict) and str(item.get("to", "") or "").strip():
             evidence.append(f"topology.file_move.to={str(item.get('to', '') or '').strip()}")
-        concerns.append(_topology_concern(len(concerns) + 1, path, evidence, topology.get("confidence")))
+        concerns.append(_topology_concern(path, evidence, topology.get("confidence")))
     for item in _list(migration.get("review_files"))[:4]:
         path = _path_from_item(item)
         if not path:
             continue
         evidence = [*base_evidence, "topology.migration_plan=review_files"]
-        concerns.append(_topology_concern(len(concerns) + 1, path, evidence, topology.get("confidence")))
+        concerns.append(_topology_concern(path, evidence, topology.get("confidence")))
 
     for group in _list(topology.get("groups"))[:4]:
         if not isinstance(group, dict):
@@ -198,22 +241,27 @@ def _topology_concerns(report: dict[str, Any]) -> list[dict[str, Any]]:
             evidence = [*base_evidence]
             if group_id:
                 evidence.append(f"topology.group_id={group_id}")
-            concerns.append(_topology_concern(len(concerns) + 1, path_text, evidence, topology.get("confidence")))
+            concerns.append(_topology_concern(path_text, evidence, topology.get("confidence")))
     return concerns
 
 
 def _topology_concern(
-    index: int,
     path: str,
     evidence: list[str],
     confidence: object,
 ) -> dict[str, Any]:
+    location = _location(path)
     return {
-        "concern_id": f"code-review:topology:{index}",
+        "concern_id": _stable_concern_id(
+            "boundary",
+            source="topology",
+            location=location,
+            evidence=evidence,
+        ),
         "kind": "boundary",
         "level": "caution",
         "confidence": _safe_confidence(confidence, 0.6),
-        "location": _location(path),
+        "location": location,
         "root_cause": "File is part of the current topology review evidence.",
         "evidence": evidence,
         "blast_radius": [path],
@@ -416,6 +464,8 @@ def _is_since_range_error(exc: Exception) -> bool:
     text = str(exc).lower()
     markers = (
         "bad revision",
+        "fatal:",
+        "git range error",
         "unknown revision",
         "ambiguous argument",
         "invalid revision",

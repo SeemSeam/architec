@@ -27,6 +27,7 @@
   },
   "root_cause": "",
   "evidence": [],
+  "references": [],
   "blast_radius": [],
   "next_steps_hint": ""
 }
@@ -34,13 +35,29 @@
 
 字段说明：
 
+- `concern_id`：concern 的引用标识，不表达排序位置。当前 code-review 生成的 id 使用 `code-review:<kind>:<hash>`，hash 来自 kind、source mapper、primary location、facts 和可用 reference/fingerprint 等事实。旧 review 中没有稳定 hash 格式的 id 仍合法。
 - `kind`：关注点类型，例如 `boundary`、`duplication`、`hotspot`、`cleanup`、`stability`、`missing-context`。
 - `level`：关注级别，不代表门禁裁决。
 - `confidence`：0 到 1 的证据置信度。
 - `location`：尽量定位到文件、行、符号或 import 边。
 - `evidence`：支撑该 concern 的事实证据。
+- `references`：可选结构化相关位置列表，用于表达 reference implementation、caller、callee 等关系。旧 concern 没有该字段仍合法。
 - `blast_radius`：可能受影响的文件、符号、组件或调用者。
 - `next_steps_hint`：轻量提示，不是结构化修复计划。
+
+`references[]` 统一使用 location-like 对象，并可带 `role`：
+
+```json
+{
+  "role": "reference",
+  "path": "",
+  "line": 0,
+  "symbol": "",
+  "symbol_kind": "function|class|module|import"
+}
+```
+
+例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 指向 reference implementation。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
 
 最低验收：
 
@@ -85,6 +102,8 @@
 ```
 
 增量审查只输出本次新增或恶化的 concern，不混入历史旧账。
+
+`review_type == "since"` 且引用或 range 不可解析时，仍返回 CodeReviewResult 骨架：`concerns` 和 `findings` 为空，`summary.headline` 说明无法分析该 since range，`summary.reason` 记录输入范围不可解析。
 
 `summary` 字段约定：
 
@@ -139,6 +158,8 @@
 
 `fix-advice` 不输出 patch，不包含 `apply` 字段，不承诺执行顺序。
 
+如果输入的 review JSON 不存在、不是合法 JSON，或顶层不是 object，CLI 应返回错误并保持 stdout 为空。合法 review 但没有 concerns 时，输出空 `suggestions` 是正常结果。
+
 ## StatusResult
 
 ```json
@@ -152,14 +173,16 @@
 }
 ```
 
-首次运行且没有快照时，输出当前状态和空趋势说明。
+没有 review events 时，输出空趋势说明。
+
+`scores` 来自最近一条 full code-review event。没有 full event 时，`scores` 为空，并通过 `trend.score_source: "none"` 说明来源缺失。`trend.event_limit` 记录当前默认读取窗口，现阶段为最近 100 条 events。
 
 ## ReviewEvent
 
 ```json
 {
   "generated_at": "iso8601",
-  "mode": "plan_review|code_review|fix_advice|status",
+  "mode": "code_review",
   "review_type": "",
   "scores": {},
   "concern_counts": {},
@@ -169,6 +192,8 @@
 ```
 
 事件流默认写入 `.architec/review-events.jsonl`。
+
+当前事件生产者是 `code-review`。`fix-advice` 读取 review JSON 后输出建议，但不写 review event，因为它不代表项目结构状态变化。其他命令如果要写 event，需要单独决策。
 
 ## 输出体量
 
@@ -183,4 +208,5 @@
 - 默认写入 `.architec/`，依赖项目现有 `.gitignore` 规则保持本地化。
 - 是否纳入版本控制由项目自行决定。
 - 文件达到 10MB 后应分片，例如 `review-events-YYYYMM.jsonl`。
-- status 读取最近窗口内的事件，长期归档只用于离线趋势。
+- status 读取最近 100 条事件，长期归档只用于离线趋势。
+- code-review event 写入对 `OSError` fail-open：主 review result 正常返回，并在 artifacts 中记录 `review_event_error`。

@@ -38,10 +38,55 @@ def second(records):
     assert len(concerns) == 1
     concern = concerns[0]
     assert concern["kind"] == "duplication"
+    assert concern["concern_id"].startswith("code-review:duplication:")
     assert concern["location"]["path"] == "src/b.py"
     assert concern["location"]["symbol"] == "second"
     assert concern["location"]["symbol_kind"] == "function"
     assert any(item.startswith("near_duplicate.reference=src/a.py:") for item in concern["evidence"])
+    assert concern["references"] == [
+        {
+            "role": "reference",
+            "path": "src/a.py",
+            "line": 2,
+            "symbol": "first",
+            "symbol_kind": "function",
+        }
+    ]
+
+
+def test_near_duplicate_concern_id_is_stable_for_same_duplicate_reference(tmp_path) -> None:
+    (tmp_path / "a.py").write_text(
+        """
+def first(value):
+    total = 0
+    for item in value:
+        if item > 10:
+            total += item * 2
+        else:
+            total += item
+    return total
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "b.py").write_text(
+        """
+def second(records):
+    result = 0
+    for row in records:
+        if row > 99:
+            result += row * 2
+        else:
+            result += row
+    return result
+""",
+        encoding="utf-8",
+    )
+
+    first = near_duplicate_concerns(tmp_path)
+    second = near_duplicate_concerns(tmp_path)
+
+    assert first[0]["concern_id"] == second[0]["concern_id"]
+    assert first[0]["concern_id"].startswith("code-review:duplication:")
 
 
 def test_near_duplicate_concerns_ignores_small_boilerplate(tmp_path) -> None:

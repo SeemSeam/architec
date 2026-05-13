@@ -15,15 +15,52 @@ def _code_review_result(review_type: str) -> dict[str, object]:
         if review_type == "diff"
         else "Full code review complete"
     )
+    concerns = []
+    signals = []
+    summary = {
+        "headline": headline,
+        "concern_total": 0,
+        "top_concern_total": 0,
+        "concern_limit": 5,
+        "signal_kinds": [],
+    }
+    if review_type != "diff":
+        summary = {
+            "headline": headline,
+            "concern_total": 1,
+            "top_concern_total": 1,
+            "concern_limit": 5,
+            "signal_kinds": ["cleanup"],
+        }
+        signals = [
+            {
+                "kind": "cleanup",
+                "summary": "1 cleanup candidates; 1 marked for review.",
+                "metrics": {"candidate_total": 1, "review_required_total": 1},
+            }
+        ]
+        concerns = [
+            {
+                "concern_id": "code-review:cleanup:abc123def456",
+                "kind": "cleanup",
+                "level": "caution",
+                "confidence": 0.82,
+                "location": {"path": "src/legacy.py", "line": 0, "symbol": "", "symbol_kind": "module"},
+                "root_cause": "Cleanup candidate categorized as legacy_impl.",
+                "evidence": ["cleanup.category=legacy_impl"],
+                "blast_radius": ["src/legacy.py"],
+                "next_steps_hint": "Review whether the file is still owned and intentionally retained.",
+            }
+        ]
     return {
         "mode": "code_review",
         "review_type": review_type,
         "scores": {"overall": 82.0},
-        "summary": {"headline": headline},
+        "summary": summary,
         "findings": [],
-        "signals": [],
+        "signals": signals,
         "evidence": [],
-        "concerns": [],
+        "concerns": concerns,
         "artifacts": {"analysis_json": "/tmp/.architec/architec-analysis.json"},
     }
 
@@ -78,7 +115,8 @@ def test_required_llm_checks_no_longer_include_goal_feature_check() -> None:
     assert ("architect_feature", "strong") not in full_checks
     assert ("architect_feature", "strong") not in diff_checks
     assert ("architect_component_scoring", "weak") not in full_checks
-    assert ("architect_component_scoring", "weak") in diff_checks
+    assert ("architect_component_scoring", "weak") not in diff_checks
+    assert full_checks == diff_checks
 
 
 def test_build_plan_review_parser_accepts_plan_and_project_root():
@@ -347,7 +385,7 @@ def test_main_legacy_diff_routes_to_code_review_diff_args(monkeypatch, tmp_path,
     assert calls[0] == "auth"
     assert calls[1] == ("bundle", str(tmp_path))
     assert calls[2][0] == "llm"
-    assert ("architect_component_scoring", "weak") in calls[2][2]
+    assert ("architect_component_scoring", "weak") not in calls[2][2]
     assert calls[3] == ("review_diff", str(tmp_path), "main", "HEAD", True)
 
 
@@ -412,6 +450,47 @@ def test_main_legacy_full_preserves_analysis_artifacts_in_output(monkeypatch, tm
     assert "json: /tmp/.architec/architec-analysis.json" in captured.out
 
 
+def test_main_legacy_full_human_summary_includes_code_review_concerns_and_signals(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    result = _code_review_result("full")
+
+    monkeypatch.setattr(sys, "argv", ["archi", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: None)
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
+    monkeypatch.setattr(cli, "preflight_backend_llm", lambda path, *, checks: None)
+    monkeypatch.setattr(cli, "run_code_review_full", lambda path, progress=None: result)
+    monkeypatch.setattr(cli, "run_code_review_diff", lambda *args, **kwargs: pytest.fail("diff should not run"))
+
+    assert cli.main() == 0
+    out = capsys.readouterr().out
+    assert "Concerns: total=1 | shown=1 | limit=5" in out
+    assert "Signals:" in out
+    assert "- cleanup: 1 cleanup candidates; 1 marked for review." in out
+    assert "Top concerns:" in out
+    assert "- cleanup [caution] src/legacy.py: Cleanup candidate categorized as legacy_impl." in out
+    _assert_advisory_only(out)
+
+
+def test_main_legacy_full_out_json_remains_code_review_payload(monkeypatch, tmp_path, capsys):
+    out_path = tmp_path / "review.json"
+    result = _code_review_result("full")
+
+    monkeypatch.setattr(sys, "argv", ["archi", "--out", str(out_path), str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: None)
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
+    monkeypatch.setattr(cli, "preflight_backend_llm", lambda path, *, checks: None)
+    monkeypatch.setattr(cli, "run_code_review_full", lambda path, progress=None: result)
+    monkeypatch.setattr(cli, "run_code_review_diff", lambda *args, **kwargs: pytest.fail("diff should not run"))
+
+    assert cli.main() == 0
+    capsys.readouterr()
+
+    assert json.loads(out_path.read_text(encoding="utf-8")) == result
+
+
 def test_main_legacy_full_and_diff_outputs_avoid_gate_terms(monkeypatch, tmp_path, capsys):
     full_out = tmp_path / "legacy-full.json"
     diff_out = tmp_path / "legacy-diff.json"
@@ -439,31 +518,48 @@ def test_main_legacy_full_and_diff_outputs_avoid_gate_terms(monkeypatch, tmp_pat
 
 
 @pytest.mark.parametrize(
-    ("argv", "removed_name"),
+    ("argv", "removed_name", "replacement"),
     [
-        (["archi", "cleanup", "."], "cleanup"),
-        (["archi", "autofix", "."], "autofix"),
-        (["archi", "autofix", "--apply", "."], "autofix"),
-        (["archi", "baseline", "."], "baseline"),
-        (["archi", "gate", "."], "gate"),
+        (["archi", "cleanup"], "cleanup", "archi code-review --full ."),
+        (["archi", "autofix"], "autofix", "archi fix-advice --for <review.json>"),
+        (["archi", "baseline"], "baseline", "archi status --snapshot"),
+        (["archi", "gate"], "gate", "archi code-review --diff . --out review.json"),
     ],
 )
-def test_main_removed_legacy_commands_are_parser_errors(monkeypatch, capsys, argv, removed_name):
+def test_main_removed_legacy_tokens_are_friendly_errors(monkeypatch, capsys, argv, removed_name, replacement):
     monkeypatch.setattr(sys, "argv", argv)
     assert not hasattr(cli, f"run_{removed_name}")
     monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: pytest.fail("auth should not run"))
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not run"))
     monkeypatch.setattr(cli, "preflight_backend_llm", lambda *args, **kwargs: pytest.fail("llm should not run"))
 
-    with pytest.raises(SystemExit) as exc:
-        cli.main()
-
-    assert exc.value.code == 2
+    assert cli.main() == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "unrecognized arguments" in captured.err
-    assert "has been removed" not in captured.err
-    assert "no longer supported" not in captured.err
+    assert f"archi {removed_name} command parser has been removed" in captured.err
+    assert replacement in captured.err
+
+
+@pytest.mark.parametrize(
+    ("argv", "replacement"),
+    [
+        (["archi", "cleanup", "."], "archi code-review --full ."),
+        (["archi", "autofix", "--apply", "."], "archi fix-advice --for <review.json>"),
+        (["archi", "baseline", "--out", "baseline.json", "."], "archi status --snapshot"),
+        (["archi", "gate", "--out", "gate.json", "."], "archi code-review --diff . --out review.json"),
+    ],
+)
+def test_main_removed_legacy_commands_with_old_args_are_friendly_errors(monkeypatch, capsys, argv, replacement):
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: pytest.fail("auth should not run"))
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not run"))
+    monkeypatch.setattr(cli, "preflight_backend_llm", lambda *args, **kwargs: pytest.fail("llm should not run"))
+
+    assert cli.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "command parser has been removed" in captured.err
+    assert replacement in captured.err
 
 
 def test_emit_includes_cleanup_metadata_summary_when_present(capsys):
@@ -601,6 +697,35 @@ def test_main_fix_advice_outputs_json_and_skips_auth_bundle_and_llm(monkeypatch,
     payload = json.loads(captured.out)
     assert payload["mode"] == "fix_advice"
     assert "archi fix-advice [1/1] reading review" in captured.err
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (None, "Review JSON not found"),
+        ("{not json", "Invalid review JSON"),
+        ("[]", "Review JSON must be an object"),
+    ],
+)
+def test_main_fix_advice_bad_review_input_returns_cli_error(
+    monkeypatch,
+    tmp_path,
+    capsys,
+    content,
+    expected,
+):
+    review_path = tmp_path / "review.json"
+    if content is not None:
+        review_path.write_text(content, encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["archi", "fix-advice", "--for", str(review_path)])
+    monkeypatch.setattr(cli, "require_authorized_session", lambda: pytest.fail("auth should not run"))
+    monkeypatch.setattr(cli, "inspect_bundle", lambda path: pytest.fail("bundle check should not run"))
+    monkeypatch.setattr(cli, "preflight_backend_llm", lambda *args, **kwargs: pytest.fail("llm preflight should not run"))
+
+    assert cli.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert expected in captured.err
 
 
 def test_main_plan_review_outputs_json_and_skips_auth_bundle_and_llm(monkeypatch, tmp_path, capsys):
@@ -761,7 +886,7 @@ def test_main_code_review_diff_outputs_json_contract(monkeypatch, tmp_path, caps
     assert calls[0] == "auth"
     assert calls[1] == ("bundle", str(tmp_path))
     assert calls[2][0] == "llm"
-    assert ("architect_component_scoring", "weak") in calls[2][2]
+    assert ("architect_component_scoring", "weak") not in calls[2][2]
     assert calls[3] == ("review", str(tmp_path), "main", "HEAD", True)
     encoded = json.dumps(payload, sort_keys=True).lower()
     assert "pass" not in encoded
@@ -812,7 +937,7 @@ def test_main_code_review_since_outputs_json_contract(monkeypatch, tmp_path, cap
     assert calls[0] == "auth"
     assert calls[1] == ("bundle", str(tmp_path))
     assert calls[2][0] == "llm"
-    assert ("architect_component_scoring", "weak") in calls[2][2]
+    assert ("architect_component_scoring", "weak") not in calls[2][2]
     assert calls[3] == ("review", str(tmp_path), "main", True)
     encoded = json.dumps(payload, sort_keys=True).lower()
     assert "pass" not in encoded

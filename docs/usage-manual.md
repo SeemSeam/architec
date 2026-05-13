@@ -556,6 +556,9 @@ archi --diff --base main --head HEAD .
 - `--base` 和 `--head` 必须和 `--diff` 一起使用
 - 只写 `--base` 或 `--head` 而不加 `--diff` 会直接报错
 - 如果使用 `--out <path>`，写出的 JSON 是 `review_type: "diff"` 的 CodeReviewResult
+- CodeReviewResult 的 `concern_id` 是基于 concern facts 生成的引用标识，不代表展示顺序
+- diff/since code-review 使用基础 LLM preflight，不额外要求 `architect_component_scoring`
+- `code-review --since <ref>` 遇到不可解析 ref/range 时返回结构化降级结果，不回退到全量审查
 
 ### 6.7 状态快照（替代 legacy baseline）
 
@@ -637,6 +640,8 @@ archi code-review --full . --out review.json
 archi fix-advice --for review.json
 ```
 
+如果 review JSON 不存在、不是合法 JSON，或顶层不是 object，`fix-advice` 会返回 CLI 错误；合法 review 但没有 concerns 时会输出空 suggestions。
+
 ### 7.6 `archi autofix` parser 已移除
 
 请使用 `archi fix-advice --for <review.json>` 生成修复建议。
@@ -648,6 +653,8 @@ archi status --snapshot
 ```
 
 `archi baseline` parser 已移除；请使用 `archi status --snapshot`。
+
+`status --trend` / `status --snapshot` 读取最近 100 条 review events。状态分数来自最近一次 full code-review event；diff / since 事件只参与趋势计数和 weakening components 观察。`fix-advice` 不写 review event。
 
 ### 7.8 保存当前 diff 的 advisory review
 

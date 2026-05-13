@@ -36,6 +36,56 @@ def _score_line(scores: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
+def _code_review_count_line(summary: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for label, key in (
+        ("total", "concern_total"),
+        ("shown", "top_concern_total"),
+        ("limit", "concern_limit"),
+    ):
+        if key in summary:
+            parts.append(f"{label}={summary.get(key)}")
+    return " | ".join(parts)
+
+
+def _format_concern_line(concern: dict[str, Any]) -> str:
+    kind = str(concern.get("kind", "") or "concern").strip()
+    level = str(concern.get("level", "") or "").strip()
+    location = concern.get("location", {}) if isinstance(concern.get("location"), dict) else {}
+    path = str(location.get("path", "") or "unknown path").strip()
+    root_cause = str(concern.get("root_cause", "") or "").strip()
+    prefix = f"{kind} [{level}]" if level else kind
+    if root_cause:
+        return f"- {prefix} {path}: {root_cause}"
+    return f"- {prefix} {path}"
+
+
+def _append_code_review_summary(lines: list[str], result: dict[str, Any], summary: dict[str, Any]) -> None:
+    count_line = _code_review_count_line(summary)
+    if count_line:
+        lines.append(f"Concerns: {count_line}")
+
+    signals = result.get("signals", [])
+    if isinstance(signals, list) and signals:
+        lines.append("Signals:")
+        for signal in signals[:5]:
+            if not isinstance(signal, dict):
+                continue
+            kind = str(signal.get("kind", "") or "").strip()
+            text = str(signal.get("summary", "") or "").strip()
+            if kind and text:
+                lines.append(f"- {kind}: {text}")
+            elif kind:
+                lines.append(f"- {kind}")
+
+    concerns = result.get("concerns", [])
+    if isinstance(concerns, list) and concerns:
+        lines.append("Top concerns:")
+        for concern in concerns[:5]:
+            if isinstance(concern, dict):
+                lines.append(_format_concern_line(concern))
+
+
 def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
     lines: list[str] = []
     if check_mode:
@@ -77,6 +127,9 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
     executive_summary = str(summary.get("executive_summary", "") or "").strip()
     if executive_summary:
         lines.append(f"Summary: {executive_summary}")
+
+    if str(result.get("mode", "") or "") == "code_review":
+        _append_code_review_summary(lines, result, summary)
 
     cleanup = result.get("cleanup", {}) if isinstance(result.get("cleanup"), dict) else {}
     if cleanup:
@@ -207,15 +260,13 @@ def _emit_json(result: dict[str, Any], out: str | None) -> None:
 
 
 def _required_llm_checks(*, diff: bool) -> list[tuple[str, str]]:
-    checks: list[tuple[str, str]] = [
+    del diff
+    return [
         ('architect_history', 'strong'),
         ('architec_summary', 'strong'),
         ('architect_folder_naming', 'weak'),
         ('architect_topology_review', 'weak'),
     ]
-    if diff:
-        checks.append(('architect_component_scoring', 'weak'))
-    return checks
 
 
 def _add_argument(parser: argparse.ArgumentParser, *args: str, **kwargs: Any) -> None:
@@ -462,6 +513,28 @@ def _validate_code_review_args(args: argparse.Namespace) -> int | None:
         return 2
     return None
 
+
+_REMOVED_LEGACY_COMMAND_REPLACEMENTS = {
+    "cleanup": "archi code-review --full .",
+    "autofix": "archi fix-advice --for <review.json>",
+    "baseline": "archi status --snapshot",
+    "gate": "archi code-review --diff . --out review.json",
+}
+
+
+def _reject_removed_legacy_token(argv: list[str]) -> int | None:
+    if not argv:
+        return None
+    replacement = _REMOVED_LEGACY_COMMAND_REPLACEMENTS.get(argv[0])
+    if replacement is None:
+        return None
+    print(
+        f"archi {argv[0]} command parser has been removed; use `{replacement}`.",
+        file=sys.stderr,
+    )
+    return 2
+
+
 def _is_advisory_status_command(argv: list[str]) -> bool:
     return bool(argv and argv[0] == 'status' and any(arg in {'--trend', '--snapshot'} for arg in argv[1:]))
 
@@ -541,6 +614,9 @@ def main() -> int:
         auth_result = handle_auth_command(argv)
         if auth_result is not None:
             return auth_result
+        removed_legacy_result = _reject_removed_legacy_token(argv)
+        if removed_legacy_result is not None:
+            return removed_legacy_result
         if argv and argv[0] == 'plan-review':
             parser = build_plan_review_parser()
             args = parser.parse_args(argv[1:])

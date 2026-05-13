@@ -1,11 +1,11 @@
 ---
 name: archi-advice
-description: Produce architecture advice by combining baseline analysis with goal or diff context. Use when the user wants a concrete architecture improvement plan, redesign direction, sequencing advice, or a practical refactor roadmap rather than only a score.
+description: Produce advisory architecture guidance by combining code-review output with plan-review, diff context, and fix-advice. Do not use the removed archi --goal flag.
 ---
 
 # archi-advice
 
-This skill is the decision layer. It should synthesize full analysis plus current goal or diff context before giving architecture advice.
+This skill synthesizes advisory review outputs. It should combine full code review plus plan-review, diff context, or fix-advice before giving architecture advice.
 
 ## Trigger
 
@@ -17,16 +17,16 @@ This skill is the decision layer. It should synthesize full analysis plus curren
 
 ## Preferred Workflow
 
-1. Run baseline analysis:
+1. Run full code review:
 
 ```bash
 archi .
 ```
 
-2. If the user has a concrete goal, also run:
+2. If the user has a concrete goal, write or ask for a Markdown plan and run:
 
 ```bash
-archi --goal "<goal>" .
+archi plan-review <plan.md>
 ```
 
 3. If the user is evaluating active changes, also run:
@@ -35,31 +35,38 @@ archi --goal "<goal>" .
 archi --diff .
 ```
 
+4. If the user needs repair-direction options from a saved review, run:
+
+```bash
+archi fix-advice --for <review.json>
+```
+
 ## Read Outputs
 
 - `.architec/architec-summary.md`
 - `.architec/architec-analysis.json`
 
-Use the baseline full analysis as the primary frame. Use goal or diff outputs as modifiers, not replacements.
+Use the full code review as the primary frame. Use plan-review, diff, or fix-advice outputs as modifiers, not replacements.
 
 ## Output Rule
 
 - Lead with the current architectural position and score.
 - Give a prioritized improvement plan, not just observations.
 - Prefer a phased plan: immediate, next, later.
-- Advice should be grounded in full-analysis findings, then adjusted by goal or diff context.
+- Advice should be grounded in code-review findings, then adjusted by plan-review, diff, or fix-advice context.
 - Do not paste raw JSON.
 
 ## Avoid Misuse
 
+- Do not use removed `archi --goal`.
 - Do not use this skill without a baseline full analysis.
-- Do not produce a refactor roadmap from goal or diff context alone; use them only after `archi-full` establishes the structural baseline.
+- Do not produce a refactor roadmap from plan or diff context alone; use them only after `archi-full` establishes the structural baseline.
 
 ## Example Prompts
 
 - "Based on the current architecture, what should we improve next?"
 - "Give me a concrete architecture refactor roadmap for this repo."
-- "Combine the baseline architecture review with the current goal and propose a phased plan."
+- "Combine the baseline architecture review with the current plan and propose a phased plan."
 
 ## Standard Output Template
 

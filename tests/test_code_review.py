@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 
 import architec.code_review.public as code_review
@@ -116,6 +117,35 @@ def test_run_code_review_full_reuses_full_analysis_and_maps_cleanup_concern(tmp_
     event_path = tmp_path / ".architec" / "review-events.jsonl"
     assert result["artifacts"]["review_event_jsonl"] == str(event_path)
     assert json.loads(event_path.read_text(encoding="utf-8"))["mode"] == "code_review"
+
+
+def test_run_code_review_event_write_failure_is_reported_in_artifacts(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    def raise_os_error(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(code_review, "append_review_event", raise_os_error)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["mode"] == "code_review"
+    assert result["artifacts"]["review_event_error"] == "disk full"
+    assert "review_event_jsonl" not in result["artifacts"]
+
+
+def test_run_code_review_event_write_non_os_error_is_not_swallowed(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    def raise_bug(*args, **kwargs):
+        raise ValueError("event builder bug")
+
+    monkeypatch.setattr(code_review, "append_review_event", raise_bug)
+
+    with pytest.raises(ValueError, match="event builder bug"):
+        code_review.run_code_review_full(tmp_path)
 
 
 def test_run_code_review_diff_reuses_diff_analysis_args(tmp_path, monkeypatch) -> None:
@@ -250,6 +280,22 @@ def test_run_code_review_since_unresolved_ref_degrades_to_result(tmp_path, monke
     assert result["concerns"] == []
     assert result["findings"] == []
     assert result["artifacts"] == {}
+
+
+def test_run_code_review_since_git_range_error_degrades_to_result(tmp_path, monkeypatch) -> None:
+    def raise_git_range_error(*args, **kwargs):
+        raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
+
+    monkeypatch.setattr(code_review, "run_analysis", raise_git_range_error)
+
+    result = code_review.run_code_review_since(tmp_path, ref="missing")
+
+    assert result["mode"] == "code_review"
+    assert result["review_type"] == "since"
+    assert result["summary"]["headline"] == "Unable to analyze changes since missing."
+    assert result["summary"]["reason"] == "The requested since range could not be resolved."
+    assert result["concerns"] == []
+    assert result["findings"] == []
 
 
 def test_run_code_review_since_unrelated_runtime_error_is_not_swallowed(tmp_path, monkeypatch) -> None:
@@ -410,6 +456,40 @@ def test_run_code_review_full_limits_ranked_concerns_to_top_five(tmp_path, monke
     assert paths == ["src/a.py", "src/b.py", "src/c.py", "src/d.py", "src/e.py"]
 
 
+def test_code_review_file_concern_ids_are_stable_across_candidate_order(tmp_path, monkeypatch) -> None:
+    report_a = {
+        "scores": {},
+        "summary": {},
+        "cleanup": {
+            "candidate_total": 2,
+            "review_required_total": 2,
+            "top_candidates": [
+                {"path": "src/a.py", "category": "legacy", "confidence": 0.92},
+                {"path": "src/b.py", "category": "legacy", "confidence": 0.91},
+            ],
+        },
+        "archive_candidates": {},
+        "semantic_judge": {},
+        "hotspots": [],
+        "topology": {},
+        "artifacts": {},
+    }
+    report_b = copy.deepcopy(report_a)
+    report_b["cleanup"]["top_candidates"] = list(reversed(report_b["cleanup"]["top_candidates"]))
+    reports = [report_a, report_b]
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: reports.pop(0))
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    first = code_review.run_code_review_full(tmp_path)
+    second = code_review.run_code_review_full(tmp_path)
+
+    first_ids = {item["location"]["path"]: item["concern_id"] for item in first["concerns"]}
+    second_ids = {item["location"]["path"]: item["concern_id"] for item in second["concerns"]}
+    assert first_ids == second_ids
+    assert first_ids["src/a.py"].startswith("code-review:cleanup:")
+    assert len(first_ids["src/a.py"].rsplit(":", 1)[1]) == 12
+
+
 def test_run_code_review_full_non_numeric_confidence_uses_defaults(tmp_path, monkeypatch) -> None:
     report = {
         **_analysis_report(),
@@ -528,6 +608,15 @@ def test_code_review_full_adds_near_duplicate_signal_and_concern(tmp_path, monke
                 },
                 "root_cause": "Function has the same normalized AST fingerprint as another function.",
                 "evidence": ["near_duplicate.fingerprint=abc", "near_duplicate.reference=src/a.py:2:first"],
+                "references": [
+                    {
+                        "role": "reference",
+                        "path": "src/a.py",
+                        "line": 2,
+                        "symbol": "first",
+                        "symbol_kind": "function",
+                    }
+                ],
                 "blast_radius": ["src/b.py", "src/a.py"],
                 "next_steps_hint": "Review whether one implementation can reuse or call the other.",
             }
@@ -537,6 +626,7 @@ def test_code_review_full_adds_near_duplicate_signal_and_concern(tmp_path, monke
     result = code_review.run_code_review_full(tmp_path)
 
     assert result["concerns"][0]["kind"] == "duplication"
+    assert result["concerns"][0]["references"][0]["path"] == "src/a.py"
     signal = next(item for item in result["signals"] if item["kind"] == "near_duplicate")
     assert signal["metrics"] == {"concern_total": 1}
 

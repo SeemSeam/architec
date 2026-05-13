@@ -57,22 +57,38 @@ Done:
 - legacy parser removal 决策已记录，见 [decisions/016-legacy-parser-removal.md](decisions/016-legacy-parser-removal.md)。
 - legacy parser stubs `cleanup` / `autofix` / `baseline` / `gate` 已由 agent4 移除，并经 agent3 审核通过。
 - `--goal` 已从顶层 parser 最终移除，并经 agent3 审核通过。
+- Advisory-only 验收与文档定型：确认当前公开命令、历史文档和 release notes 都已对齐最终迁移状态。
+- 裸 legacy token 行为已补友好错误提示：`archi cleanup` / `autofix` / `baseline` / `gate` 不再被当作 path 进入运行时链路。
+- `docs/progressive-architectural-cleanup*` 已标记为 historical / archived，避免和当前 CLI 混淆。
+- release notes 已补 final breaking changes checklist。
+- skills / prompts 已扫描并更新，不再推荐 removed commands 或 retired public APIs。
+- duplication advice + reference evidence 决策已记录，见 [decisions/017-duplication-advice-reference-evidence.md](decisions/017-duplication-advice-reference-evidence.md)。
+- `near_duplicate` concern 已补可选 `references[]` 结构化 reference location，`fix-advice` 已为 `kind=duplication` 输出专用 advisory options。
+- agent1 / agent4 / agent5 的 `archi-goal` 和 `archi-advice` skills 已同步到 `plan-review` / `code-review` 工作流，不再推荐 removed `archi --goal`。
+- concern id 稳定性决策已记录，见 [decisions/018-concern-id-stability.md](decisions/018-concern-id-stability.md)；当前 code-review 生成的 concern id 已改为基于事实的 deterministic hash。
+- `fix-advice --for <review.json>` 对缺失、无效或非 object review JSON 返回 CLI 错误；合法空 concerns 仍输出空 suggestions。
+- 顶层 `archi .` / `archi --diff .` 的 human summary 已恢复 CodeReviewResult 下的 concern counts、signals 和 top concerns 摘要。
+- status / review event 深化决策已记录，见 [decisions/019-status-event-semantics.md](decisions/019-status-event-semantics.md)。
+- `status --trend` 已明确读取最近 100 条 review events，scores 来自最近 full code-review event，weakening components 使用 deterministic sort。
+- `fix-advice` 已明确保持 consumer-only，不写 review event；code-review event 写入 `OSError` fail-open 已补测试。
+- diff/since LLM preflight 精简决策已记录，见 [decisions/020-diff-preflight-policy.md](decisions/020-diff-preflight-policy.md)；advisory diff/since 不再要求 `architect_component_scoring` preflight。
+- since range error 语义已记录，见 [decisions/021-since-range-error-semantics.md](decisions/021-since-range-error-semantics.md)；不可解析 ref/range 返回结构化 CodeReviewResult 降级对象。
+- advisory-review open questions 已清空，剩余非封版方向移入 Deferred。
 
 In Progress:
 
-- Advisory-only 验收与文档定型：确认当前公开命令、历史文档和 release notes 都已对齐最终迁移状态。
+- 无。
 
 Next:
 
-- 审计裸 legacy token 行为（如 `archi cleanup` 被当作 path 的边界），决定是否增加更友好的错误提示。
-- 标记或归档 `docs/progressive-architectural-cleanup*` 等历史文档，避免与当前 CLI 行为混淆。
-- 整理 release notes 的最终 breaking changes 清单。
-- 检查 skills / agent prompts，确认不再推荐已移除的 legacy CLI 或 public API。
-- 决定是否补 `fix-advice` 的 `duplication` 专用建议分支，以及 reference evidence 的结构化方式。
-- 将 `open-questions.md` 中已能决策的问题转成新的 decision 记录。
+- 封版后按优先级从 Deferred 中选择下一阶段深化项。
 
 Deferred:
 
+- 无发现场景文案进一步标准化。
+- JSON 主体 20KB 目标在中大型仓库中的体量校准。
+- `shadow_implementation` 阈值调研。
+- `fix-advice --for <review.json>` 是否长期改名为 `--review <review.json>`。
 - 多语言支持。
 - 自建运行时信号采集。
 - 用户自定义脚本化规则平台。

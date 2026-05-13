@@ -12,7 +12,7 @@ from architec.support.io_utils import normalize_relpath, safe_int
 CHANGED_FILES_SCOPE_ENV = "ARCH_SCORE_CHANGED_FILES"
 
 
-def run_git(root: Path, args: list[str]) -> str:
+def run_git(root: Path, args: list[str], *, strict: bool = False) -> str:
     proc = subprocess.run(
         ["git", *args],
         cwd=root,
@@ -21,6 +21,10 @@ def run_git(root: Path, args: list[str]) -> str:
         text=True,
     )
     if proc.returncode != 0:
+        if strict:
+            message = (proc.stderr or proc.stdout or "").strip()
+            command = "git " + " ".join(args)
+            raise RuntimeError(f"git range error while running `{command}`: {message}")
         return ""
     return proc.stdout or ""
 
@@ -55,10 +59,7 @@ def changed_files(root: Path, base: str | None, head: str | None) -> list[dict[s
         return scoped
 
     if base and head:
-        text = run_git(root, ["diff", "--numstat", f"{base}...{head}"])
-        rows = parse_numstat(text)
-        if rows:
-            return rows
+        return parse_numstat(run_git(root, ["diff", "--numstat", f"{base}...{head}"], strict=True))
 
     rows = parse_numstat(run_git(root, ["diff", "--numstat", "HEAD"]))
     if rows:
