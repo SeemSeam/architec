@@ -78,6 +78,7 @@
 | [topics/architecture-stability.md](topics/architecture-stability.md) | 长期架构稳定性能力、缺口和下一阶段优先级 |
 | [topics/review-shortcomings.md](topics/review-shortcomings.md) | 当前审查能力短板 |
 | [topics/hippocampus-dogfood-audit-2026-05-14.md](topics/hippocampus-dogfood-audit-2026-05-14.md) | Hippocampus dogfood 审查记录和下一步产品信号 |
+| [topics/python-dotenv-dogfood-audit-2026-05-14.md](topics/python-dotenv-dogfood-audit-2026-05-14.md) | 小型成熟 Python 库 dogfood 审查记录和 full-review calibration 信号 |
 | [topics/ai-signals.md](topics/ai-signals.md) | AI/vibe coding 特有坏味信号 |
 | [topics/external-signals.md](topics/external-signals.md) | 历史、测试、依赖、运行时信号取舍 |
 

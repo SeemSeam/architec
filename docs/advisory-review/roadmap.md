@@ -110,6 +110,11 @@ In Progress:
 
 Next:
 
+- Calibrate full-review cleanup/archive/topology display for small mature
+  libraries based on the python-dotenv dogfood run: avoid stale-doc false
+  positives on active changelogs, de-duplicate cleanup/archive concerns for the
+  same path, and keep low-pressure topology findings as context when
+  `needs_folder_management=false`.
 - Refine `shadow_implementation` mapper taxonomy so broad mapper role matches
   do not conflate color mapping, rename mapping, and other unrelated mapping
   responsibilities.

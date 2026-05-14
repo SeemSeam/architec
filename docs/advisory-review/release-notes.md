@@ -213,6 +213,8 @@ A follow-up Hippocampus dogfood run after Decisions 041-047 confirmed that diff/
 
 Decision 048 records the planned `near_duplicate` variant-family grouping v1. Exact normalized AST fingerprinting remains the base signal, but same-file phase/cache/prompt-builder families should be grouped into one advisory observation or display-limited so they do not flood top concerns. Cross-file duplicates and substantive non-family duplicates remain reportable.
 
+A python-dotenv dogfood run tested Architec against a small mature Python library. The run produced a high overall score and no duplicate/shadow implementation findings, which is the desired behavior. It also exposed full-review calibration work: active changelogs can be over-classified as stale docs, cleanup/archive can duplicate attention on the same path, and low-pressure topology findings should remain context when `needs_folder_management=false`.
+
 A Hippocampus dogfood audit recorded the next product priority for incremental review: diff/since top concerns need scope hygiene. Changed-file-scoped observations should be visually and structurally separated from global cleanup, hotspot, and topology context so incremental review does not look dominated by unrelated project-wide debt.
 
 The implemented scope-hygiene behavior keeps full review unchanged. For diff/since review, top-level displayed concerns prioritize selected changed-file observations, while global cleanup/hotspot/topology context remains available through labelled context, signals, or artifacts. Summary metrics distinguish selected-scope counts from global-context counts via `scoped_concern_total`, `global_context_concern_total`, `displayed_scoped_concern_total`, and `displayed_global_context_concern_total`.
