@@ -49,6 +49,7 @@
 - `shadow_implementation` 会抑制 renderer 与 assembler/support/budget/context 等 intentional split-role pairs，同时保留 same-role 和 parser-helper candidates。见 [043-shadow-implementation-role-taxonomy.md](decisions/043-shadow-implementation-role-taxonomy.md)。
 - risk context enrichment 接受可选 complexity/public API/historical recurrence facts，仍只附加到既有 concerns，不生成新 concern。见 [044-risk-context-enrichment.md](decisions/044-risk-context-enrichment.md)。
 - plan/diff consistency expected tests v1 只消费 saved plan-review JSON 中显式 structured expected-test entries，缺失 selected-diff test touchpoints 时输出 advisory observations。见 [045-plan-diff-expected-tests.md](decisions/045-plan-diff-expected-tests.md)。
+- plan/diff consistency dependency alternatives v1 允许 structured dependency entries 声明可接受 import alternatives，selected changed Python files 命中任一模块即满足。见 [046-plan-diff-dependency-alternatives.md](decisions/046-plan-diff-dependency-alternatives.md)。
 
 ## 目录
 

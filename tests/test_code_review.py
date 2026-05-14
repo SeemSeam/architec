@@ -1291,6 +1291,9 @@ def test_code_review_diff_adds_plan_diff_consistency_concerns(tmp_path, monkeypa
     assert signal["metrics"] == {
         "planned_path_total": 2,
         "planned_import_total": 0,
+        "planned_import_alternative_total": 0,
+        "observed_planned_import_total": 0,
+        "missing_planned_import_total": 0,
         "expected_test_total": 0,
         "observed_expected_test_total": 0,
         "missing_expected_test_total": 0,
@@ -1337,6 +1340,9 @@ def test_code_review_diff_with_plan_and_empty_diff_reports_missing_planned_path(
     assert signal["metrics"] == {
         "planned_path_total": 1,
         "planned_import_total": 0,
+        "planned_import_alternative_total": 0,
+        "observed_planned_import_total": 0,
+        "missing_planned_import_total": 0,
         "expected_test_total": 0,
         "observed_expected_test_total": 0,
         "missing_expected_test_total": 0,
@@ -1397,6 +1403,9 @@ def test_code_review_diff_adds_plan_import_expectation_concern(tmp_path, monkeyp
     assert "plan_diff_consistency.dependency_source=src/api/**" in concern["evidence"]
     signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
     assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["planned_import_alternative_total"] == 0
+    assert signal["metrics"]["observed_planned_import_total"] == 0
+    assert signal["metrics"]["missing_planned_import_total"] == 1
     assert signal["metrics"]["concern_total"] == 1
 
 
@@ -1435,7 +1444,119 @@ def test_code_review_diff_observes_plan_import_expectation(tmp_path, monkeypatch
     assert "planned_import_not_observed" not in encoded
     signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
     assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["observed_planned_import_total"] == 1
+    assert signal["metrics"]["missing_planned_import_total"] == 0
     assert signal["metrics"]["concern_total"] == 0
+
+
+def test_code_review_diff_observes_plan_import_alternative_expectation(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py", "intent": "route through a service boundary"}],
+                    "dependencies": [
+                        {
+                            "source": "src/api/**",
+                            "any_of": ["app.service.facade", "app.service.gateway"],
+                        }
+                    ],
+                },
+                "plan_fingerprint": "observed-alternative-import-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    api_dir = tmp_path / "src" / "api"
+    api_dir.mkdir(parents=True)
+    (api_dir / "handler.py").write_text("from app.service import gateway\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    encoded = json.dumps(result, sort_keys=True)
+    assert "planned_import_alternative_not_observed" not in encoded
+    assert "planned_import_not_observed" not in encoded
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["planned_import_alternative_total"] == 1
+    assert signal["metrics"]["observed_planned_import_total"] == 1
+    assert signal["metrics"]["missing_planned_import_total"] == 0
+    assert signal["metrics"]["concern_total"] == 0
+
+
+def test_code_review_diff_missing_plan_import_alternatives_emit_single_concern(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py", "intent": "route through a service boundary"}],
+                    "dependencies": [
+                        {
+                            "source": "src/api/**",
+                            "alternatives": ["app.service.facade", "app.service.gateway"],
+                        }
+                    ],
+                },
+                "plan_fingerprint": "missing-alternative-import-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    api_dir = tmp_path / "src" / "api"
+    api_dir.mkdir(parents=True)
+    (api_dir / "handler.py").write_text("import app.storage\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concerns = [
+        item
+        for item in result["concerns"]
+        if item["kind"] == "plan-diff-consistency"
+        and "plan_diff_consistency.observation=planned_import_alternative_not_observed" in item["evidence"]
+    ]
+    assert len(concerns) == 1
+    concern = concerns[0]
+    assert concern["location"]["path"] == "src/api/handler.py"
+    assert "plan_diff_consistency.planned_import_alternatives=app.service.facade,app.service.gateway" in concern["evidence"]
+    assert "plan_diff_consistency.planned_import_alternative_total=2" in concern["evidence"]
+    assert "plan_diff_consistency.dependency_source=src/api/**" in concern["evidence"]
+    assert "plan_diff_consistency.planned_import=app.service.facade" not in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["planned_import_alternative_total"] == 1
+    assert signal["metrics"]["observed_planned_import_total"] == 0
+    assert signal["metrics"]["missing_planned_import_total"] == 1
+    assert signal["metrics"]["concern_total"] == 1
+    payload = json.dumps(result, sort_keys=True).lower()
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "patch", "apply"):
+        assert term not in payload
 
 
 def test_code_review_diff_ignores_string_dependencies_for_import_expectations(tmp_path, monkeypatch) -> None:
@@ -1473,6 +1594,9 @@ def test_code_review_diff_ignores_string_dependencies_for_import_expectations(tm
     assert "planned_import_not_observed" not in encoded
     signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
     assert signal["metrics"]["planned_import_total"] == 0
+    assert signal["metrics"]["planned_import_alternative_total"] == 0
+    assert signal["metrics"]["observed_planned_import_total"] == 0
+    assert signal["metrics"]["missing_planned_import_total"] == 0
     assert signal["metrics"]["concern_total"] == 0
 
 
@@ -1513,6 +1637,9 @@ def test_code_review_diff_ignores_plan_import_expectation_without_changed_python
     assert "planned_import_not_observed" not in encoded
     signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
     assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["planned_import_alternative_total"] == 0
+    assert signal["metrics"]["observed_planned_import_total"] == 0
+    assert signal["metrics"]["missing_planned_import_total"] == 0
     assert signal["metrics"]["concern_total"] == 0
 
 

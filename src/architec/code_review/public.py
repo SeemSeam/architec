@@ -701,6 +701,15 @@ def _signals(
                 "metrics": {
                     "planned_path_total": planned_path_total,
                     "planned_import_total": planned_import_total,
+                    "planned_import_alternative_total": int(
+                        plan_scan.get("planned_import_alternative_total", 0) or 0
+                    ),
+                    "observed_planned_import_total": int(
+                        plan_scan.get("observed_planned_import_total", 0) or 0
+                    ),
+                    "missing_planned_import_total": int(
+                        plan_scan.get("missing_planned_import_total", 0) or 0
+                    ),
                     "expected_test_total": expected_test_total,
                     "observed_expected_test_total": int(
                         plan_scan.get("observed_expected_test_total", 0) or 0

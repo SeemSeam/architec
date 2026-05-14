@@ -95,7 +95,7 @@ The next architecture-stability work should prioritize contract and drift contro
    - surface `plan-diff-consistency` concerns for unexpected changed areas, missing expected areas, and boundary changes not named in the plan;
    - keep plan/diff mismatch as an observation, not a claim that the implementation is wrong.
 
-   V1 is recorded in [Decision 037](../decisions/037-plan-diff-consistency-v1.md). It compares saved `plan-review` paths with changed files. Structured import-edge expectations are recorded in [Decision 040](../decisions/040-plan-diff-import-edge-expectations.md). Explicit expected-test entries are recorded in [Decision 045](../decisions/045-plan-diff-expected-tests.md); prose test notes remain context.
+   V1 is recorded in [Decision 037](../decisions/037-plan-diff-consistency-v1.md). It compares saved `plan-review` paths with changed files. Structured import-edge expectations are recorded in [Decision 040](../decisions/040-plan-diff-import-edge-expectations.md). Explicit expected-test entries are recorded in [Decision 045](../decisions/045-plan-diff-expected-tests.md); prose test notes remain context. Dependency alternatives are recorded in [Decision 046](../decisions/046-plan-diff-dependency-alternatives.md); any listed acceptable module can satisfy the planned dependency group.
 
 3. **Test/Churn Risk Fusion**
 
