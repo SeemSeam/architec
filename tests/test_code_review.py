@@ -1291,6 +1291,9 @@ def test_code_review_diff_adds_plan_diff_consistency_concerns(tmp_path, monkeypa
     assert signal["metrics"] == {
         "planned_path_total": 2,
         "planned_import_total": 0,
+        "expected_test_total": 0,
+        "observed_expected_test_total": 0,
+        "missing_expected_test_total": 0,
         "changed_file_total": 2,
         "concern_total": 2,
         "concern_total_before_limit": 2,
@@ -1334,6 +1337,9 @@ def test_code_review_diff_with_plan_and_empty_diff_reports_missing_planned_path(
     assert signal["metrics"] == {
         "planned_path_total": 1,
         "planned_import_total": 0,
+        "expected_test_total": 0,
+        "observed_expected_test_total": 0,
+        "missing_expected_test_total": 0,
         "changed_file_total": 0,
         "concern_total": 1,
         "concern_total_before_limit": 1,
@@ -1508,6 +1514,162 @@ def test_code_review_diff_ignores_plan_import_expectation_without_changed_python
     signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
     assert signal["metrics"]["planned_import_total"] == 1
     assert signal["metrics"]["concern_total"] == 0
+
+
+def test_code_review_diff_adds_missing_expected_test_concern(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py", "intent": "route handler"}],
+                    "expected_tests": [
+                        {
+                            "test_path": "tests/test_api_handler.py",
+                            "source": "src/api/**",
+                        }
+                    ],
+                },
+                "plan_fingerprint": "expected-test-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(
+        item
+        for item in result["concerns"]
+        if item["kind"] == "plan-diff-consistency"
+        and "plan_diff_consistency.observation=planned_test_not_observed" in item["evidence"]
+    )
+    assert concern["location"]["path"] == "tests/test_api_handler.py"
+    assert "plan_diff_consistency.expected_test=tests/test_api_handler.py" in concern["evidence"]
+    assert "plan_diff_consistency.test_source=src/api/**" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["expected_test_total"] == 1
+    assert signal["metrics"]["observed_expected_test_total"] == 0
+    assert signal["metrics"]["missing_expected_test_total"] == 1
+    assert signal["metrics"]["concern_total"] == 1
+
+
+def test_code_review_diff_observes_expected_test_path(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py", "intent": "route handler"}],
+                    "tests": [{"glob": "tests/test_api_*.py", "source_glob": "src/api/**"}],
+                },
+                "plan_fingerprint": "observed-test-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 2,
+            "changed_files": ["src/api/handler.py", "tests/test_api_handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    encoded = json.dumps(result, sort_keys=True)
+    assert "planned_test_not_observed" not in encoded
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["expected_test_total"] == 1
+    assert signal["metrics"]["observed_expected_test_total"] == 1
+    assert signal["metrics"]["missing_expected_test_total"] == 0
+    assert signal["metrics"]["concern_total"] == 0
+
+
+def test_code_review_diff_empty_diff_reports_missing_expected_test(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "expected_tests": [{"test_glob": "tests/test_service_model.py"}],
+                },
+                "plan_fingerprint": "empty-diff-test-plan",
+                "artifacts": {"plan_path": "plans/model.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 0,
+            "changed_files": [],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(item for item in result["concerns"] if item["kind"] == "plan-diff-consistency")
+    assert concern["location"]["path"] == "tests/test_service_model.py"
+    assert "plan_diff_consistency.observation=planned_test_not_observed" in concern["evidence"]
+    assert "plan_diff_consistency.changed_file_total=0" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["expected_test_total"] == 1
+    assert signal["metrics"]["observed_expected_test_total"] == 0
+    assert signal["metrics"]["missing_expected_test_total"] == 1
+    assert signal["metrics"]["concern_total"] == 1
+
+
+def test_code_review_diff_ignores_string_expected_tests(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "expected_tests": ["tests/test_api_handler.py"],
+                    "tests": ["tests/test_service_model.py"],
+                },
+                "plan_fingerprint": "string-test-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 0,
+            "changed_files": [],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    assert result["concerns"] == []
+    assert result["signals"] == []
 
 
 def test_code_review_since_plan_review_bad_ref_does_not_read_plan(tmp_path, monkeypatch) -> None:

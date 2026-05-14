@@ -99,6 +99,7 @@ Done:
 - `near_duplicate` thin wrapper/facade boilerplate 抑制已落地：委托目标不同的薄 wrapper 不再作为低价值 duplication concern 输出，见 [decisions/042-near-duplicate-thin-wrapper-suppression.md](decisions/042-near-duplicate-thin-wrapper-suppression.md)。
 - `shadow_implementation` role taxonomy precision 已落地：renderer 与 assembler/support/budget/context 等 intentional split-role pairs 被抑制，same-role 和 parser-helper candidates 仍可报告，见 [decisions/043-shadow-implementation-role-taxonomy.md](decisions/043-shadow-implementation-role-taxonomy.md)。
 - risk context enrichment 已落地：`--risk-context` 接受可选 `complexity_by_file`、`public_api_files` 和 `historical_recurrence_by_file`，并把这些 facts 附加到已有 concerns，见 [decisions/044-risk-context-enrichment.md](decisions/044-risk-context-enrichment.md)。
+- plan/diff consistency expected tests v1 已落地：`code-review --diff/--since --plan-review` 读取 saved plan-review JSON 中显式 structured expected-test entries，缺失 selected-diff test touchpoints 时输出 advisory observations，见 [decisions/045-plan-diff-expected-tests.md](decisions/045-plan-diff-expected-tests.md)。
 
 In Progress:
 
@@ -107,7 +108,7 @@ In Progress:
 Next:
 
 - 继续深化 test/churn risk fusion 的 richer external report formats。
-- 评估 plan/diff consistency 的下一层语义：expected tests、public API migration notes 或 dependency alternatives。
+- 评估 plan/diff consistency 的下一层语义：public API migration notes 或 dependency alternatives。
 
 Deferred:
 

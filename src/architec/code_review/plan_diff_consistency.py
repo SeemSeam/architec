@@ -76,6 +76,22 @@ def _dependency_imports(item: dict[str, Any]) -> list[str]:
     return out
 
 
+def _test_expectation_path(item: dict[str, Any]) -> str:
+    for key in ("test_path", "test_glob", "path", "glob", "test"):
+        text = _normal_path(item.get(key, ""))
+        if text:
+            return text
+    return ""
+
+
+def _test_expectation_source(item: dict[str, Any]) -> str:
+    for key in ("source_glob", "source", "source_path", "source_path_glob", "for_path", "from_path"):
+        text = _normal_path(item.get(key, ""))
+        if text:
+            return text
+    return ""
+
+
 def _planned_import_expectations(plan_review: dict[str, Any]) -> list[dict[str, Any]]:
     understood = plan_review.get("understood_plan")
     if not isinstance(understood, dict):
@@ -96,6 +112,31 @@ def _planned_import_expectations(plan_review: dict[str, Any]) -> list[dict[str, 
                 continue
             seen.add(key)
             expectations.append({"source": source, "module": module})
+    return expectations
+
+
+def _planned_test_expectations(plan_review: dict[str, Any]) -> list[dict[str, Any]]:
+    understood = plan_review.get("understood_plan")
+    if not isinstance(understood, dict):
+        return []
+    expectations: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for field in ("expected_tests", "tests"):
+        raw_tests = understood.get(field)
+        if not isinstance(raw_tests, list):
+            continue
+        for item in raw_tests:
+            if not isinstance(item, dict):
+                continue
+            test_path = _test_expectation_path(item)
+            if not test_path:
+                continue
+            source = _test_expectation_source(item)
+            key = (source, test_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            expectations.append({"source": source, "test_path": test_path})
     return expectations
 
 
@@ -133,6 +174,26 @@ def _stable_import_concern_id(
         "observation": "planned_import_not_observed",
         "source": source,
         "module": module,
+        "plan_path": plan_path,
+        "plan_fingerprint": plan_fingerprint,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+    return f"code-review:plan-diff-consistency:{digest}"
+
+
+def _stable_test_concern_id(
+    *,
+    source: str,
+    test_path: str,
+    plan_path: str,
+    plan_fingerprint: str,
+) -> str:
+    payload = {
+        "kind": "plan-diff-consistency",
+        "observation": "planned_test_not_observed",
+        "source": source,
+        "test_path": test_path,
         "plan_path": plan_path,
         "plan_fingerprint": plan_fingerprint,
     }
@@ -264,6 +325,49 @@ def _missing_planned_import_concern(
     }
 
 
+def _missing_planned_test_concern(
+    *,
+    source: str,
+    test_path: str,
+    changed_files: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+) -> dict[str, Any]:
+    evidence = [
+        "plan_diff_consistency.observation=planned_test_not_observed",
+        f"plan_diff_consistency.expected_test={test_path}",
+        f"plan_diff_consistency.changed_file_total={len(changed_files)}",
+    ]
+    if source:
+        evidence.append(f"plan_diff_consistency.test_source={source}")
+    if plan_fingerprint:
+        evidence.append(f"plan_diff_consistency.plan_fingerprint={plan_fingerprint}")
+    if plan_path:
+        evidence.append(f"plan_diff_consistency.plan_path={plan_path}")
+    location_path = test_path or source or plan_path or "plan-review"
+    return {
+        "concern_id": _stable_test_concern_id(
+            source=source,
+            test_path=test_path,
+            plan_path=plan_path,
+            plan_fingerprint=plan_fingerprint,
+        ),
+        "kind": "plan-diff-consistency",
+        "level": "info",
+        "confidence": 0.72,
+        "location": {
+            "path": location_path,
+            "line": 0,
+            "symbol": "",
+            "symbol_kind": "module",
+        },
+        "root_cause": "Saved plan-review expected test path was not observed in the selected diff.",
+        "evidence": evidence,
+        "blast_radius": [path for path in (source, test_path) if path],
+        "next_steps_hint": "Review whether the expected test change is still intended or whether the plan-review artifact should be updated.",
+    }
+
+
 def load_plan_review(path: str | Path) -> dict[str, Any]:
     review_path = Path(path)
     try:
@@ -350,6 +454,42 @@ def _import_expectation_concerns(
     return concerns
 
 
+def _test_expectation_concerns(
+    *,
+    plan_review: dict[str, Any],
+    changed_files: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+) -> list[dict[str, Any]]:
+    expectations = _planned_test_expectations(plan_review)
+    concerns: list[dict[str, Any]] = []
+    for expectation in expectations:
+        source = _normal_path(expectation.get("source", ""))
+        test_path = _normal_path(expectation.get("test_path", ""))
+        if not test_path:
+            continue
+        observed = any(_path_matches(changed_path, test_path) for changed_path in changed_files)
+        if observed:
+            continue
+        concerns.append(
+            _missing_planned_test_concern(
+                source=source,
+                test_path=test_path,
+                changed_files=changed_files,
+                plan_fingerprint=plan_fingerprint,
+                plan_path=plan_path,
+            )
+        )
+    return concerns
+
+
+def _matches_expected_test(path: str, test_expectations: list[dict[str, Any]]) -> bool:
+    return any(
+        _path_matches(path, _normal_path(expectation.get("test_path", "")))
+        for expectation in test_expectations
+    )
+
+
 def plan_diff_consistency_scan(
     plan_review: dict[str, Any],
     *,
@@ -366,19 +506,26 @@ def plan_diff_consistency_scan(
     if isinstance(artifacts, dict):
         plan_path = _normal_path(artifacts.get("plan_path", ""))
     import_expectations = _planned_import_expectations(plan_review)
+    test_expectations = _planned_test_expectations(plan_review)
     root = Path(project_root).resolve() if project_root is not None else None
-    if not planned and not import_expectations:
+    if not planned and not import_expectations and not test_expectations:
         return {
             "concerns": [],
             "changed_file_total": len(changed),
             "planned_path_total": len(planned),
             "planned_import_total": 0,
+            "expected_test_total": 0,
+            "observed_expected_test_total": 0,
+            "missing_expected_test_total": 0,
             "scoped_to_changed_files": True,
         }
 
     concerns: list[dict[str, Any]] = []
     for path in changed:
-        if not any(_path_matches(path, planned_path) for planned_path in planned):
+        if not any(_path_matches(path, planned_path) for planned_path in planned) and not _matches_expected_test(
+            path,
+            test_expectations,
+        ):
             concerns.append(
                 _unexpected_change_concern(
                     path=path,
@@ -406,6 +553,13 @@ def plan_diff_consistency_scan(
             project_root=root,
         )
     )
+    test_concerns = _test_expectation_concerns(
+        plan_review=plan_review,
+        changed_files=changed,
+        plan_fingerprint=plan_fingerprint,
+        plan_path=plan_path,
+    )
+    concerns.extend(test_concerns)
     concerns.sort(
         key=lambda item: (
             str(item.get("level", "") or ""),
@@ -418,6 +572,9 @@ def plan_diff_consistency_scan(
         "changed_file_total": len(changed),
         "planned_path_total": len(planned),
         "planned_import_total": len(import_expectations),
+        "expected_test_total": len(test_expectations),
+        "observed_expected_test_total": len(test_expectations) - len(test_concerns),
+        "missing_expected_test_total": len(test_concerns),
         "concern_total_before_limit": len(concerns),
         "scoped_to_changed_files": True,
     }

@@ -48,6 +48,7 @@
 - `near_duplicate` 会抑制委托目标不同的 thin wrapper/facade boilerplate，避免低价值 wrapper 形状重复占据 top concerns。见 [042-near-duplicate-thin-wrapper-suppression.md](decisions/042-near-duplicate-thin-wrapper-suppression.md)。
 - `shadow_implementation` 会抑制 renderer 与 assembler/support/budget/context 等 intentional split-role pairs，同时保留 same-role 和 parser-helper candidates。见 [043-shadow-implementation-role-taxonomy.md](decisions/043-shadow-implementation-role-taxonomy.md)。
 - risk context enrichment 接受可选 complexity/public API/historical recurrence facts，仍只附加到既有 concerns，不生成新 concern。见 [044-risk-context-enrichment.md](decisions/044-risk-context-enrichment.md)。
+- plan/diff consistency expected tests v1 只消费 saved plan-review JSON 中显式 structured expected-test entries，缺失 selected-diff test touchpoints 时输出 advisory observations。见 [045-plan-diff-expected-tests.md](decisions/045-plan-diff-expected-tests.md)。
 
 ## 目录
 

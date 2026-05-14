@@ -203,6 +203,8 @@ Risk context enrichment accepts additional optional external facts for `complexi
 
 Plan/diff consistency now also reads structured dependency import expectations from saved plan-review JSON. If selected changed Python files do not show an expected import edge, `code-review` emits a neutral `planned_import_not_observed` observation.
 
+Plan/diff consistency expected tests v1 accepts explicit structured expected-test entries from saved plan-review JSON in diff/since review. Missing expected test touchpoints in the selected changed files emit advisory `plan-diff-consistency` observations. Free-form prose test notes remain context, not requirements; full review and since bad-ref degraded results do not run the check.
+
 A Hippocampus dogfood audit recorded the next product priority for incremental review: diff/since top concerns need scope hygiene. Changed-file-scoped observations should be visually and structurally separated from global cleanup, hotspot, and topology context so incremental review does not look dominated by unrelated project-wide debt.
 
 The implemented scope-hygiene behavior keeps full review unchanged. For diff/since review, top-level displayed concerns prioritize selected changed-file observations, while global cleanup/hotspot/topology context remains available through labelled context, signals, or artifacts. Summary metrics distinguish selected-scope counts from global-context counts via `scoped_concern_total`, `global_context_concern_total`, `displayed_scoped_concern_total`, and `displayed_global_context_concern_total`.
