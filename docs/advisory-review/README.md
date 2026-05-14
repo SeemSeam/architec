@@ -43,6 +43,7 @@
 - plan/diff consistency v1 允许 `code-review --diff/--since` 读取已保存的 `plan-review` JSON，并输出路径级 `plan-diff-consistency` observations。见 [037-plan-diff-consistency-v1.md](decisions/037-plan-diff-consistency-v1.md)。
 - `fix-advice` 为 `architecture-contract` concern 输出边界导向 advisory options。见 [038-architecture-contract-fix-advice.md](decisions/038-architecture-contract-fix-advice.md)。
 - risk context fusion v1 允许 `code-review` 读取可选外部 coverage/churn/test-map JSON，并把风险事实附加到既有 concerns。见 [039-risk-context-fusion-v1.md](decisions/039-risk-context-fusion-v1.md)。
+- plan/diff consistency 已扩展为可检查 saved plan-review JSON 中的 structured dependency import expectations。见 [040-plan-diff-import-edge-expectations.md](decisions/040-plan-diff-import-edge-expectations.md)。
 
 ## 目录
 

@@ -454,7 +454,9 @@ changes:
     path: src/service/boundary.py
     intent: clarify service ownership
 dependencies:
-  - src/service/contracts.py
+  - source: src/api/**
+    imports:
+      - app.service.facade
 ```
 ````
 
@@ -553,7 +555,7 @@ archi code-review --diff --plan-review plan.json .
 archi code-review --since main --plan-review plan.json .
 ```
 
-`--plan-review` 读取 saved plan-review JSON，并把 `understood_plan.changes[].path` 与本次 changed files 对齐。输出的 `plan-diff-consistency` concerns 只表示路径级偏离观察，不表示代码或方案哪一方正确。
+`--plan-review` 读取 saved plan-review JSON，并把 `understood_plan.changes[].path` 与本次 changed files 对齐；如果 `understood_plan.dependencies[]` 使用结构化 import expectation，也会检查 selected changed Python files 是否观察到这些 import edges。输出的 `plan-diff-consistency` concerns 只表示偏离观察，不表示代码或方案哪一方正确。
 
 指定比较范围：
 
@@ -685,7 +687,7 @@ archi code-review --diff . --out review.json
 | `--diff` | 启用增量差异分析 |
 | `--base` | 差异分析的起始 git 引用 |
 | `--head` | 差异分析的结束 git 引用 |
-| `--plan-review` | saved plan-review JSON；仅用于 diff/since 的路径级一致性观察 |
+| `--plan-review` | saved plan-review JSON；仅用于 diff/since 的路径和结构化 import expectation 一致性观察 |
 | `--component` | 预留参数，当前未参与核心分析流程 |
 | `--format` | 输出格式偏好，当前接受 `json/md/html/all`，但核心流程仍会统一生成主输出文件 |
 | `--refresh-from-hippo` | 先刷新 Hippo 输入，再继续后续流程 |

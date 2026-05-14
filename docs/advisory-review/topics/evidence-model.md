@@ -65,7 +65,7 @@
 
 `fix-advice` 会为 `architecture-contract` concern 消费这些 factual evidence，并把 `next_steps_hint` 作为可选 review context。它不把 rule note 当作 evidence，也不判断 contract 或 changed import 哪一方正确。
 
-`plan-diff-consistency` concern 的 `location` 指向计划外 changed file 或计划中未触达的路径，`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path facts。它只表达 saved plan-review JSON 与 selected diff 的路径级不一致，不表达 correctness 或 merge readiness。
+`plan-diff-consistency` concern 的 `location` 指向计划外 changed file、计划中未触达的路径，或缺失计划 import expectation 的相关 changed file/source scope。`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path 或 `planned_import` facts。它只表达 saved plan-review JSON 与 selected diff 的不一致，不表达 correctness 或 merge readiness。
 
 `risk_context` facts 是外部报告提供的 companion evidence。它们可以附加到既有 concern 的 `evidence[]`，例如 `risk_context.coverage=0.42`、`risk_context.churn=13` 或 `risk_context.related_test_total=0`。这些 facts 不参与 `concern_id` 生成，不改变 concern ranking，也不表示行为正确性。
 

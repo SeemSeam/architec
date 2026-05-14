@@ -1205,6 +1205,7 @@ def test_code_review_diff_adds_plan_diff_consistency_concerns(tmp_path, monkeypa
     assert signal["summary"] == "2 plan/diff consistency observations detected."
     assert signal["metrics"] == {
         "planned_path_total": 2,
+        "planned_import_total": 0,
         "changed_file_total": 2,
         "concern_total": 2,
         "concern_total_before_limit": 2,
@@ -1247,11 +1248,178 @@ def test_code_review_diff_with_plan_and_empty_diff_reports_missing_planned_path(
     signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
     assert signal["metrics"] == {
         "planned_path_total": 1,
+        "planned_import_total": 0,
         "changed_file_total": 0,
         "concern_total": 1,
         "concern_total_before_limit": 1,
         "scoped_to_changed_files": True,
     }
+
+
+def test_code_review_diff_adds_plan_import_expectation_concern(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py", "intent": "route through service facade"}],
+                    "dependencies": [
+                        {
+                            "source": "src/api/**",
+                            "imports": ["app.service.facade"],
+                        }
+                    ],
+                },
+                "plan_fingerprint": "import-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    api_dir = tmp_path / "src" / "api"
+    api_dir.mkdir(parents=True)
+    (api_dir / "handler.py").write_text("import app.storage\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(
+        item
+        for item in result["concerns"]
+        if item["kind"] == "plan-diff-consistency"
+        and "plan_diff_consistency.observation=planned_import_not_observed" in item["evidence"]
+    )
+    assert concern["location"]["path"] == "src/api/handler.py"
+    assert "plan_diff_consistency.planned_import=app.service.facade" in concern["evidence"]
+    assert "plan_diff_consistency.dependency_source=src/api/**" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["concern_total"] == 1
+
+
+def test_code_review_diff_observes_plan_import_expectation(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py", "intent": "route through service facade"}],
+                    "dependencies": [{"path": "src/api/handler.py", "module": "app.service.facade"}],
+                },
+                "plan_fingerprint": "observed-import-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    api_dir = tmp_path / "src" / "api"
+    api_dir.mkdir(parents=True)
+    (api_dir / "handler.py").write_text("from app.service import facade\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    encoded = json.dumps(result, sort_keys=True)
+    assert "planned_import_not_observed" not in encoded
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["concern_total"] == 0
+
+
+def test_code_review_diff_ignores_string_dependencies_for_import_expectations(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py", "intent": "route handler"}],
+                    "dependencies": ["src/service/contracts.py"],
+                },
+                "plan_fingerprint": "string-dependency-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    api_dir = tmp_path / "src" / "api"
+    api_dir.mkdir(parents=True)
+    (api_dir / "handler.py").write_text("VALUE = 1\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    encoded = json.dumps(result, sort_keys=True)
+    assert "planned_import_not_observed" not in encoded
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["planned_import_total"] == 0
+    assert signal["metrics"]["concern_total"] == 0
+
+
+def test_code_review_diff_ignores_plan_import_expectation_without_changed_python_file(
+    tmp_path, monkeypatch
+) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/schema.yaml", "intent": "update schema"}],
+                    "dependencies": [{"source": "src/api/**", "imports": ["app.service.facade"]}],
+                },
+                "plan_fingerprint": "non-python-dependency-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    api_dir = tmp_path / "src" / "api"
+    api_dir.mkdir(parents=True)
+    (api_dir / "schema.yaml").write_text("version: 1\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/schema.yaml"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    encoded = json.dumps(result, sort_keys=True)
+    assert "planned_import_not_observed" not in encoded
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["planned_import_total"] == 1
+    assert signal["metrics"]["concern_total"] == 0
 
 
 def test_code_review_since_plan_review_bad_ref_does_not_read_plan(tmp_path, monkeypatch) -> None:

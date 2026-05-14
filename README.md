@@ -208,7 +208,9 @@ to unchanged existing implementations.
 Saved plan-review JSON can be supplied to diff/since review with
 `--plan-review <plan.json>`. This adds path-level `plan-diff-consistency`
 observations when changed files fall outside the saved plan touchpoints, or
-when planned paths are not present in the selected diff.
+when planned paths are not present in the selected diff. Structured
+`understood_plan.dependencies[]` import expectations are also checked against
+selected changed Python files.
 
 External risk context JSON can be supplied with `--risk-context <risk.json>`.
 It may contain coverage-by-file, churn-by-file, source-to-test mappings, or
@@ -239,7 +241,9 @@ changes:
     path: src/service/boundary.py
     intent: clarify service ownership
 dependencies:
-  - src/service/contracts.py
+  - source: src/api/**
+    imports:
+      - app.service.facade
 ```
 ````
 

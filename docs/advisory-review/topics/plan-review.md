@@ -73,6 +73,7 @@ Do not change cleanup archive behavior.
 - `suggested_adjustments` 表达可考虑的替代方向。复用已有实现属于一种 adjustment，而不是独立输出类别。
 - `plan_fingerprint` 供后续 `code-review --diff` 做一致性观察。
 - 保存后的 JSON 可通过 `archi code-review --diff --plan-review plan.json .` 或 `archi code-review --since <ref> --plan-review plan.json .` 与 selected changed files 做路径级一致性观察。
+- `dependencies` 可以保留字符串，也可以使用结构化 import expectation，例如 `{source: "src/api/**", imports: ["app.service.facade"]}`；增量 `code-review` 会检查 selected changed Python files 是否观察到这些 import edges。
 - `plan_fingerprint` 保留 YAML 中 `changes` 和 `dependencies` 的原始顺序；同一触达对象列表重新排序会生成不同 fingerprint。这让 fingerprint 表示“这份具体方案文本的承诺”，而不是去重后的对象集合。
 
 ## 空/降级输出

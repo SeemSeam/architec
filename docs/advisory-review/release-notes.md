@@ -197,6 +197,8 @@ Plan/diff consistency v1 connects saved plan-review JSON to incremental code rev
 
 Risk context fusion v1 lets `code-review` read optional external coverage/churn/test-map JSON through `--risk-context <risk.json>`. Matching file facts are appended to existing concerns and summarized in a `risk_context` signal; `architec` does not execute tests or generate those reports.
 
+Plan/diff consistency now also reads structured dependency import expectations from saved plan-review JSON. If selected changed Python files do not show an expected import edge, `code-review` emits a neutral `planned_import_not_observed` observation.
+
 `CodeReviewResult.concerns[]` now uses portfolio ranking for the displayed top concerns. Severity level remains the first ordering boundary, and same-level results prefer a mix of concern kinds before filling remaining slots with the same kind. `summary.concern_total` remains the pre-display total.
 
 CodeReviewResult now records `summary.payload_bytes` as a compact main-payload estimate and applies a conservative display guard to oversized concern evidence, references, blast radius, and one-level signal metric maps. Truncation metadata is recorded in `artifacts.payload_truncation`.

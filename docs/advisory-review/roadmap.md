@@ -93,6 +93,7 @@ Done:
 - plan/diff consistency v1 已落地：`code-review --diff/--since --plan-review <plan.json>` 可将 saved plan-review touchpoints 与 changed files 对齐，输出 `plan-diff-consistency` observations，见 [decisions/037-plan-diff-consistency-v1.md](decisions/037-plan-diff-consistency-v1.md)。
 - `fix-advice` 已为 `architecture-contract` concern 增加专用边界导向 advisory options，见 [decisions/038-architecture-contract-fix-advice.md](decisions/038-architecture-contract-fix-advice.md)。
 - risk context fusion v1 已落地：`code-review --risk-context <risk.json>` 可读取外部 coverage/churn/test-map facts，并附加到已有 concerns，见 [decisions/039-risk-context-fusion-v1.md](decisions/039-risk-context-fusion-v1.md)。
+- plan/diff consistency import-edge expectation 已落地：`understood_plan.dependencies[]` 的 structured import 期望会与 selected changed Python files 的 imports 对齐，见 [decisions/040-plan-diff-import-edge-expectations.md](decisions/040-plan-diff-import-edge-expectations.md)。
 
 In Progress:
 
@@ -100,8 +101,8 @@ In Progress:
 
 Next:
 
-- 继续深化 plan/diff consistency 的 import-edge expectation；路径级 v1 已完成。
 - 继续深化 test/churn risk fusion：complexity/public API risk、historical recurrence 和 richer external report formats。
+- 评估 plan/diff consistency 的下一层语义：expected tests、public API migration notes 或 dependency alternatives。
 
 Deferred:
 

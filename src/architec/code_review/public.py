@@ -684,7 +684,8 @@ def _signals(
         )
     plan_scan = _dict(plan_diff_scan)
     planned_path_total = int(plan_scan.get("planned_path_total", 0) or 0)
-    if planned_path_total:
+    planned_import_total = int(plan_scan.get("planned_import_total", 0) or 0)
+    if planned_path_total or planned_import_total:
         plan_concern_total = sum(
             1
             for concern in concerns
@@ -697,6 +698,7 @@ def _signals(
                 "summary": f"{plan_concern_total} plan/diff consistency observations detected.",
                 "metrics": {
                     "planned_path_total": planned_path_total,
+                    "planned_import_total": planned_import_total,
                     "changed_file_total": int(plan_scan.get("changed_file_total", 0) or 0),
                     "concern_total": plan_concern_total,
                     "concern_total_before_limit": int(
@@ -877,11 +879,16 @@ def _plan_diff_scan_for_review(
     *,
     review_type: str,
     plan_review: dict[str, Any] | None,
+    project_root: str | Path | None,
 ) -> dict[str, Any]:
     if plan_review is None or review_type not in {"diff", "since"}:
         return {"concerns": []}
     changed_files = _changed_files_from_report(report)
-    return plan_diff_consistency_scan(plan_review, changed_files=changed_files)
+    return plan_diff_consistency_scan(
+        plan_review,
+        changed_files=changed_files,
+        project_root=project_root,
+    )
 
 
 def _result_from_report(
@@ -920,6 +927,7 @@ def _result_from_report(
         report,
         review_type=review_type,
         plan_review=plan_review,
+        project_root=project_root,
     )
     plan_diff_concerns = list(plan_diff_scan.get("concerns", []))
     generated_concerns = [

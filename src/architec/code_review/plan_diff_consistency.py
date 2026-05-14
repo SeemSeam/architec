@@ -6,6 +6,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from architec.code_review.python_imports import import_records, module_matches
 from architec.support.io_utils import normalize_relpath
 
 
@@ -38,6 +39,66 @@ def _planned_paths(plan_review: dict[str, Any]) -> list[str]:
     return out
 
 
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    raw = value if isinstance(value, list) else [value]
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _dependency_source(item: dict[str, Any]) -> str:
+    for key in ("source_glob", "source", "path", "from_path"):
+        text = _normal_path(item.get(key, ""))
+        if text:
+            return text
+    return ""
+
+
+def _dependency_imports(item: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in ("imports", "modules", "module", "import", "target", "dependency"):
+        values.extend(_string_list(item.get(key)))
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
+def _planned_import_expectations(plan_review: dict[str, Any]) -> list[dict[str, Any]]:
+    understood = plan_review.get("understood_plan")
+    if not isinstance(understood, dict):
+        return []
+    raw_dependencies = understood.get("dependencies")
+    if not isinstance(raw_dependencies, list):
+        return []
+    expectations: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in raw_dependencies:
+        if not isinstance(item, dict):
+            continue
+        source = _dependency_source(item)
+        imports = _dependency_imports(item)
+        for module in imports:
+            key = (source, module)
+            if key in seen:
+                continue
+            seen.add(key)
+            expectations.append({"source": source, "module": module})
+    return expectations
+
+
 def _path_matches(path: str, pattern: str) -> bool:
     normalized = _normal_path(path)
     planned = _normal_path(pattern)
@@ -58,6 +119,26 @@ def _stable_concern_id(kind: str, *, path: str, plan_path: str, plan_fingerprint
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
     return f"code-review:{kind}:{digest}"
+
+
+def _stable_import_concern_id(
+    *,
+    source: str,
+    module: str,
+    plan_path: str,
+    plan_fingerprint: str,
+) -> str:
+    payload = {
+        "kind": "plan-diff-consistency",
+        "observation": "planned_import_not_observed",
+        "source": source,
+        "module": module,
+        "plan_path": plan_path,
+        "plan_fingerprint": plan_fingerprint,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+    return f"code-review:plan-diff-consistency:{digest}"
 
 
 def _unexpected_change_concern(
@@ -138,6 +219,51 @@ def _missing_planned_path_concern(
     }
 
 
+def _missing_planned_import_concern(
+    *,
+    source: str,
+    module: str,
+    changed_files: list[str],
+    scoped_changed_files: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+) -> dict[str, Any]:
+    location_path = scoped_changed_files[0] if scoped_changed_files else source or plan_path or "plan-review"
+    evidence = [
+        "plan_diff_consistency.observation=planned_import_not_observed",
+        f"plan_diff_consistency.planned_import={module}",
+        f"plan_diff_consistency.changed_file_total={len(changed_files)}",
+        f"plan_diff_consistency.scoped_changed_file_total={len(scoped_changed_files)}",
+    ]
+    if source:
+        evidence.append(f"plan_diff_consistency.dependency_source={source}")
+    if plan_fingerprint:
+        evidence.append(f"plan_diff_consistency.plan_fingerprint={plan_fingerprint}")
+    if plan_path:
+        evidence.append(f"plan_diff_consistency.plan_path={plan_path}")
+    return {
+        "concern_id": _stable_import_concern_id(
+            source=source,
+            module=module,
+            plan_path=plan_path,
+            plan_fingerprint=plan_fingerprint,
+        ),
+        "kind": "plan-diff-consistency",
+        "level": "info",
+        "confidence": 0.7,
+        "location": {
+            "path": location_path,
+            "line": 0,
+            "symbol": "",
+            "symbol_kind": "module",
+        },
+        "root_cause": "Saved plan-review dependency was not observed in the selected diff imports.",
+        "evidence": evidence,
+        "blast_radius": [path for path in (source, *scoped_changed_files) if path],
+        "next_steps_hint": "Review whether the dependency expectation is still intended or whether the implementation uses a different boundary.",
+    }
+
+
 def load_plan_review(path: str | Path) -> dict[str, Any]:
     review_path = Path(path)
     try:
@@ -153,10 +279,82 @@ def load_plan_review(path: str | Path) -> dict[str, Any]:
     return loaded
 
 
+def _imports_by_changed_file(project_root: Path | None, changed_files: list[str]) -> dict[str, list[str]]:
+    if project_root is None:
+        return {}
+    imports_by_file: dict[str, list[str]] = {}
+    for path in changed_files:
+        target = project_root / path
+        if target.suffix != ".py" or not target.exists():
+            continue
+        try:
+            source = target.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        modules: list[str] = []
+        seen: set[str] = set()
+        for record in import_records(path, source):
+            if record.module in seen:
+                continue
+            seen.add(record.module)
+            modules.append(record.module)
+        imports_by_file[path] = modules
+    return imports_by_file
+
+
+def _scoped_changed_files(changed_files: list[str], source: str) -> list[str]:
+    if not source:
+        return changed_files
+    return [path for path in changed_files if _path_matches(path, source)]
+
+
+def _import_expectation_concerns(
+    *,
+    plan_review: dict[str, Any],
+    changed_files: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+    project_root: Path | None,
+) -> list[dict[str, Any]]:
+    expectations = _planned_import_expectations(plan_review)
+    if not expectations or project_root is None:
+        return []
+    imports_by_file = _imports_by_changed_file(project_root, changed_files)
+    changed_python_files = list(imports_by_file)
+    concerns: list[dict[str, Any]] = []
+    for expectation in expectations:
+        source = _normal_path(expectation.get("source", ""))
+        module = str(expectation.get("module", "") or "").strip()
+        if not module:
+            continue
+        scoped_files = _scoped_changed_files(changed_python_files, source)
+        if not scoped_files:
+            continue
+        observed = any(
+            module_matches(imported, module)
+            for path in scoped_files
+            for imported in imports_by_file.get(path, [])
+        )
+        if observed:
+            continue
+        concerns.append(
+            _missing_planned_import_concern(
+                source=source,
+                module=module,
+                changed_files=changed_files,
+                scoped_changed_files=scoped_files,
+                plan_fingerprint=plan_fingerprint,
+                plan_path=plan_path,
+            )
+        )
+    return concerns
+
+
 def plan_diff_consistency_scan(
     plan_review: dict[str, Any],
     *,
     changed_files: list[str],
+    project_root: str | Path | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
     changed = [_normal_path(path) for path in changed_files]
@@ -167,11 +365,14 @@ def plan_diff_consistency_scan(
     plan_path = ""
     if isinstance(artifacts, dict):
         plan_path = _normal_path(artifacts.get("plan_path", ""))
-    if not planned:
+    import_expectations = _planned_import_expectations(plan_review)
+    root = Path(project_root).resolve() if project_root is not None else None
+    if not planned and not import_expectations:
         return {
             "concerns": [],
             "changed_file_total": len(changed),
             "planned_path_total": len(planned),
+            "planned_import_total": 0,
             "scoped_to_changed_files": True,
         }
 
@@ -196,6 +397,15 @@ def plan_diff_consistency_scan(
                     plan_path=plan_path,
                 )
             )
+    concerns.extend(
+        _import_expectation_concerns(
+            plan_review=plan_review,
+            changed_files=changed,
+            plan_fingerprint=plan_fingerprint,
+            plan_path=plan_path,
+            project_root=root,
+        )
+    )
     concerns.sort(
         key=lambda item: (
             str(item.get("level", "") or ""),
@@ -207,6 +417,7 @@ def plan_diff_consistency_scan(
         "concerns": concerns[:limit],
         "changed_file_total": len(changed),
         "planned_path_total": len(planned),
+        "planned_import_total": len(import_expectations),
         "concern_total_before_limit": len(concerns),
         "scoped_to_changed_files": True,
     }

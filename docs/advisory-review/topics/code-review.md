@@ -87,7 +87,7 @@ archi plan-review plan.md --out plan.json
 archi code-review --diff --plan-review plan.json .
 ```
 
-它比较 `understood_plan.changes[].path` 与本次 `change_analysis.changed_files`，对计划外 changed file 或计划中未触达路径输出 `kind: "plan-diff-consistency"` concern，并输出 `plan_diff_consistency` signal。该观察只表达实现与已审查计划的路径级偏离，不判断计划或代码哪一方正确。
+它比较 `understood_plan.changes[].path` 与本次 `change_analysis.changed_files`，对计划外 changed file 或计划中未触达路径输出 `kind: "plan-diff-consistency"` concern。它还读取 structured `understood_plan.dependencies[]` import expectations；如果 selected changed Python files 中没有观察到计划的 import edge，会输出 `plan_diff_consistency.observation=planned_import_not_observed`。这些观察只表达实现与已审查计划的偏离，不判断计划或代码哪一方正确。
 
 Risk context fusion v1 可选读取外部 JSON：
 
