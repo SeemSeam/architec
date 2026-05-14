@@ -61,6 +61,8 @@
 
 `near_duplicate` 不为委托目标不同的 thin wrapper/facade boilerplate 输出 concern。该过滤发生在 concern 构建之前，因此不会改变已输出 concern 的 schema、`concern_id` 格式或 `references[].role` 语义。
 
+`near_duplicate` variant-family grouping v1 不要求新的 ReviewConcern schema。若同一文件内 phase/cache/prompt-builder exact duplicates 被分组或展示限流，已输出的 concern 仍使用 `kind: "duplication"`、`location.symbol_kind: "function"` 和 `references[].role: "reference"`。可选 family evidence 或 signal metrics 只能解释 grouping/display behavior，不能引入 gate、verdict 或 fix-advice schema 语义。
+
 `shadow_implementation` 不为清晰的 renderer versus assembler/support/budget/context split-role pairs 输出 concern。该 role taxonomy filtering 发生在 concern 构建之前；已输出的 `shadow-implementation` concern 仍使用同一 schema、`references[].role: "existing_implementation"`、函数/类 `location.symbol_kind` 和事实型 `concern_id`。parser-helper pairs 和 same-role candidates 仍可报告；file/module-level shadow public signal 仍 deferred。
 
 在 diff/since scoped review 中，`shadow-implementation` 和 `near_duplicate` 的 `location.path` 必须位于 changed files；`references[]` 可以指向未变更文件。对应 signal metrics 使用 `scoped_to_changed_files`、`changed_file_total` 和 `candidate_total_before_scope` 标识它不是全仓总量。`near_duplicate` 的 scope 条件只看 primary `location.path`，不因为 reference path changed 而报告历史旧账。

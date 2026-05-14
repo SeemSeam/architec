@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -189,8 +190,67 @@ def _stable_concern_id(
     return f"code-review:duplication:{digest}"
 
 
+def _stable_family_concern_id(
+    members: list[_FunctionFingerprint],
+    fingerprint: str,
+    family_key: str,
+) -> str:
+    payload = {
+        "kind": "duplication",
+        "scope": "variant-family",
+        "path": members[0].path,
+        "family_key": family_key,
+        "fingerprint": fingerprint,
+        "members": [item.symbol for item in members],
+    }
+    encoded = repr(payload)
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+    return f"code-review:duplication:{digest}"
+
+
 def _candidate_key(item: _FunctionFingerprint) -> tuple[str, int, str]:
     return (item.path, item.line, item.symbol)
+
+
+def _symbol_tokens(symbol: str) -> list[str]:
+    leaf = symbol.rsplit(".", 1)[-1]
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", leaf)
+    spaced = re.sub(r"[^A-Za-z0-9]+", " ", spaced)
+    return [token.lower() for token in spaced.split() if token]
+
+
+def _variant_family_key(symbol: str) -> str:
+    tokens = _symbol_tokens(symbol)
+    if len(tokens) < 2:
+        return ""
+    normalized: list[str] = []
+    variant_seen = False
+    previous_variant_label = False
+    for token in tokens:
+        if token in {"phase", "step", "stage", "part"}:
+            normalized.append(token)
+            previous_variant_label = True
+            continue
+        if previous_variant_label and re.fullmatch(r"\d+[a-z]?", token):
+            variant_seen = True
+            previous_variant_label = False
+            continue
+        previous_variant_label = False
+        labeled = re.fullmatch(r"(phase|step|stage|part|v)\d+[a-z]?", token)
+        if labeled:
+            normalized.append(labeled.group(1))
+            variant_seen = True
+            continue
+        suffixed = re.fullmatch(r"([a-z][a-z_]*?)(\d+[a-z]?)", token)
+        if suffixed and len(suffixed.group(1)) >= 3:
+            normalized.append(suffixed.group(1))
+            variant_seen = True
+            continue
+        if re.fullmatch(r"\d+[a-z]?", token):
+            variant_seen = True
+            continue
+        normalized.append(token)
+    return " ".join(normalized) if variant_seen and len(normalized) >= 2 else ""
 
 
 def _collect_functions(path: Path, root: Path) -> list[_FunctionFingerprint]:
@@ -262,6 +322,48 @@ def _build_concern(
     }
 
 
+def _build_variant_family_concern(
+    members: list[_FunctionFingerprint],
+    fingerprint: str,
+    family_key: str,
+) -> dict[str, Any] | None:
+    pair = _variant_family_representative_pair(members)
+    if pair is None:
+        return None
+    reference, duplicate = pair
+    return {
+        "concern_id": _stable_family_concern_id(members, fingerprint, family_key),
+        "kind": "duplication",
+        "level": "caution",
+        "confidence": 0.82,
+        "location": {
+            "path": duplicate.path,
+            "line": duplicate.line,
+            "symbol": duplicate.symbol,
+            "symbol_kind": "function",
+        },
+        "root_cause": "Same-file function family shares one normalized AST fingerprint across variant members.",
+        "evidence": [
+            f"near_duplicate.fingerprint={fingerprint}",
+            f"near_duplicate.variant_family={family_key}",
+            f"near_duplicate.variant_member_total={len(members)}",
+            f"near_duplicate.reference={reference.path}:{reference.line}:{reference.symbol}",
+            f"near_duplicate.node_count={duplicate.node_count}",
+        ],
+        "references": [
+            {
+                "role": "reference",
+                "path": reference.path,
+                "line": reference.line,
+                "symbol": reference.symbol,
+                "symbol_kind": "function",
+            }
+        ],
+        "blast_radius": [reference.path],
+        "next_steps_hint": "Review whether the variant family should stay explicit or share a common helper.",
+    }
+
+
 def _normalized_changed_files(changed_files: Iterable[str] | None) -> frozenset[str] | None:
     if changed_files is None:
         return None
@@ -294,6 +396,50 @@ def _is_thin_wrapper_pair(
     )
 
 
+def _variant_family_representative_pair(
+    members: list[_FunctionFingerprint],
+) -> tuple[_FunctionFingerprint, _FunctionFingerprint] | None:
+    for reference in members:
+        for duplicate in members:
+            if duplicate == reference:
+                continue
+            if not _is_thin_wrapper_pair(duplicate, reference):
+                return reference, duplicate
+    return None
+
+
+def _variant_family_groups(
+    group: list[_FunctionFingerprint],
+) -> dict[tuple[str, str], list[_FunctionFingerprint]]:
+    families: dict[tuple[str, str], list[_FunctionFingerprint]] = {}
+    for item in group:
+        family_key = _variant_family_key(item.symbol)
+        if not family_key:
+            continue
+        families.setdefault((item.path, family_key), []).append(item)
+    return {
+        key: sorted(items, key=_candidate_key)
+        for key, items in families.items()
+        if len(items) >= 2
+    }
+
+
+def _same_variant_family(
+    left: _FunctionFingerprint,
+    right: _FunctionFingerprint,
+    grouped_keys: set[tuple[str, str]],
+) -> bool:
+    if left.path != right.path:
+        return False
+    left_key = _variant_family_key(left.symbol)
+    right_key = _variant_family_key(right.symbol)
+    return bool(left_key and left_key == right_key and (left.path, left_key) in grouped_keys)
+
+
+def _candidate_keys(items: Iterable[_FunctionFingerprint]) -> set[tuple[str, int, str]]:
+    return {_candidate_key(item) for item in items}
+
+
 def near_duplicate_scan(
     project_root: str | Path,
     *,
@@ -314,6 +460,17 @@ def near_duplicate_scan(
             continue
         group = sorted(items, key=_candidate_key)
         candidate_total_before_scope += len(group) - 1
+        families = _variant_family_groups(group)
+        grouped_keys = set(families)
+        grouped_member_keys: set[tuple[str, int, str]] = set()
+        for (path, family_key), members in sorted(families.items()):
+            if changed_scope is not None and path not in changed_scope:
+                continue
+            concern = _build_variant_family_concern(members, fingerprint, family_key)
+            if not concern:
+                continue
+            concerns.append(concern)
+            grouped_member_keys.update(_candidate_keys(members))
         if changed_scope is None:
             reference = group[0]
             candidates = group[1:]
@@ -325,6 +482,10 @@ def near_duplicate_scan(
                 if changed_scope is not None
                 else reference
             )
+            if _same_variant_family(duplicate, reference, grouped_keys):
+                continue
+            if _candidate_key(duplicate) in grouped_member_keys:
+                continue
             if _is_thin_wrapper_pair(duplicate, reference):
                 continue
             concerns.append(_build_concern(duplicate, reference, fingerprint))

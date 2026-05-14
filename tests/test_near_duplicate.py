@@ -163,6 +163,220 @@ def build_tree(target='.', *, verbose=False):
     assert scan["concerns"] == []
 
 
+def test_near_duplicate_groups_same_file_phase_prompt_family(tmp_path) -> None:
+    (tmp_path / "prompts.py").write_text(
+        """
+def build_phase_1_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+
+
+def build_phase_2a_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+
+
+def build_phase3_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+""",
+        encoding="utf-8",
+    )
+
+    concerns = near_duplicate_concerns(tmp_path)
+
+    assert len(concerns) == 1
+    concern = concerns[0]
+    assert concern["kind"] == "duplication"
+    assert concern["location"]["path"] == "prompts.py"
+    assert "near_duplicate.variant_family=build phase messages" in concern["evidence"]
+    assert "near_duplicate.variant_member_total=3" in concern["evidence"]
+    assert concern["references"][0]["symbol"] == "build_phase_1_messages"
+
+
+def test_near_duplicate_groups_same_file_phase_cache_family(tmp_path) -> None:
+    (tmp_path / "cache.py").write_text(
+        """
+def save_phase1_cache(cache, key, payload):
+    serialized = json.dumps(payload, sort_keys=True)
+    target = cache.root / key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if cache.enabled:
+        target.write_text(serialized, encoding="utf-8")
+    return target
+
+
+def save_phase2_cache(cache, key, payload):
+    serialized = json.dumps(payload, sort_keys=True)
+    target = cache.root / key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if cache.enabled:
+        target.write_text(serialized, encoding="utf-8")
+    return target
+
+
+def save_phase3_cache(cache, key, payload):
+    serialized = json.dumps(payload, sort_keys=True)
+    target = cache.root / key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if cache.enabled:
+        target.write_text(serialized, encoding="utf-8")
+    return target
+""",
+        encoding="utf-8",
+    )
+
+    concerns = near_duplicate_concerns(tmp_path)
+
+    assert len(concerns) == 1
+    assert "near_duplicate.variant_family=save phase cache" in concerns[0]["evidence"]
+    assert "near_duplicate.variant_member_total=3" in concerns[0]["evidence"]
+
+
+def test_near_duplicate_same_file_non_family_duplicate_still_reports(tmp_path) -> None:
+    (tmp_path / "logic.py").write_text(
+        """
+def summarize_primary(records):
+    total = 0
+    for record in records:
+        if record.enabled:
+            total += record.value * 2
+        else:
+            total += record.value
+    if total > 100:
+        total -= 5
+    return total
+
+
+def calculate_secondary(items):
+    result = 0
+    for item in items:
+        if item.enabled:
+            result += item.value * 2
+        else:
+            result += item.value
+    if result > 100:
+        result -= 5
+    return result
+""",
+        encoding="utf-8",
+    )
+
+    concerns = near_duplicate_concerns(tmp_path)
+
+    assert len(concerns) == 1
+    assert concerns[0]["location"]["symbol"] == "calculate_secondary"
+    assert all("variant_family" not in item for item in concerns[0]["evidence"])
+
+
+def test_near_duplicate_scoped_variant_family_does_not_flood_changed_file(tmp_path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "prompts.py").write_text(
+        """
+def build_phase_1_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+
+
+def build_phase_2_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+
+
+def build_phase_3_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+""",
+        encoding="utf-8",
+    )
+
+    scan = near_duplicate_scan(tmp_path, changed_files=["src/prompts.py"])
+
+    assert scan["scoped_to_changed_files"] is True
+    assert len(scan["concerns"]) == 1
+    assert scan["concerns"][0]["location"]["path"] == "src/prompts.py"
+    assert "near_duplicate.variant_member_total=3" in scan["concerns"][0]["evidence"]
+
+
+def test_near_duplicate_variant_family_id_is_stable(tmp_path) -> None:
+    (tmp_path / "prompts.py").write_text(
+        """
+def build_phase_1_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+
+
+def build_phase_2_messages(context):
+    messages = []
+    for section in context.sections:
+        if section.enabled:
+            messages.append({"role": "user", "content": section.text})
+        else:
+            messages.append({"role": "system", "content": "skipped"})
+    if context.note:
+        messages.append({"role": "system", "content": context.note})
+    return messages
+""",
+        encoding="utf-8",
+    )
+
+    first = near_duplicate_concerns(tmp_path)
+    second = near_duplicate_concerns(tmp_path)
+
+    assert first[0]["concern_id"] == second[0]["concern_id"]
+    assert first[0]["concern_id"].startswith("code-review:duplication:")
+
+
 def test_near_duplicate_concerns_ignore_generated_state_dirs(tmp_path) -> None:
     ccb_dir = tmp_path / ".ccb" / "agents" / "agent1" / "provider-state"
     generated_dir = tmp_path / "generated"

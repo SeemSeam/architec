@@ -102,6 +102,7 @@ Done:
 - plan/diff consistency expected tests v1 已落地：`code-review --diff/--since --plan-review` 读取 saved plan-review JSON 中显式 structured expected-test entries，缺失 selected-diff test touchpoints 时输出 advisory observations，见 [decisions/045-plan-diff-expected-tests.md](decisions/045-plan-diff-expected-tests.md)。
 - plan/diff consistency dependency alternatives v1 已落地：structured dependency entries 可声明 acceptable import alternatives，selected changed Python files 命中任一模块即满足；见 [decisions/046-plan-diff-dependency-alternatives.md](decisions/046-plan-diff-dependency-alternatives.md)。
 - plan/diff consistency public API migrations v1 已落地：读取 saved plan-review JSON 中 explicit structured migration touchpoints，缺失 selected-diff public API migration touchpoints 时输出 advisory observations；见 [decisions/047-plan-diff-public-api-migrations.md](decisions/047-plan-diff-public-api-migrations.md)。
+- `near_duplicate` variant-family grouping v1 已落地：同文件 phase/cache/prompt-builder exact duplicate families 会收敛为单个 grouped duplication observation，避免一个 intentional family 淹没 top concerns；见 [decisions/048-near-duplicate-variant-family-grouping.md](decisions/048-near-duplicate-variant-family-grouping.md)。
 
 In Progress:
 
@@ -109,10 +110,6 @@ In Progress:
 
 Next:
 
-- Improve `near_duplicate` display quality for intentional variant families
-  surfaced by Hippocampus dogfood, especially same-file phase/cache/prompt
-  builder families that currently produce many individual exact-fingerprint
-  concerns.
 - Refine `shadow_implementation` mapper taxonomy so broad mapper role matches
   do not conflate color mapping, rename mapping, and other unrelated mapping
   responsibilities.

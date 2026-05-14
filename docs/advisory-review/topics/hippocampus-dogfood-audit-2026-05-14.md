@@ -118,17 +118,19 @@ Weak observations that should drive Architec roadmap refinement:
   many exact normalized AST matches. These are often intentional variant
   families rather than independent wheel-building. They may still be useful as
   architecture context, but they should not flood top concerns as individual
-  repeated findings.
+  repeated findings. This is now captured by [decision 048](../decisions/048-near-duplicate-variant-family-grouping.md):
+  same-file phase/cache/prompt-builder families should be grouped or
+  display-limited while cross-file and substantive non-family duplicates remain
+  reportable.
 - `duplication`: `legacy_project_prompts_dir` versus `project_prompts_dir`
   highlights a compatibility-path variant. The advice should recognize legacy
   or compatibility intent instead of only suggesting direct reuse.
 
 Follow-up plan adjustments:
 
-1. Add near-duplicate variant-family grouping or suppression for same-file
-   phase/cache/prompt-builder families. The goal is to report one grouped
-   advisory observation, or lower display priority, rather than many individual
-   concerns.
+1. Implement the [decision 048](../decisions/048-near-duplicate-variant-family-grouping.md)
+   near-duplicate variant-family grouping/display-limit behavior for same-file
+   phase/cache/prompt-builder families.
 2. Refine `shadow_implementation` taxonomy beyond coarse role tokens. Mapper
    pairs need domain/output-shape separation so color mapping and rename mapping
    do not look like the same implementation role.

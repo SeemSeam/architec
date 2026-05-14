@@ -63,7 +63,7 @@ archi code-review --diff --risk-context <risk.json> .
 - `near_duplicate`：规范化 AST 指纹重复，输出 `duplication` concern，并通过 `references[]` 标出 reference implementation。
 - `shadow_implementation`：函数级和类级跨文件相似实现，输出 `shadow-implementation` concern，并通过 `references[]` 标出 `existing_implementation`。
 
-`near_duplicate` 仍以 exact normalized AST fingerprint 为基础，但会抑制 thin wrapper/facade boilerplate：如果两个薄 wrapper 只是形状相同且委托到不同 target，它们不作为高价值 duplication concern 输出。重复的实质逻辑和委托到同一 target 的 wrapper 仍可被报告。
+`near_duplicate` 仍以 exact normalized AST fingerprint 为基础，但会抑制 thin wrapper/facade boilerplate：如果两个薄 wrapper 只是形状相同且委托到不同 target，它们不作为高价值 duplication concern 输出。variant-family grouping v1 见 [Decision 048](../decisions/048-near-duplicate-variant-family-grouping.md)：same-file phase/cache/prompt-builder exact duplicates 可以被合并为一个 advisory duplication observation，或在 top concern 展示中限流。重复的实质逻辑、cross-file duplicates 和委托到同一 target 的 wrapper 仍可被报告。
 
 `shadow_implementation` 仍以 role overlap、AST similarity、signature/class API similarity、name overlap 和 no reuse edge 为基础，但会抑制清晰的 renderer versus assembler/support/budget/context split-role pairs。same-role candidates 和 parser-helper pairs 仍可报告；scope、`references[].role: "existing_implementation"`、`concern_id` 和 `fix-advice` 语义不变。
 
