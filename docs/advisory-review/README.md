@@ -38,6 +38,7 @@
 - `shadow_implementation` file-level 根仓采样噪声过高，public signal 继续 deferred。见 [032-shadow-implementation-file-public-signal-deferred.md](decisions/032-shadow-implementation-file-public-signal-deferred.md)。
 - AI signal scanners 默认排除本地 agent state、generated artifacts、vendor、fixtures、tests 和 cache 目录。见 [033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md)。
 - 公开 advisory 命令的 empty/degraded 文案使用中性 no-finding / unable-to-analyze 表述。见 [034-advisory-empty-state-wording.md](decisions/034-advisory-empty-state-wording.md)。
+- 下一阶段架构稳定性优先级是 boundary contracts、plan/diff consistency 和 test/churn risk fusion。见 [035-architecture-stability-next-priorities.md](decisions/035-architecture-stability-next-priorities.md)。
 
 ## 目录
 
@@ -61,6 +62,7 @@
 | [topics/fix-advice.md](topics/fix-advice.md) | 修复建议的输入输出和边界 |
 | [topics/status.md](topics/status.md) | 快照、趋势和长期状态观察 |
 | [topics/evidence-model.md](topics/evidence-model.md) | JSON 契约、concern 结构、输出体量、事件流生命周期 |
+| [topics/architecture-stability.md](topics/architecture-stability.md) | 长期架构稳定性能力、缺口和下一阶段优先级 |
 | [topics/review-shortcomings.md](topics/review-shortcomings.md) | 当前审查能力短板 |
 | [topics/ai-signals.md](topics/ai-signals.md) | AI/vibe coding 特有坏味信号 |
 | [topics/external-signals.md](topics/external-signals.md) | 历史、测试、依赖、运行时信号取舍 |

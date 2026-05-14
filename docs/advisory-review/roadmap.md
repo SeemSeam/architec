@@ -88,6 +88,7 @@ Done:
 - `shadow_implementation` file-level dry-run 已在当前仓库采样：根仓 top candidates 被 `.ccb` provider-state/plugin 副本主导，`src/architec` 无 module pair，因此 public signal 继续 deferred，见 [decisions/032-shadow-implementation-file-public-signal-deferred.md](decisions/032-shadow-implementation-file-public-signal-deferred.md)。
 - AI signal scanners 已补 source/generated-state exclusion：`near_duplicate` 和 `shadow_implementation` 默认跳过 `.ccb`、release-flow-test、generated/vendor/test/cache 等目录，见 [decisions/033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md)。
 - 公开 advisory 命令 empty/degraded 文案已标准化：no-finding、no-events、合法空 suggestions 和 unable-to-analyze 输入降级保持中性表达，见 [decisions/034-advisory-empty-state-wording.md](decisions/034-advisory-empty-state-wording.md)。
+- 长期架构稳定性下一阶段已收敛为 architecture contracts、plan/diff consistency 和 test/churn risk fusion，见 [topics/architecture-stability.md](topics/architecture-stability.md) 和 [decisions/035-architecture-stability-next-priorities.md](decisions/035-architecture-stability-next-priorities.md)。
 
 In Progress:
 
@@ -95,7 +96,9 @@ In Progress:
 
 Next:
 
-- 若继续推进 file-level shadow，先收集真实 positive fixture 并补 provider/plugin variant taxonomy；否则从 Deferred 中选择下一项。
+- 设计 architecture contracts：目录/包 ownership、allowed dependency direction、facade/public API expectations，并定义 advisory concern 输出契约。
+- 设计 plan/diff consistency：将 `plan-review` 解析出的 intended changes 与 `code-review --diff` 的 changed files/import edges 对齐。
+- 设计 test/churn risk fusion：读取已有测试、coverage 或 churn 报告，作为 code-review concerns 的风险上下文。
 
 Deferred:
 
