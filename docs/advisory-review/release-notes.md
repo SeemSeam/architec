@@ -199,6 +199,8 @@ Plan/diff consistency v1 connects saved plan-review JSON to incremental code rev
 
 Risk context fusion v1 lets `code-review` read optional external coverage/churn/test-map JSON through `--risk-context <risk.json>`. Matching file facts are appended to existing concerns and summarized in a `risk_context` signal; `architec` does not execute tests or generate those reports.
 
+Risk context enrichment accepts additional optional external facts for `complexity_by_file`, `public_api_files`, and `historical_recurrence_by_file`. These facts attach only to existing concerns and update `risk_context` input and `by_factor` counts; they do not create a new health score, concern kind, concern id scheme, or fix-advice schema.
+
 Plan/diff consistency now also reads structured dependency import expectations from saved plan-review JSON. If selected changed Python files do not show an expected import edge, `code-review` emits a neutral `planned_import_not_observed` observation.
 
 A Hippocampus dogfood audit recorded the next product priority for incremental review: diff/since top concerns need scope hygiene. Changed-file-scoped observations should be visually and structurally separated from global cleanup, hotspot, and topology context so incremental review does not look dominated by unrelated project-wide debt.

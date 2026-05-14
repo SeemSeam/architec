@@ -71,7 +71,7 @@
 
 `plan-diff-consistency` concern 的 `location` 指向计划外 changed file、计划中未触达的路径，或缺失计划 import expectation 的相关 changed file/source scope。`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path 或 `planned_import` facts。它只表达 saved plan-review JSON 与 selected diff 的不一致，不表达 correctness 或 merge readiness。
 
-`risk_context` facts 是外部报告提供的 companion evidence。它们可以附加到既有 concern 的 `evidence[]`，例如 `risk_context.coverage=0.42`、`risk_context.churn=13` 或 `risk_context.related_test_total=0`。这些 facts 不参与 `concern_id` 生成，不改变 concern ranking，也不表示行为正确性。
+`risk_context` facts 是外部报告提供的 companion evidence。它们可以附加到既有 concern 的 `evidence[]`，例如 `risk_context.coverage=0.42`、`risk_context.churn=13`、`risk_context.related_test_total=0`、`risk_context.complexity=18`、`risk_context.public_api=true` 或 `risk_context.recurrence=3`。这些 facts 不参与 `concern_id` 生成，不改变 concern ranking，也不表示行为正确性。Risk context 不创建新 concern；未匹配到既有 concern 的外部文件事实只进入 input counts。
 
 最低验收：
 
@@ -156,6 +156,8 @@ Incremental summaries expose scope hygiene counts:
   "metrics": {}
 }
 ```
+
+`risk_context` signal 的 `metrics` 使用 input counts 和 `by_factor` counts 表示外部事实覆盖面和实际 enrichment。字段可包含 `input_file_total`、`coverage_file_total`、`churn_file_total`、`test_map_file_total`、`changed_test_total`、`complexity_file_total`、`public_api_file_total`、`recurrence_file_total`、`enriched_concern_total` 和 `by_factor`。`by_factor` 可包含 `low_coverage`、`high_churn`、`missing_related_tests`、`high_complexity`、`public_api` 和 `recurring_history`。这些 metrics 只解释 risk facts 的附加情况，不是健康分。
 
 `evidence[]` 统一结构：
 

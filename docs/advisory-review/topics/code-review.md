@@ -99,7 +99,7 @@ Risk context fusion v1 可选读取外部 JSON：
 archi code-review --diff --risk-context risk.json .
 ```
 
-`risk.json` 可以包含 `coverage_by_file`、`churn_by_file`、`test_files_by_source` 和 `changed_tests`。`code-review` 只把这些外部事实附加到已有 concerns，并输出 `risk_context` signal；它不执行测试、不生成 coverage、不计算新的健康分。
+`risk.json` 可以包含 `coverage_by_file`、`churn_by_file`、`test_files_by_source`、`changed_tests`，以及 [Decision 044](../decisions/044-risk-context-enrichment.md) 接受的 `complexity_by_file`、`public_api_files`、`historical_recurrence_by_file`。`code-review` 只把这些外部事实附加到已有 concerns，并输出 `risk_context` signal；它不执行测试、不生成 coverage、不计算 complexity、不挖掘历史 recurrence、不计算新的健康分。
 
 ## Dogfood Follow-Up
 

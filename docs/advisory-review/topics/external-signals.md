@@ -29,6 +29,8 @@
 
 V1 见 [Decision 039](../decisions/039-risk-context-fusion-v1.md)：`code-review --risk-context <risk.json>` 读取外部 coverage/churn/test-map JSON，把匹配路径的事实附加到已有 concerns，并输出 `risk_context` signal。没有输入时不输出该 signal。
 
+Enrichment 见 [Decision 044](../decisions/044-risk-context-enrichment.md)：同一个 JSON 还接受 optional `complexity_by_file`、`public_api_files` 和 `historical_recurrence_by_file`。这些 facts 仍然只附加到已有 concerns，不生成 coverage、complexity 或 recurrence 数据，也不创建新的 concern kind。
+
 ## 依赖信号
 
 依赖信号只做架构视角：

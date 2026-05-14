@@ -1569,6 +1569,20 @@ def test_code_review_full_enriches_concerns_with_external_risk_context(tmp_path,
             {
                 "coverage_by_file": {"src/legacy/old_service.py": {"line_rate": 0.42}},
                 "churn_by_file": {"src/legacy/old_service.py": {"changes": 13}},
+                "complexity_by_file": {
+                    "src/legacy/old_service.py": {"cyclomatic": 18.25},
+                    "docs/legacy.md": 4,
+                    "src/unmatched.py": {"score": 99},
+                },
+                "public_api_files": {
+                    "src/legacy/old_service.py": {"exports": ["OldService"]},
+                    "docs/legacy.md": False,
+                    "src/unmatched.py": True,
+                },
+                "historical_recurrence_by_file": {
+                    "src/legacy/old_service.py": {"recent_count": 3},
+                    "docs/legacy.md": 1,
+                },
                 "test_files_by_source": {"src/legacy/old_service.py": []},
                 "changed_tests": ["tests/test_legacy.py"],
             }
@@ -1599,21 +1613,77 @@ def test_code_review_full_enriches_concerns_with_external_risk_context(tmp_path,
         and "risk_context.related_test_total=0" in concern["evidence"]
     ]
     assert full_enriched
+    assert "risk_context.complexity=18.25" in full_enriched[0]["evidence"]
+    assert "risk_context.complexity_level=high" in full_enriched[0]["evidence"]
+    assert "risk_context.public_api=true" in full_enriched[0]["evidence"]
+    assert "risk_context.recurrence=3" in full_enriched[0]["evidence"]
+    assert "risk_context.recurrence_level=recurring" in full_enriched[0]["evidence"]
+    doc_enriched = [
+        concern
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] == "docs/legacy.md"
+    ]
+    assert doc_enriched
+    assert "risk_context.complexity=4" in doc_enriched[0]["evidence"]
+    assert "risk_context.recurrence=1" in doc_enriched[0]["evidence"]
+    assert "risk_context.complexity_level=high" not in doc_enriched[0]["evidence"]
+    assert "risk_context.recurrence_level=recurring" not in doc_enriched[0]["evidence"]
+    assert "risk_context.public_api=true" not in doc_enriched[0]["evidence"]
+    assert all(
+        "risk_context." not in fact
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] != "src/legacy/old_service.py"
+        and concern["location"]["path"] != "docs/legacy.md"
+        for fact in concern["evidence"]
+    )
     signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
-    assert signal["summary"] == "2 concerns enriched with external risk context."
+    assert signal["summary"] == "3 concerns enriched with external risk context."
     assert signal["metrics"] == {
-        "input_file_total": 1,
-        "enriched_concern_total": 2,
+        "input_file_total": 3,
+        "enriched_concern_total": 3,
         "changed_test_total": 1,
         "coverage_file_total": 1,
         "churn_file_total": 1,
+        "complexity_file_total": 3,
+        "public_api_file_total": 2,
+        "recurrence_file_total": 2,
         "test_map_file_total": 1,
         "by_factor": {
             "high_churn": 2,
+            "high_complexity": 2,
             "low_coverage": 2,
             "missing_related_tests": 2,
+            "public_api": 2,
+            "recurring_history": 2,
         },
     }
+
+
+def test_code_review_risk_context_public_api_files_list_form(tmp_path, monkeypatch) -> None:
+    risk_path = tmp_path / "risk-context.json"
+    risk_path.write_text(
+        json.dumps({"public_api_files": ["docs/legacy.md", "src/unmatched.py"]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+    artifact_path = result["artifacts"]["code_review_concerns_json"]
+    artifact = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
+    doc_concern = next(item for item in artifact["concerns"] if item["location"]["path"] == "docs/legacy.md")
+
+    assert "risk_context.public_api=true" in doc_concern["evidence"]
+    assert all(
+        "risk_context." not in fact
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] != "docs/legacy.md"
+        for fact in concern["evidence"]
+    )
+    signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
+    assert signal["metrics"]["input_file_total"] == 2
+    assert signal["metrics"]["public_api_file_total"] == 2
+    assert signal["metrics"]["by_factor"] == {"public_api": 1}
 
 
 def test_code_review_without_risk_context_has_no_risk_signal(tmp_path, monkeypatch) -> None:

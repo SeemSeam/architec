@@ -9,6 +9,8 @@ from architec.support.io_utils import normalize_relpath
 
 LOW_COVERAGE_THRESHOLD = 0.6
 HIGH_CHURN_THRESHOLD = 10
+HIGH_COMPLEXITY_THRESHOLD = 15
+RECURRING_HISTORY_THRESHOLD = 2
 
 
 def _dict(value: object) -> dict[str, Any]:
@@ -63,6 +65,38 @@ def _churn_value(value: object) -> int | None:
     return int(number)
 
 
+def _complexity_value(value: object) -> float | None:
+    raw = value
+    if isinstance(value, dict):
+        for key in ("complexity", "cyclomatic", "score"):
+            if key in value:
+                raw = value.get(key)
+                break
+    number = _number(raw)
+    if number is None or number < 0:
+        return None
+    return number
+
+
+def _recurrence_value(value: object) -> int | None:
+    raw = value
+    if isinstance(value, dict):
+        for key in ("count", "occurrences", "recurrence", "recent_count"):
+            if key in value:
+                raw = value.get(key)
+                break
+    number = _number(raw)
+    if number is None or number < 0:
+        return None
+    return int(number)
+
+
+def _format_number(value: float) -> str:
+    if value.is_integer():
+        return str(int(value))
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
 def _coverage_by_file(context: dict[str, Any]) -> dict[str, float]:
     out: dict[str, float] = {}
     raw = _dict(context.get("coverage_by_file"))
@@ -82,6 +116,46 @@ def _churn_by_file(context: dict[str, Any]) -> dict[str, int]:
         churn = _churn_value(value)
         if normalized and churn is not None:
             out[normalized] = churn
+    return out
+
+
+def _complexity_by_file(context: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    raw = _dict(context.get("complexity_by_file"))
+    for path, value in raw.items():
+        normalized = _normal_path(path)
+        complexity = _complexity_value(value)
+        if normalized and complexity is not None:
+            out[normalized] = round(complexity, 4)
+    return out
+
+
+def _public_api_files(context: dict[str, Any]) -> set[str]:
+    raw = context.get("public_api_files")
+    out: set[str] = set()
+    if isinstance(raw, list):
+        for item in raw:
+            normalized = _normal_path(item)
+            if normalized:
+                out.add(normalized)
+    elif isinstance(raw, dict):
+        for path, value in raw.items():
+            if not value and not isinstance(value, dict):
+                continue
+            normalized = _normal_path(path)
+            if normalized:
+                out.add(normalized)
+    return out
+
+
+def _historical_recurrence_by_file(context: dict[str, Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    raw = _dict(context.get("historical_recurrence_by_file"))
+    for path, value in raw.items():
+        normalized = _normal_path(path)
+        recurrence = _recurrence_value(value)
+        if normalized and recurrence is not None:
+            out[normalized] = recurrence
     return out
 
 
@@ -147,12 +221,18 @@ def apply_risk_context(
         return concerns, {}
     coverage = _coverage_by_file(context)
     churn = _churn_by_file(context)
+    complexity = _complexity_by_file(context)
+    public_api = _public_api_files(context)
+    recurrence = _historical_recurrence_by_file(context)
     tests_by_source = _test_map(context)
     changed_tests = _changed_tests(context)
     enriched: list[dict[str, Any]] = []
     by_factor = {
         "low_coverage": 0,
         "high_churn": 0,
+        "high_complexity": 0,
+        "public_api": 0,
+        "recurring_history": 0,
         "missing_related_tests": 0,
     }
     enriched_total = 0
@@ -172,6 +252,21 @@ def apply_risk_context(
             if value >= HIGH_CHURN_THRESHOLD:
                 facts.append("risk_context.churn_level=high")
                 by_factor["high_churn"] += 1
+        if path in complexity:
+            value = complexity[path]
+            facts.append(f"risk_context.complexity={_format_number(value)}")
+            if value >= HIGH_COMPLEXITY_THRESHOLD:
+                facts.append("risk_context.complexity_level=high")
+                by_factor["high_complexity"] += 1
+        if path in public_api:
+            facts.append("risk_context.public_api=true")
+            by_factor["public_api"] += 1
+        if path in recurrence:
+            value = recurrence[path]
+            facts.append(f"risk_context.recurrence={value}")
+            if value >= RECURRING_HISTORY_THRESHOLD:
+                facts.append("risk_context.recurrence_level=recurring")
+                by_factor["recurring_history"] += 1
         if path in tests_by_source:
             related_tests = tests_by_source[path]
             facts.append(f"risk_context.related_test_total={len(related_tests)}")
@@ -183,7 +278,7 @@ def apply_risk_context(
             enriched_total += 1
         enriched.append(copied)
 
-    file_paths = set(coverage) | set(churn) | set(tests_by_source)
+    file_paths = set(coverage) | set(churn) | set(complexity) | set(public_api) | set(recurrence) | set(tests_by_source)
     scan = {
         "input_file_total": len(file_paths),
         "changed_test_total": len(changed_tests),
@@ -191,6 +286,9 @@ def apply_risk_context(
         "by_factor": {key: value for key, value in sorted(by_factor.items()) if value},
         "coverage_file_total": len(coverage),
         "churn_file_total": len(churn),
+        "complexity_file_total": len(complexity),
+        "public_api_file_total": len(public_api),
+        "recurrence_file_total": len(recurrence),
         "test_map_file_total": len(tests_by_source),
     }
     return enriched, scan

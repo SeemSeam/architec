@@ -115,7 +115,7 @@ The next architecture-stability work should prioritize contract and drift contro
    - enrich existing concerns with companion risk facts rather than inventing a separate health score;
    - never execute the test runner as part of `code-review`.
 
-   V1 is recorded in [Decision 039](../decisions/039-risk-context-fusion-v1.md). It reads an optional `--risk-context` JSON and adds companion evidence plus a `risk_context` signal.
+   V1 is recorded in [Decision 039](../decisions/039-risk-context-fusion-v1.md). It reads an optional `--risk-context` JSON and adds companion evidence plus a `risk_context` signal. Complexity, public API, and historical recurrence enrichment are recorded in [Decision 044](../decisions/044-risk-context-enrichment.md); these facts still attach only to existing concerns.
 
 4. **Module-Level Shadow Re-evaluation**
 
@@ -148,6 +148,6 @@ The next major gap is not another generic smell detector. It is the absence of r
 
 The second gap is intent tracking. Vibe-coding drift often starts when implementation wanders away from a reviewed plan. Path-level plan/diff consistency is now available when a saved `plan-review` JSON is provided, but deeper semantic intent and import-edge expectations remain future work.
 
-The third gap is risk fusion. Architecture concerns matter more when they appear in high-churn, under-tested, public API code. V1 can combine externally supplied coverage/churn/test-map facts with concerns, but richer complexity, public API, and historical fusion remain future work.
+The third gap is risk fusion. Architecture concerns matter more when they appear in high-churn, under-tested, public API code. V1 can combine externally supplied coverage/churn/test-map facts with concerns, and Decision 044 extends that input model to optional complexity, public API, and historical recurrence facts. Richer external report formats and cross-event historical explanation remain future work.
 
 These three gaps define the implementation sequence: contracts first, path-level plan/diff consistency second, test/churn fusion third.
