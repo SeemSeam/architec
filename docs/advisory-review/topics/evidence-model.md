@@ -69,7 +69,7 @@
 
 `fix-advice` 会为 `architecture-contract` concern 消费这些 factual evidence，并把 `next_steps_hint` 作为可选 review context。它不把 rule note 当作 evidence，也不判断 contract 或 changed import 哪一方正确。
 
-`plan-diff-consistency` concern 的 `location` 指向计划外 changed file、计划中未触达的路径、缺失计划 import expectation 的相关 changed file/source scope、缺失 dependency alternative group 的 source scope，或缺失 expected-test touchpoint 的计划 source/test scope。`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path、`planned_import` facts、dependency alternative facts 或 expected-test facts。Dependency alternatives 和 expected-test observations 都只使用显式 structured plan-review entries；任意 prose/string dependency 或 test note 不生成 requirement。它只表达 saved plan-review JSON 与 selected diff 的不一致，不表达 correctness、test adequacy 或 merge readiness。
+`plan-diff-consistency` concern 的 `location` 指向计划外 changed file、计划中未触达的路径、缺失计划 import expectation 的相关 changed file/source scope、缺失 dependency alternative group 的 source scope、缺失 expected-test touchpoint 的计划 source/test scope，或缺失 public API migration touchpoint 的计划 path。`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path、`planned_import` facts、dependency alternative facts、expected-test facts 或 public API migration facts。Dependency alternatives、expected-test observations 和 public API migration observations 都只使用显式 structured plan-review entries；任意 prose/string dependency、test 或 migration note 不生成 requirement。它只表达 saved plan-review JSON 与 selected diff 的不一致，不表达 correctness、test adequacy、API correctness 或 merge readiness。
 
 `risk_context` facts 是外部报告提供的 companion evidence。它们可以附加到既有 concern 的 `evidence[]`，例如 `risk_context.coverage=0.42`、`risk_context.churn=13`、`risk_context.related_test_total=0`、`risk_context.complexity=18`、`risk_context.public_api=true` 或 `risk_context.recurrence=3`。这些 facts 不参与 `concern_id` 生成，不改变 concern ranking，也不表示行为正确性。Risk context 不创建新 concern；未匹配到既有 concern 的外部文件事实只进入 input counts。
 
@@ -159,7 +159,7 @@ Incremental summaries expose scope hygiene counts:
 
 `risk_context` signal 的 `metrics` 使用 input counts 和 `by_factor` counts 表示外部事实覆盖面和实际 enrichment。字段可包含 `input_file_total`、`coverage_file_total`、`churn_file_total`、`test_map_file_total`、`changed_test_total`、`complexity_file_total`、`public_api_file_total`、`recurrence_file_total`、`enriched_concern_total` 和 `by_factor`。`by_factor` 可包含 `low_coverage`、`high_churn`、`missing_related_tests`、`high_complexity`、`public_api` 和 `recurring_history`。这些 metrics 只解释 risk facts 的附加情况，不是健康分。
 
-`plan_diff_consistency` signal 的 `metrics` 可包含 `planned_path_total`、`planned_import_total`、`planned_import_alternative_total`、`observed_planned_import_total`、`missing_planned_import_total`、`expected_test_total`、`observed_expected_test_total`、`missing_expected_test_total`、`changed_file_total`、`concern_total` 和 `concern_total_before_limit`。这些 metrics 解释 saved plan-review JSON 与 selected diff/since range 的对齐观察，不是测试充分性评分或 dependency allow-list coverage。
+`plan_diff_consistency` signal 的 `metrics` 可包含 `planned_path_total`、`planned_import_total`、`planned_import_alternative_total`、`observed_planned_import_total`、`missing_planned_import_total`、`expected_test_total`、`observed_expected_test_total`、`missing_expected_test_total`、`public_api_migration_total`、`observed_public_api_migration_total`、`missing_public_api_migration_total`、`changed_file_total`、`concern_total` 和 `concern_total_before_limit`。这些 metrics 解释 saved plan-review JSON 与 selected diff/since range 的对齐观察，不是测试充分性评分、dependency allow-list coverage 或 public API migration correctness score。
 
 `evidence[]` 统一结构：
 

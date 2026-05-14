@@ -687,7 +687,8 @@ def _signals(
     planned_path_total = int(plan_scan.get("planned_path_total", 0) or 0)
     planned_import_total = int(plan_scan.get("planned_import_total", 0) or 0)
     expected_test_total = int(plan_scan.get("expected_test_total", 0) or 0)
-    if planned_path_total or planned_import_total or expected_test_total:
+    public_api_migration_total = int(plan_scan.get("public_api_migration_total", 0) or 0)
+    if planned_path_total or planned_import_total or expected_test_total or public_api_migration_total:
         plan_concern_total = sum(
             1
             for concern in concerns
@@ -716,6 +717,13 @@ def _signals(
                     ),
                     "missing_expected_test_total": int(
                         plan_scan.get("missing_expected_test_total", 0) or 0
+                    ),
+                    "public_api_migration_total": public_api_migration_total,
+                    "observed_public_api_migration_total": int(
+                        plan_scan.get("observed_public_api_migration_total", 0) or 0
+                    ),
+                    "missing_public_api_migration_total": int(
+                        plan_scan.get("missing_public_api_migration_total", 0) or 0
                     ),
                     "changed_file_total": int(plan_scan.get("changed_file_total", 0) or 0),
                     "concern_total": plan_concern_total,

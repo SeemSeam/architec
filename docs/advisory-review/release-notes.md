@@ -1,7 +1,7 @@
 # Advisory Review Migration Notes
 
 Date: 2026-05-12
-Updated: 2026-05-13
+Updated: 2026-05-14
 
 ## Summary
 
@@ -206,6 +206,8 @@ Plan/diff consistency now also reads structured dependency import expectations f
 Plan/diff consistency expected tests v1 accepts explicit structured expected-test entries from saved plan-review JSON in diff/since review. Missing expected test touchpoints in the selected changed files emit advisory `plan-diff-consistency` observations. Free-form prose test notes remain context, not requirements; full review and since bad-ref degraded results do not run the check.
 
 Plan/diff consistency dependency alternatives v1 lets explicit structured dependency entries list acceptable import alternatives. The selected changed Python files satisfy the expectation when any listed module is imported; missing all alternatives emits an advisory `plan-diff-consistency` observation. Free-form prose dependency notes remain context, not requirements.
+
+Plan/diff consistency public API migrations v1 accepts explicit structured public API migration entries from saved plan-review JSON. Missing selected-diff migration touchpoints emit advisory `plan-diff-consistency` observations. String or prose migration notes remain context, not requirements, and there is no dedicated fix-advice behavior.
 
 A Hippocampus dogfood audit recorded the next product priority for incremental review: diff/since top concerns need scope hygiene. Changed-file-scoped observations should be visually and structurally separated from global cleanup, hotspot, and topology context so incremental review does not look dominated by unrelated project-wide debt.
 

@@ -111,6 +111,26 @@ def _test_expectation_source(item: dict[str, Any]) -> str:
     return ""
 
 
+def _public_api_migration_path(item: dict[str, Any]) -> str:
+    for key in ("path", "api_path", "public_api_path", "glob", "api_glob"):
+        text = _normal_path(item.get(key, ""))
+        if text:
+            return text
+    return ""
+
+
+def _public_api_migration_source(item: dict[str, Any]) -> str:
+    for key in ("source_glob", "source", "from_path"):
+        text = _normal_path(item.get(key, ""))
+        if text:
+            return text
+    return ""
+
+
+def _context_value(item: dict[str, Any], key: str) -> str:
+    return str(item.get(key, "") or "").strip()
+
+
 def _planned_import_expectations(plan_review: dict[str, Any]) -> list[dict[str, Any]]:
     understood = plan_review.get("understood_plan")
     if not isinstance(understood, dict):
@@ -145,6 +165,42 @@ def _planned_import_expectations(plan_review: dict[str, Any]) -> list[dict[str, 
                 continue
             seen_alternatives.add(alt_key)
             expectations.append({"source": source, "modules": alternatives, "alternative": True})
+    return expectations
+
+
+def _planned_public_api_migrations(plan_review: dict[str, Any]) -> list[dict[str, Any]]:
+    understood = plan_review.get("understood_plan")
+    if not isinstance(understood, dict):
+        return []
+    expectations: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str, str]] = set()
+    for field in ("public_api_migrations", "api_migrations"):
+        raw_migrations = understood.get(field)
+        if not isinstance(raw_migrations, list):
+            continue
+        for item in raw_migrations:
+            if not isinstance(item, dict):
+                continue
+            path = _public_api_migration_path(item)
+            if not path:
+                continue
+            source = _public_api_migration_source(item)
+            symbol = _context_value(item, "symbol")
+            old_symbol = _context_value(item, "old_symbol")
+            new_symbol = _context_value(item, "new_symbol")
+            key = (source, path, symbol, old_symbol, new_symbol)
+            if key in seen:
+                continue
+            seen.add(key)
+            expectations.append(
+                {
+                    "source": source,
+                    "path": path,
+                    "symbol": symbol,
+                    "old_symbol": old_symbol,
+                    "new_symbol": new_symbol,
+                }
+            )
     return expectations
 
 
@@ -247,6 +303,32 @@ def _stable_test_concern_id(
         "observation": "planned_test_not_observed",
         "source": source,
         "test_path": test_path,
+        "plan_path": plan_path,
+        "plan_fingerprint": plan_fingerprint,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+    return f"code-review:plan-diff-consistency:{digest}"
+
+
+def _stable_public_api_migration_concern_id(
+    *,
+    source: str,
+    path: str,
+    symbol: str,
+    old_symbol: str,
+    new_symbol: str,
+    plan_path: str,
+    plan_fingerprint: str,
+) -> str:
+    payload = {
+        "kind": "plan-diff-consistency",
+        "observation": "planned_public_api_migration_not_observed",
+        "source": source,
+        "path": path,
+        "symbol": symbol,
+        "old_symbol": old_symbol,
+        "new_symbol": new_symbol,
         "plan_path": plan_path,
         "plan_fingerprint": plan_fingerprint,
     }
@@ -468,6 +550,61 @@ def _missing_planned_test_concern(
     }
 
 
+def _missing_public_api_migration_concern(
+    *,
+    expectation: dict[str, Any],
+    changed_files: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+) -> dict[str, Any]:
+    source = _normal_path(expectation.get("source", ""))
+    path = _normal_path(expectation.get("path", ""))
+    symbol = str(expectation.get("symbol", "") or "").strip()
+    old_symbol = str(expectation.get("old_symbol", "") or "").strip()
+    new_symbol = str(expectation.get("new_symbol", "") or "").strip()
+    evidence = [
+        "plan_diff_consistency.observation=planned_public_api_migration_not_observed",
+        f"plan_diff_consistency.public_api_migration={path}",
+        f"plan_diff_consistency.changed_file_total={len(changed_files)}",
+    ]
+    if source:
+        evidence.append(f"plan_diff_consistency.migration_source={source}")
+    if symbol:
+        evidence.append(f"plan_diff_consistency.symbol={symbol}")
+    if old_symbol:
+        evidence.append(f"plan_diff_consistency.old_symbol={old_symbol}")
+    if new_symbol:
+        evidence.append(f"plan_diff_consistency.new_symbol={new_symbol}")
+    if plan_fingerprint:
+        evidence.append(f"plan_diff_consistency.plan_fingerprint={plan_fingerprint}")
+    if plan_path:
+        evidence.append(f"plan_diff_consistency.plan_path={plan_path}")
+    return {
+        "concern_id": _stable_public_api_migration_concern_id(
+            source=source,
+            path=path,
+            symbol=symbol,
+            old_symbol=old_symbol,
+            new_symbol=new_symbol,
+            plan_path=plan_path,
+            plan_fingerprint=plan_fingerprint,
+        ),
+        "kind": "plan-diff-consistency",
+        "level": "info",
+        "confidence": 0.72,
+        "location": {
+            "path": path or source or plan_path or "plan-review",
+            "line": 0,
+            "symbol": symbol or new_symbol or old_symbol,
+            "symbol_kind": "module",
+        },
+        "root_cause": "Saved plan-review public API migration touchpoint was not observed in the selected diff.",
+        "evidence": evidence,
+        "blast_radius": [item for item in (source, path) if item],
+        "next_steps_hint": "Review whether the public API migration is still intended or whether the plan-review artifact should be updated.",
+    }
+
+
 def load_plan_review(path: str | Path) -> dict[str, Any]:
     review_path = Path(path)
     try:
@@ -610,10 +747,43 @@ def _test_expectation_concerns(
     return concerns
 
 
+def _public_api_migration_concerns(
+    *,
+    expectations: list[dict[str, Any]],
+    changed_files: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+) -> list[dict[str, Any]]:
+    concerns: list[dict[str, Any]] = []
+    for expectation in expectations:
+        expected_path = _normal_path(expectation.get("path", ""))
+        if not expected_path:
+            continue
+        observed = any(_path_matches(changed_path, expected_path) for changed_path in changed_files)
+        if observed:
+            continue
+        concerns.append(
+            _missing_public_api_migration_concern(
+                expectation=expectation,
+                changed_files=changed_files,
+                plan_fingerprint=plan_fingerprint,
+                plan_path=plan_path,
+            )
+        )
+    return concerns
+
+
 def _matches_expected_test(path: str, test_expectations: list[dict[str, Any]]) -> bool:
     return any(
         _path_matches(path, _normal_path(expectation.get("test_path", "")))
         for expectation in test_expectations
+    )
+
+
+def _matches_public_api_migration(path: str, expectations: list[dict[str, Any]]) -> bool:
+    return any(
+        _path_matches(path, _normal_path(expectation.get("path", "")))
+        for expectation in expectations
     )
 
 
@@ -634,8 +804,9 @@ def plan_diff_consistency_scan(
         plan_path = _normal_path(artifacts.get("plan_path", ""))
     import_expectations = _planned_import_expectations(plan_review)
     test_expectations = _planned_test_expectations(plan_review)
+    public_api_migrations = _planned_public_api_migrations(plan_review)
     root = Path(project_root).resolve() if project_root is not None else None
-    if not planned and not import_expectations and not test_expectations:
+    if not planned and not import_expectations and not test_expectations and not public_api_migrations:
         return {
             "concerns": [],
             "changed_file_total": len(changed),
@@ -647,6 +818,9 @@ def plan_diff_consistency_scan(
             "expected_test_total": 0,
             "observed_expected_test_total": 0,
             "missing_expected_test_total": 0,
+            "public_api_migration_total": 0,
+            "observed_public_api_migration_total": 0,
+            "missing_public_api_migration_total": 0,
             "scoped_to_changed_files": True,
         }
 
@@ -655,6 +829,9 @@ def plan_diff_consistency_scan(
         if not any(_path_matches(path, planned_path) for planned_path in planned) and not _matches_expected_test(
             path,
             test_expectations,
+        ) and not _matches_public_api_migration(
+            path,
+            public_api_migrations,
         ):
             concerns.append(
                 _unexpected_change_concern(
@@ -691,6 +868,13 @@ def plan_diff_consistency_scan(
         plan_path=plan_path,
     )
     concerns.extend(test_concerns)
+    public_api_migration_concerns = _public_api_migration_concerns(
+        expectations=public_api_migrations,
+        changed_files=changed,
+        plan_fingerprint=plan_fingerprint,
+        plan_path=plan_path,
+    )
+    concerns.extend(public_api_migration_concerns)
     concerns.sort(
         key=lambda item: (
             str(item.get("level", "") or ""),
@@ -709,6 +893,9 @@ def plan_diff_consistency_scan(
         "expected_test_total": len(test_expectations),
         "observed_expected_test_total": len(test_expectations) - len(test_concerns),
         "missing_expected_test_total": len(test_concerns),
+        "public_api_migration_total": len(public_api_migrations),
+        "observed_public_api_migration_total": len(public_api_migrations) - len(public_api_migration_concerns),
+        "missing_public_api_migration_total": len(public_api_migration_concerns),
         "concern_total_before_limit": len(concerns),
         "scoped_to_changed_files": True,
     }

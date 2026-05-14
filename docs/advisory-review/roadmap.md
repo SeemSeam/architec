@@ -101,6 +101,7 @@ Done:
 - risk context enrichment 已落地：`--risk-context` 接受可选 `complexity_by_file`、`public_api_files` 和 `historical_recurrence_by_file`，并把这些 facts 附加到已有 concerns，见 [decisions/044-risk-context-enrichment.md](decisions/044-risk-context-enrichment.md)。
 - plan/diff consistency expected tests v1 已落地：`code-review --diff/--since --plan-review` 读取 saved plan-review JSON 中显式 structured expected-test entries，缺失 selected-diff test touchpoints 时输出 advisory observations，见 [decisions/045-plan-diff-expected-tests.md](decisions/045-plan-diff-expected-tests.md)。
 - plan/diff consistency dependency alternatives v1 已落地：structured dependency entries 可声明 acceptable import alternatives，selected changed Python files 命中任一模块即满足；见 [decisions/046-plan-diff-dependency-alternatives.md](decisions/046-plan-diff-dependency-alternatives.md)。
+- plan/diff consistency public API migrations v1 已落地：读取 saved plan-review JSON 中 explicit structured migration touchpoints，缺失 selected-diff public API migration touchpoints 时输出 advisory observations；见 [decisions/047-plan-diff-public-api-migrations.md](decisions/047-plan-diff-public-api-migrations.md)。
 
 In Progress:
 
@@ -109,7 +110,7 @@ In Progress:
 Next:
 
 - 继续深化 test/churn risk fusion 的 richer external report formats。
-- 评估 plan/diff consistency 的下一层语义：public API migration notes。
+- 评估 plan/diff consistency 的下一层语义：更细的 semantic intent matching。
 
 Deferred:
 

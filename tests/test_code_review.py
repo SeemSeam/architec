@@ -1297,6 +1297,9 @@ def test_code_review_diff_adds_plan_diff_consistency_concerns(tmp_path, monkeypa
         "expected_test_total": 0,
         "observed_expected_test_total": 0,
         "missing_expected_test_total": 0,
+        "public_api_migration_total": 0,
+        "observed_public_api_migration_total": 0,
+        "missing_public_api_migration_total": 0,
         "changed_file_total": 2,
         "concern_total": 2,
         "concern_total_before_limit": 2,
@@ -1346,6 +1349,9 @@ def test_code_review_diff_with_plan_and_empty_diff_reports_missing_planned_path(
         "expected_test_total": 0,
         "observed_expected_test_total": 0,
         "missing_expected_test_total": 0,
+        "public_api_migration_total": 0,
+        "observed_public_api_migration_total": 0,
+        "missing_public_api_migration_total": 0,
         "changed_file_total": 0,
         "concern_total": 1,
         "concern_total_before_limit": 1,
@@ -1778,6 +1784,185 @@ def test_code_review_diff_ignores_string_expected_tests(tmp_path, monkeypatch) -
                     "tests": ["tests/test_service_model.py"],
                 },
                 "plan_fingerprint": "string-test-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 0,
+            "changed_files": [],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    assert result["concerns"] == []
+    assert result["signals"] == []
+
+
+def test_code_review_diff_adds_missing_public_api_migration_concern(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "public_api_migrations": [
+                        {
+                            "public_api_path": "src/api/__init__.py",
+                            "symbol": "build_tree",
+                            "old_symbol": "build_tree",
+                            "new_symbol": "build_project_tree",
+                            "source": "src/api/**",
+                        }
+                    ],
+                },
+                "plan_fingerprint": "api-migration-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/core/tree.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(
+        item
+        for item in result["concerns"]
+        if item["kind"] == "plan-diff-consistency"
+        and "plan_diff_consistency.observation=planned_public_api_migration_not_observed"
+        in item["evidence"]
+    )
+    assert concern["location"] == {
+        "path": "src/api/__init__.py",
+        "line": 0,
+        "symbol": "build_tree",
+        "symbol_kind": "module",
+    }
+    assert "plan_diff_consistency.public_api_migration=src/api/__init__.py" in concern["evidence"]
+    assert "plan_diff_consistency.symbol=build_tree" in concern["evidence"]
+    assert "plan_diff_consistency.old_symbol=build_tree" in concern["evidence"]
+    assert "plan_diff_consistency.new_symbol=build_project_tree" in concern["evidence"]
+    assert "plan_diff_consistency.migration_source=src/api/**" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["public_api_migration_total"] == 1
+    assert signal["metrics"]["observed_public_api_migration_total"] == 0
+    assert signal["metrics"]["missing_public_api_migration_total"] == 1
+    assert signal["metrics"]["concern_total"] == 2
+    payload = json.dumps(result, sort_keys=True).lower()
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "patch", "apply"):
+        assert term not in payload
+
+
+def test_code_review_diff_observes_public_api_migration_path(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "api_migrations": [
+                        {
+                            "api_glob": "src/api/*.py",
+                            "new_symbol": "build_project_tree",
+                            "from_path": "src/api/__init__.py",
+                        }
+                    ],
+                },
+                "plan_fingerprint": "observed-api-migration-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/__init__.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    encoded = json.dumps(result, sort_keys=True)
+    assert "planned_public_api_migration_not_observed" not in encoded
+    assert "unexpected_changed_file" not in encoded
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["public_api_migration_total"] == 1
+    assert signal["metrics"]["observed_public_api_migration_total"] == 1
+    assert signal["metrics"]["missing_public_api_migration_total"] == 0
+    assert signal["metrics"]["concern_total"] == 0
+
+
+def test_code_review_diff_empty_diff_reports_missing_public_api_migration(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "public_api_migrations": [{"api_path": "src/api/__init__.py"}],
+                },
+                "plan_fingerprint": "empty-api-migration-plan",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 0,
+            "changed_files": [],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(item for item in result["concerns"] if item["kind"] == "plan-diff-consistency")
+    assert concern["location"]["path"] == "src/api/__init__.py"
+    assert "plan_diff_consistency.observation=planned_public_api_migration_not_observed" in concern["evidence"]
+    assert "plan_diff_consistency.changed_file_total=0" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["public_api_migration_total"] == 1
+    assert signal["metrics"]["observed_public_api_migration_total"] == 0
+    assert signal["metrics"]["missing_public_api_migration_total"] == 1
+    assert signal["metrics"]["concern_total"] == 1
+    payload = json.dumps(result, sort_keys=True).lower()
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "patch", "apply"):
+        assert term not in payload
+
+
+def test_code_review_diff_ignores_string_public_api_migrations(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "public_api_migrations": ["update src/api/__init__.py"],
+                    "api_migrations": ["rename build_tree"],
+                },
+                "plan_fingerprint": "string-api-migration-plan",
                 "artifacts": {"plan_path": "plans/api.md"},
             }
         ),
