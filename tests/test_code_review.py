@@ -90,6 +90,24 @@ def _empty_review_report() -> dict[str, object]:
     }
 
 
+def _global_context_report(changed_files: list[str]) -> dict[str, object]:
+    report = copy.deepcopy(_analysis_report())
+    report["change_analysis"] = {
+        "changed_file_total": len(changed_files),
+        "changed_files": changed_files,
+        "components": [],
+    }
+    report["topology"] = {
+        "needs_folder_management": True,
+        "flat_file_total": 12,
+        "confidence": 0.71,
+        "root_placement_review": {
+            "review_root_files": [{"path": "src/global/topology.py"}],
+        },
+    }
+    return report
+
+
 def _write_near_duplicate_project(tmp_path) -> None:
     source = tmp_path / "src"
     source.mkdir(exist_ok=True)
@@ -251,6 +269,73 @@ def test_run_code_review_diff_empty_concerns_uses_fixed_summary(tmp_path, monkey
     encoded = json.dumps({"headline": result["summary"]["headline"]}, sort_keys=True).lower()
     for term in ("pass", "fail", "block", "verdict", "must-fix", "clean", "safe"):
         assert term not in encoded
+
+
+def test_code_review_diff_hides_unrelated_global_context_from_top_concerns(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = _global_context_report(["tests/test_llm_transport.py", "opencode.json"])
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    assert result["concerns"] == []
+    assert result["evidence"] == []
+    assert result["summary"]["concern_total"] == 4
+    assert result["summary"]["top_concern_total"] == 0
+    assert result["summary"]["scoped_concern_total"] == 0
+    assert result["summary"]["global_context_concern_total"] == 4
+    assert result["summary"]["displayed_scoped_concern_total"] == 0
+    assert result["summary"]["displayed_global_context_concern_total"] == 0
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert artifact["concern_total"] == 4
+    assert len(artifact["concerns"]) == 4
+    assert {item["location"]["path"] for item in artifact["concerns"]} == {
+        "src/legacy/old_service.py",
+        "docs/legacy.md",
+        "src/global/topology.py",
+    }
+
+
+def test_code_review_since_hides_unrelated_global_context_from_top_concerns(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = _global_context_report(["tests/test_prompt_propagation.py"])
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_since(tmp_path, ref="main")
+
+    assert result["concerns"] == []
+    assert result["evidence"] == []
+    assert result["summary"]["concern_total"] == 4
+    assert result["summary"]["top_concern_total"] == 0
+    assert result["summary"]["scoped_concern_total"] == 0
+    assert result["summary"]["global_context_concern_total"] == 4
+
+
+def test_code_review_diff_displays_global_context_when_own_file_changed(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = _global_context_report(["src/legacy/old_service.py"])
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    assert {item["location"]["path"] for item in result["concerns"]} == {
+        "src/legacy/old_service.py",
+    }
+    assert {item["kind"] for item in result["concerns"]} == {"cleanup", "hotspot"}
+    assert result["summary"]["concern_total"] == 4
+    assert result["summary"]["scoped_concern_total"] == 2
+    assert result["summary"]["global_context_concern_total"] == 2
+    assert result["summary"]["top_concern_total"] == 2
+    assert result["summary"]["displayed_scoped_concern_total"] == 2
+    assert result["summary"]["displayed_global_context_concern_total"] == 0
 
 
 def test_run_code_review_since_reuses_diff_analysis_args(tmp_path, monkeypatch) -> None:
@@ -1254,6 +1339,9 @@ def test_code_review_diff_with_plan_and_empty_diff_reports_missing_planned_path(
         "concern_total_before_limit": 1,
         "scoped_to_changed_files": True,
     }
+    assert result["summary"]["scoped_concern_total"] == 1
+    assert result["summary"]["global_context_concern_total"] == 0
+    assert result["summary"]["top_concern_total"] == 1
 
 
 def test_code_review_diff_adds_plan_import_expectation_concern(tmp_path, monkeypatch) -> None:

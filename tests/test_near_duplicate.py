@@ -96,6 +96,73 @@ def test_near_duplicate_concerns_ignores_small_boilerplate(tmp_path) -> None:
     assert near_duplicate_concerns(tmp_path) == []
 
 
+def test_near_duplicate_concerns_ignore_thin_wrappers_with_different_targets(tmp_path) -> None:
+    (tmp_path / "api.py").write_text(
+        """
+def extract_signatures(target='.', *, verbose=False):
+    project_root, output_dir = _resolve_target(target)
+    return run_sig_extract(project_root, output_dir, verbose=verbose)
+
+
+def build_tree(target='.', *, verbose=False):
+    project_root, output_dir = _resolve_target(target)
+    return run_tree_gen(project_root, output_dir, verbose=verbose)
+""",
+        encoding="utf-8",
+    )
+
+    assert near_duplicate_concerns(tmp_path) == []
+
+
+def test_near_duplicate_concerns_keep_wrappers_with_same_target(tmp_path) -> None:
+    (tmp_path / "api.py").write_text(
+        """
+def first_entry(target='.', *, verbose=False):
+    project_root, output_dir = _resolve_target(target)
+    return run_shared(project_root, output_dir, verbose=verbose)
+
+
+def second_entry(target='.', *, verbose=False):
+    project_root, output_dir = _resolve_target(target)
+    return run_shared(project_root, output_dir, verbose=verbose)
+""",
+        encoding="utf-8",
+    )
+
+    concerns = near_duplicate_concerns(tmp_path)
+
+    assert len(concerns) == 1
+    assert concerns[0]["location"]["symbol"] == "second_entry"
+    assert concerns[0]["references"][0]["symbol"] == "first_entry"
+
+
+def test_near_duplicate_scoped_ignores_changed_thin_wrapper_with_different_target(tmp_path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "existing.py").write_text(
+        """
+def extract_signatures(target='.', *, verbose=False):
+    project_root, output_dir = _resolve_target(target)
+    return run_sig_extract(project_root, output_dir, verbose=verbose)
+""",
+        encoding="utf-8",
+    )
+    (source / "changed.py").write_text(
+        """
+def build_tree(target='.', *, verbose=False):
+    project_root, output_dir = _resolve_target(target)
+    return run_tree_gen(project_root, output_dir, verbose=verbose)
+""",
+        encoding="utf-8",
+    )
+
+    scan = near_duplicate_scan(tmp_path, changed_files=["src/changed.py"])
+
+    assert scan["scoped_to_changed_files"] is True
+    assert scan["candidate_total_before_scope"] == 1
+    assert scan["concerns"] == []
+
+
 def test_near_duplicate_concerns_ignore_generated_state_dirs(tmp_path) -> None:
     ccb_dir = tmp_path / ".ccb" / "agents" / "agent1" / "provider-state"
     generated_dir = tmp_path / "generated"

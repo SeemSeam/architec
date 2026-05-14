@@ -44,6 +44,9 @@
 - `fix-advice` 为 `architecture-contract` concern 输出边界导向 advisory options。见 [038-architecture-contract-fix-advice.md](decisions/038-architecture-contract-fix-advice.md)。
 - risk context fusion v1 允许 `code-review` 读取可选外部 coverage/churn/test-map JSON，并把风险事实附加到既有 concerns。见 [039-risk-context-fusion-v1.md](decisions/039-risk-context-fusion-v1.md)。
 - plan/diff consistency 已扩展为可检查 saved plan-review JSON 中的 structured dependency import expectations。见 [040-plan-diff-import-edge-expectations.md](decisions/040-plan-diff-import-edge-expectations.md)。
+- diff/since scope hygiene 要求增量 top-level concerns 优先展示 selected changed-file observations，并把 global cleanup/hotspot/topology context 分离或标注。见 [041-diff-since-scope-hygiene.md](decisions/041-diff-since-scope-hygiene.md)。
+- `near_duplicate` 会抑制委托目标不同的 thin wrapper/facade boilerplate，避免低价值 wrapper 形状重复占据 top concerns。见 [042-near-duplicate-thin-wrapper-suppression.md](decisions/042-near-duplicate-thin-wrapper-suppression.md)。
+- `shadow_implementation` 会抑制 renderer 与 assembler/support/budget/context 等 intentional split-role pairs，同时保留 same-role 和 parser-helper candidates。见 [043-shadow-implementation-role-taxonomy.md](decisions/043-shadow-implementation-role-taxonomy.md)。
 
 ## 目录
 
@@ -69,6 +72,7 @@
 | [topics/evidence-model.md](topics/evidence-model.md) | JSON 契约、concern 结构、输出体量、事件流生命周期 |
 | [topics/architecture-stability.md](topics/architecture-stability.md) | 长期架构稳定性能力、缺口和下一阶段优先级 |
 | [topics/review-shortcomings.md](topics/review-shortcomings.md) | 当前审查能力短板 |
+| [topics/hippocampus-dogfood-audit-2026-05-14.md](topics/hippocampus-dogfood-audit-2026-05-14.md) | Hippocampus dogfood 审查记录和下一步产品信号 |
 | [topics/ai-signals.md](topics/ai-signals.md) | AI/vibe coding 特有坏味信号 |
 | [topics/external-signals.md](topics/external-signals.md) | 历史、测试、依赖、运行时信号取舍 |
 

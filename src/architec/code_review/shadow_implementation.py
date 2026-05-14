@@ -117,6 +117,8 @@ MODULE_SPLIT_TOKENS = {
     "view",
     "views",
 }
+RENDER_ROLE_TOKENS = {"render", "renderer", "rendering"}
+ASSEMBLY_ROLE_TOKENS = {"append", "assemble", "assembler", "assembly", "budget", "context", "support"}
 
 MIN_NODE_COUNT = 45
 MIN_CLASS_NODE_COUNT = 90
@@ -242,6 +244,18 @@ def _role_tokens(tokens: set[str]) -> frozenset[str]:
 
 def _is_adapter_like(tokens: set[str]) -> bool:
     return bool(tokens & ADAPTER_TOKENS)
+
+
+def _has_pure_role(tokens: frozenset[str], positive: set[str], negative: set[str]) -> bool:
+    return bool(tokens & positive) and not bool(tokens & negative)
+
+
+def _has_intentional_split_role_pair(left: _FunctionCandidate, right: _FunctionCandidate) -> bool:
+    left_render = _has_pure_role(left.all_tokens, RENDER_ROLE_TOKENS, ASSEMBLY_ROLE_TOKENS)
+    right_render = _has_pure_role(right.all_tokens, RENDER_ROLE_TOKENS, ASSEMBLY_ROLE_TOKENS)
+    left_assembly = _has_pure_role(left.all_tokens, ASSEMBLY_ROLE_TOKENS, RENDER_ROLE_TOKENS)
+    right_assembly = _has_pure_role(right.all_tokens, ASSEMBLY_ROLE_TOKENS, RENDER_ROLE_TOKENS)
+    return (left_render and right_assembly) or (right_render and left_assembly)
 
 
 def _iter_python_files(root: Path) -> list[Path]:
@@ -839,6 +853,8 @@ def _shadow_match(left: _FunctionCandidate, right: _FunctionCandidate) -> _Shado
         return None
     common_roles = left.role_tokens & right.role_tokens
     if not common_roles:
+        return None
+    if _has_intentional_split_role_pair(left, right):
         return None
     name_overlap = _jaccard(left.name_tokens, right.name_tokens)
     if name_overlap < MIN_NAME_OVERLAP:

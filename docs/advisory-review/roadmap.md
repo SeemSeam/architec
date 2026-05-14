@@ -94,6 +94,10 @@ Done:
 - `fix-advice` 已为 `architecture-contract` concern 增加专用边界导向 advisory options，见 [decisions/038-architecture-contract-fix-advice.md](decisions/038-architecture-contract-fix-advice.md)。
 - risk context fusion v1 已落地：`code-review --risk-context <risk.json>` 可读取外部 coverage/churn/test-map facts，并附加到已有 concerns，见 [decisions/039-risk-context-fusion-v1.md](decisions/039-risk-context-fusion-v1.md)。
 - plan/diff consistency import-edge expectation 已落地：`understood_plan.dependencies[]` 的 structured import 期望会与 selected changed Python files 的 imports 对齐，见 [decisions/040-plan-diff-import-edge-expectations.md](decisions/040-plan-diff-import-edge-expectations.md)。
+- Hippocampus dogfood 审查已记录：full review 证明 shadow / duplication advice 有可用信号，diff review 暴露全局 cleanup/hotspot/topology 占据增量 top concerns 的 scope hygiene 问题，见 [topics/hippocampus-dogfood-audit-2026-05-14.md](topics/hippocampus-dogfood-audit-2026-05-14.md)。
+- diff/since review scope hygiene 已落地：增量 top concern portfolio 优先展示 changed-file-scoped observations，全局 cleanup/hotspot/topology context 分离或明确标注，并输出 scoped/global summary counts，见 [decisions/041-diff-since-scope-hygiene.md](decisions/041-diff-since-scope-hygiene.md)。
+- `near_duplicate` thin wrapper/facade boilerplate 抑制已落地：委托目标不同的薄 wrapper 不再作为低价值 duplication concern 输出，见 [decisions/042-near-duplicate-thin-wrapper-suppression.md](decisions/042-near-duplicate-thin-wrapper-suppression.md)。
+- `shadow_implementation` role taxonomy precision 已落地：renderer 与 assembler/support/budget/context 等 intentional split-role pairs 被抑制，same-role 和 parser-helper candidates 仍可报告，见 [decisions/043-shadow-implementation-role-taxonomy.md](decisions/043-shadow-implementation-role-taxonomy.md)。
 
 In Progress:
 

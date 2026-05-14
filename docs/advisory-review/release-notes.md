@@ -177,6 +177,8 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 `code-review --diff` and `code-review --since <ref>` now run `shadow_implementation` in changed-file-scoped mode. They only report concerns whose primary `location.path` is in the changed files; `references[]` may point at unchanged existing implementations.
 
+`shadow_implementation` now applies role-taxonomy precision filtering for clear renderer versus assembler/support/budget/context split roles. Function/class shadow remains role, AST, signature, API, name-overlap, and reuse-edge based; same-role candidates and parser-helper pairs remain eligible.
+
 `fix-advice` now has a dedicated advisory branch for `shadow-implementation` concerns. It consumes `references[].role: "existing_implementation"` to compare the suspected shadow implementation with the existing function or class, while keeping the output non-executable and neutral about which implementation is correct.
 
 `code-review --diff` and `code-review --since <ref>` now also run exact `near_duplicate` detection in changed-file-scoped mode. They report duplication only when the primary `location.path` is changed; `references[]` may point at unchanged existing code.
@@ -198,6 +200,12 @@ Plan/diff consistency v1 connects saved plan-review JSON to incremental code rev
 Risk context fusion v1 lets `code-review` read optional external coverage/churn/test-map JSON through `--risk-context <risk.json>`. Matching file facts are appended to existing concerns and summarized in a `risk_context` signal; `architec` does not execute tests or generate those reports.
 
 Plan/diff consistency now also reads structured dependency import expectations from saved plan-review JSON. If selected changed Python files do not show an expected import edge, `code-review` emits a neutral `planned_import_not_observed` observation.
+
+A Hippocampus dogfood audit recorded the next product priority for incremental review: diff/since top concerns need scope hygiene. Changed-file-scoped observations should be visually and structurally separated from global cleanup, hotspot, and topology context so incremental review does not look dominated by unrelated project-wide debt.
+
+The implemented scope-hygiene behavior keeps full review unchanged. For diff/since review, top-level displayed concerns prioritize selected changed-file observations, while global cleanup/hotspot/topology context remains available through labelled context, signals, or artifacts. Summary metrics distinguish selected-scope counts from global-context counts via `scoped_concern_total`, `global_context_concern_total`, `displayed_scoped_concern_total`, and `displayed_global_context_concern_total`.
+
+`near_duplicate` now suppresses exact duplicate pairs when both functions are thin wrapper/facade boilerplate and their delegated call targets differ. This keeps public API wrapper shapes such as `build_tree` / `extract_signatures` from occupying top concern slots while preserving substantive repeated logic and same-target wrapper duplicates.
 
 `CodeReviewResult.concerns[]` now uses portfolio ranking for the displayed top concerns. Severity level remains the first ordering boundary, and same-level results prefer a mix of concern kinds before filling remaining slots with the same kind. `summary.concern_total` remains the pre-display total.
 

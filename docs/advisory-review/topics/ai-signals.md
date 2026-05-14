@@ -9,9 +9,9 @@
 - `near_duplicate`：AST 或 token 指纹命中的近重复函数、类或文件。
 - `shadow_implementation`：新增代码与已有能力高度相似，但没有复用既有入口。
 
-`near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：检测 Python 函数/方法的规范化 AST 重复，优先低误报。diff/since changed-file scope 见 [decisions/026-near-duplicate-diff-since-scope.md](../decisions/026-near-duplicate-diff-since-scope.md)。
+`near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：检测 Python 函数/方法的规范化 AST 重复，优先低误报。diff/since changed-file scope 见 [decisions/026-near-duplicate-diff-since-scope.md](../decisions/026-near-duplicate-diff-since-scope.md)。thin wrapper/facade boilerplate 抑制见 [decisions/042-near-duplicate-thin-wrapper-suppression.md](../decisions/042-near-duplicate-thin-wrapper-suppression.md)：委托目标不同的薄 wrapper 不作为高价值重复实现输出。
 
-`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。file-level dry-run calibration 见 [decisions/031-shadow-implementation-file-dry-run.md](../decisions/031-shadow-implementation-file-dry-run.md)。当前公开检测 Python 函数和类级跨文件相似实现，优先高精度。
+`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。role taxonomy precision 见 [decisions/043-shadow-implementation-role-taxonomy.md](../decisions/043-shadow-implementation-role-taxonomy.md)。file-level dry-run calibration 见 [decisions/031-shadow-implementation-file-dry-run.md](../decisions/031-shadow-implementation-file-dry-run.md)。当前公开检测 Python 函数和类级跨文件相似实现，优先高精度。
 
 `shadow_implementation` v1 不是：
 
@@ -29,6 +29,7 @@
 - 函数节点数至少 45。
 - 类节点数至少 90，且需要 API/member shape 相似。
 - 需要共享角色 token、名称 token overlap、签名相似度、AST feature cosine 和无直接复用边共同满足阈值。
+- 清晰的 renderer versus assembler/support/budget/context split-role pairs 会被抑制；same-role candidates 和 parser-helper pairs 仍可报告。
 - 输出 top candidates，并在 concern 中保留 `existing_implementation` 结构化 reference。
 - 增量模式中 `references[]` 可以指向未变更文件，但 `location.path` 必须属于 changed files。
 

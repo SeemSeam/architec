@@ -51,6 +51,7 @@ class _FunctionFingerprint:
     symbol: str
     fingerprint: str
     node_count: int
+    thin_wrapper_call: str = ""
 
 
 class _NormalizeAst(ast.NodeTransformer):
@@ -114,6 +115,53 @@ def _node_size(node: ast.AST) -> int:
     return sum(1 for _ in ast.walk(node))
 
 
+def _call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _call_name(node.value)
+        if base:
+            return f"{base}.{node.attr}"
+        return node.attr
+    return ""
+
+
+def _called_target(node: ast.AST) -> str:
+    if isinstance(node, ast.Call):
+        return _call_name(node.func)
+    return ""
+
+
+def _thin_wrapper_call_target(node: ast.AST) -> str:
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return ""
+    body = list(node.body)
+    control_nodes = (ast.If, ast.For, ast.While, ast.Try, ast.With, ast.Match)
+    nested_defs = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+    if not body or any(isinstance(item, control_nodes) for item in ast.walk(node)):
+        return ""
+    if any(isinstance(item, nested_defs) and item is not node for item in ast.walk(node)):
+        return ""
+    if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant):
+        body = body[1:]
+    if not body or len(body) > 4:
+        return ""
+    simple_statements = (ast.Assign, ast.AnnAssign, ast.Expr, ast.Return)
+    if any(not isinstance(item, simple_statements) for item in body):
+        return ""
+
+    terminal = body[-1]
+    if isinstance(terminal, ast.Return):
+        target = _called_target(terminal.value)
+    elif isinstance(terminal, ast.Expr):
+        target = _called_target(terminal.value)
+    else:
+        target = ""
+    if not target or target in {"super"}:
+        return ""
+    return target
+
+
 def _fingerprint(node: ast.AST) -> str:
     normalized = _NormalizeAst().visit(ast.fix_missing_locations(copy.deepcopy(node)))
     text = ast.dump(normalized, annotate_fields=True, include_attributes=False)
@@ -167,6 +215,7 @@ def _collect_functions(path: Path, root: Path) -> list[_FunctionFingerprint]:
                         symbol=_symbol_for(node, parents),
                         fingerprint=_fingerprint(node),
                         node_count=size,
+                        thin_wrapper_call=_thin_wrapper_call_target(node),
                     )
                 )
             next_parents = [*parents, str(getattr(node, "name", "") or "")]
@@ -234,6 +283,17 @@ def _reference_for_scoped_candidate(
     return group[0]
 
 
+def _is_thin_wrapper_pair(
+    duplicate: _FunctionFingerprint,
+    reference: _FunctionFingerprint,
+) -> bool:
+    return bool(
+        duplicate.thin_wrapper_call
+        and reference.thin_wrapper_call
+        and duplicate.thin_wrapper_call != reference.thin_wrapper_call
+    )
+
+
 def near_duplicate_scan(
     project_root: str | Path,
     *,
@@ -265,6 +325,8 @@ def near_duplicate_scan(
                 if changed_scope is not None
                 else reference
             )
+            if _is_thin_wrapper_pair(duplicate, reference):
+                continue
             concerns.append(_build_concern(duplicate, reference, fingerprint))
     result: dict[str, Any] = {
         "concerns": concerns[:limit],

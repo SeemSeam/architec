@@ -22,6 +22,7 @@ CONCERN_BLAST_RADIUS_LIMIT = 8
 CONCERN_REFERENCES_LIMIT = 3
 SIGNAL_METRIC_DICT_LIMIT = 12
 CONCERNS_ARTIFACT_FILE = "code-review-concerns.json"
+INCREMENTAL_SELECTED_SCOPE_KINDS = {"architecture-contract", "plan-diff-consistency"}
 
 
 def _list(value: object) -> list[Any]:
@@ -755,6 +756,7 @@ def _summary(
     concern_total: int,
     concern_limit: int = CONCERN_LIMIT,
     since_ref: str = "",
+    scope_counts: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     if review_type == "since" and not concerns:
         headline = "No new architecture concerns were identified in the selected since range."
@@ -766,13 +768,16 @@ def _summary(
         headline = "Diff code review complete"
     else:
         headline = "Full code review complete"
-    return {
+    summary = {
         "headline": headline,
         "concern_total": concern_total,
         "top_concern_total": len(concerns),
         "concern_limit": concern_limit,
         "signal_kinds": [str(signal.get("kind", "") or "") for signal in signals if isinstance(signal, dict)],
     }
+    if scope_counts is not None:
+        summary.update(scope_counts)
+    return summary
 
 
 def _empty_since_range_result(ref: str) -> dict[str, Any]:
@@ -826,6 +831,48 @@ def _changed_files_from_report(report: dict[str, Any]) -> list[str]:
         seen.add(path)
         out.append(path)
     return out
+
+
+def _concern_location_path(concern: dict[str, Any]) -> str:
+    return str(_dict(concern.get("location")).get("path", "") or "").strip().lstrip("./")
+
+
+def _is_incremental_selected_scope_concern(
+    concern: dict[str, Any],
+    changed_files: set[str],
+) -> bool:
+    kind = str(concern.get("kind", "") or "")
+    if kind in INCREMENTAL_SELECTED_SCOPE_KINDS:
+        return True
+    path = _concern_location_path(concern)
+    return bool(path and path in changed_files)
+
+
+def _display_concerns_for_review(
+    concerns: list[dict[str, Any]],
+    *,
+    review_type: str,
+    changed_files: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, int] | None]:
+    if review_type not in {"diff", "since"}:
+        return _ranked_concerns(concerns, limit=CONCERN_LIMIT), None
+
+    changed_file_set = set(changed_files)
+    scoped: list[dict[str, Any]] = []
+    global_context: list[dict[str, Any]] = []
+    for concern in concerns:
+        if _is_incremental_selected_scope_concern(concern, changed_file_set):
+            scoped.append(concern)
+        else:
+            global_context.append(concern)
+
+    display = _ranked_concerns(scoped, limit=CONCERN_LIMIT)
+    return display, {
+        "scoped_concern_total": len(scoped),
+        "global_context_concern_total": len(global_context),
+        "displayed_scoped_concern_total": len(display),
+        "displayed_global_context_concern_total": 0,
+    }
 
 
 def _shadow_scan_for_review(
@@ -941,7 +988,12 @@ def _result_from_report(
         *plan_diff_concerns,
     ]
     generated_concerns, risk_scan = apply_risk_context(generated_concerns, risk_context)
-    concerns = _ranked_concerns(generated_concerns, limit=CONCERN_LIMIT)
+    changed_files = _changed_files_from_report(report)
+    concerns, scope_counts = _display_concerns_for_review(
+        generated_concerns,
+        review_type=review_type,
+        changed_files=changed_files,
+    )
     signals = _signals(
         report,
         generated_concerns,
@@ -962,6 +1014,7 @@ def _result_from_report(
             concern_total=len(generated_concerns),
             concern_limit=CONCERN_LIMIT,
             since_ref=since_ref,
+            scope_counts=scope_counts,
         ),
         "findings": [],
         "signals": signals,

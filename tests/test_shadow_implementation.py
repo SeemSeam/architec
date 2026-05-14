@@ -156,6 +156,147 @@ def component_permission_policy(component, rules, context):
     )
 
 
+def _write_render_assembly_split(tmp_path) -> None:
+    source = tmp_path / "src" / "maps"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "renderer.py").write_text(
+        """
+def render_project_map(entries, options, budget):
+    lines = []
+    for entry in entries:
+        name = entry.get("name", "")
+        details = entry.get("details", [])
+        if not details:
+            continue
+        row = [name]
+        for detail in details:
+            row.append(f"- {detail}")
+        if options.get("include_budget"):
+            row.append(str(budget.get(name, 0)))
+        lines.append("\\n".join(row))
+    if options.get("footer"):
+        lines.append("rendered")
+    return "\\n\\n".join(lines)
+""",
+        encoding="utf-8",
+    )
+    (source / "assembler.py").write_text(
+        """
+def append_project_map(entries, options, budget):
+    chunks = []
+    for entry in entries:
+        name = entry.get("name", "")
+        details = entry.get("details", [])
+        if details == []:
+            continue
+        chunk = [name]
+        for detail in details:
+            chunk.append(f"- {detail}")
+        if options.get("include_budget") is True:
+            chunk.append(str(budget.get(name, 0)))
+        chunks.append("\\n".join(chunk))
+    if options.get("footer") is True:
+        chunks.append("assembled")
+    return "\\n\\n".join(chunks)
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_parser_helpers(tmp_path) -> None:
+    source = tmp_path / "src" / "parsers"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "block_parser.py").write_text(
+        """
+def parse_json_block(text, strict=False):
+    payload = text.strip()
+    if payload.startswith("```"):
+        lines = payload.splitlines()
+        payload = "\\n".join(lines[1:-1])
+    payload = payload.strip()
+    if not payload:
+        if strict:
+            raise ValueError("empty")
+        return {}
+    try:
+        return json.loads(payload)
+    except ValueError:
+        if strict:
+            raise
+    return {}
+""",
+        encoding="utf-8",
+    )
+    (source / "response_parser.py").write_text(
+        """
+def _try_parse_json(payload, strict=False):
+    candidate = payload.strip()
+    if candidate.startswith("```json"):
+        rows = candidate.splitlines()
+        candidate = "\\n".join(rows[1:-1])
+    candidate = candidate.strip()
+    if candidate == "":
+        if strict:
+            raise ValueError("empty")
+        return {}
+    try:
+        return json.loads(candidate)
+    except ValueError:
+        if strict:
+            raise
+    return {}
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_same_role_renderers(tmp_path) -> None:
+    source = tmp_path / "src" / "maps"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "project_renderer.py").write_text(
+        """
+def render_project_map(entries, options, budget):
+    lines = []
+    for entry in entries:
+        name = entry.get("name", "")
+        details = entry.get("details", [])
+        if not details:
+            continue
+        row = [name]
+        for detail in details:
+            row.append(f"- {detail}")
+        if options.get("include_budget"):
+            row.append(str(budget.get(name, 0)))
+        lines.append("\\n".join(row))
+    if options.get("footer"):
+        lines.append("rendered")
+    return "\\n\\n".join(lines)
+""",
+        encoding="utf-8",
+    )
+    (source / "module_renderer.py").write_text(
+        """
+def render_module_map(items, settings, budget):
+    output = []
+    for item in items:
+        name = item.get("name", "")
+        details = item.get("details", [])
+        if details == []:
+            continue
+        block = [name]
+        for detail in details:
+            block.append(f"- {detail}")
+        if settings.get("include_budget") is True:
+            block.append(str(budget.get(name, 0)))
+        output.append("\\n".join(block))
+    if settings.get("footer") is True:
+        output.append("rendered")
+    return "\\n\\n".join(output)
+""",
+        encoding="utf-8",
+    )
+
+
 def _write_shadow_policy_classes(tmp_path) -> None:
     policy_dir = tmp_path / "src" / "policy"
     policy_dir.mkdir(parents=True, exist_ok=True)
@@ -354,6 +495,47 @@ def test_shadow_implementation_concerns_detect_policy_like_functions(tmp_path) -
     assert "shadow_implementation.role=policy" in concern["evidence"]
     assert "shadow_implementation.reuse_edge=false" in concern["evidence"]
     assert all(not item.startswith("Add ") for item in concern["evidence"])
+
+
+def test_shadow_implementation_suppresses_renderer_assembler_split(tmp_path) -> None:
+    _write_render_assembly_split(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns == []
+
+
+def test_shadow_implementation_keeps_parser_helper_pair(tmp_path) -> None:
+    _write_parser_helpers(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns
+    concern = concerns[0]
+    assert concern["location"]["symbol"] == "_try_parse_json"
+    assert concern["references"][0]["symbol"] == "parse_json_block"
+    assert "shadow_implementation.role=parser" in concern["evidence"]
+
+
+def test_shadow_implementation_keeps_same_role_renderer_pair(tmp_path) -> None:
+    _write_same_role_renderers(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns
+    assert concerns[0]["kind"] == "shadow-implementation"
+    assert "shadow_implementation.role=mapper" in concerns[0]["evidence"]
+
+
+def test_shadow_implementation_scoped_suppresses_changed_renderer_assembler_split(tmp_path) -> None:
+    _write_render_assembly_split(tmp_path)
+
+    concerns = shadow_implementation_concerns(
+        tmp_path,
+        changed_files=["src/maps/assembler.py"],
+    )
+
+    assert concerns == []
 
 
 def test_shadow_implementation_file_dry_run_reports_policy_module_pair(tmp_path) -> None:

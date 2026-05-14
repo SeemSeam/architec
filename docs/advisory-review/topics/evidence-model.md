@@ -59,6 +59,10 @@
 
 例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 使用 `role: "reference"` 指向 reference implementation。`shadow-implementation` concern 的 `location` 指向疑似 shadow implementation，`references[]` 使用 `role: "existing_implementation"` 指向可对照的已有实现；函数级 concern 使用 `location.symbol_kind: "function"`，类级 concern 使用 `location.symbol_kind: "class"`。file/module-level shadow implementation 目前只做 internal dry-run metrics，不进入 ReviewConcern，也不新增 `symbol_kind: "module"` 的 shadow concern。`fix-advice` 按 role 区分 duplication reference 和 shadow existing implementation，不把两者混用。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
 
+`near_duplicate` 不为委托目标不同的 thin wrapper/facade boilerplate 输出 concern。该过滤发生在 concern 构建之前，因此不会改变已输出 concern 的 schema、`concern_id` 格式或 `references[].role` 语义。
+
+`shadow_implementation` 不为清晰的 renderer versus assembler/support/budget/context split-role pairs 输出 concern。该 role taxonomy filtering 发生在 concern 构建之前；已输出的 `shadow-implementation` concern 仍使用同一 schema、`references[].role: "existing_implementation"`、函数/类 `location.symbol_kind` 和事实型 `concern_id`。parser-helper pairs 和 same-role candidates 仍可报告；file/module-level shadow public signal 仍 deferred。
+
 在 diff/since scoped review 中，`shadow-implementation` 和 `near_duplicate` 的 `location.path` 必须位于 changed files；`references[]` 可以指向未变更文件。对应 signal metrics 使用 `scoped_to_changed_files`、`changed_file_total` 和 `candidate_total_before_scope` 标识它不是全仓总量。`near_duplicate` 的 scope 条件只看 primary `location.path`，不因为 reference path changed 而报告历史旧账。
 
 `architecture-contract` concern 的 `location` 指向 changed file 中的 import 行，`evidence` 至少包含 `architecture_contract.rule_id`、`architecture_contract.source_glob`、`architecture_contract.import` 和 `architecture_contract.restricted_import`。规则的 `note` 属于 human guidance，进入 `next_steps_hint` 而不是 evidence。没有 `.architecture-rules.toml` contract config 时，code-review 不输出 contract signal 或 concern。
@@ -124,6 +128,24 @@
 - `payload_bytes`：不含 `artifacts` 的主 JSON compact encoding 估算字节数，用于观察输出体量。
 
 `concerns[]` 是默认展示 portfolio，不是完整 concern truth。排序先保留 severity level 优先级，再在同一 level 内尽量展示不同 kind；需要完整集合的消费者应结合 artifacts 或扩展输出，而不是只读取 top-N。
+
+For `review_type: "diff"` and `review_type: "since"`, the displayed
+`concerns[]` portfolio should be selected-scope first. A selected-scope concern
+has a primary `location.path` in the selected changed files/range. Global
+cleanup, archive, hotspot, and topology observations whose primary location is
+outside that range may remain available as labelled context, `signals[]`, or
+artifacts, but should not be indistinguishable from selected-scope top concerns.
+The complete generated concern artifact remains the place for all generated
+observations.
+
+Incremental summaries expose scope hygiene counts:
+
+- `scoped_concern_total`: generated selected-scope concern count.
+- `global_context_concern_total`: generated global-context concern count.
+- `displayed_scoped_concern_total`: selected-scope concerns displayed in
+  top-level `concerns[]`.
+- `displayed_global_context_concern_total`: global-context concerns displayed
+  in top-level `concerns[]`.
 
 `signals[]` 统一结构：
 
