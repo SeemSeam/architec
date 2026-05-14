@@ -60,3 +60,78 @@ This weakens trust in incremental review. A diff review should still be allowed 
    - covered by [decision 043](../decisions/043-shadow-implementation-role-taxonomy.md);
    - clear renderer versus assembler/support/budget/context split roles are suppressed;
    - parser-helper and same-role candidates remain eligible.
+
+## Re-Run After Decisions 041-047
+
+To avoid writing generated `.architec/` artifacts into the Hippocampus working
+tree, the follow-up dogfood run copied `/home/bfly/workspace/hippocampus` to
+`/tmp/hippocampus-archi-dogfood` and ran Architec against the copy.
+
+Commands:
+
+```bash
+PYTHONPATH=/home/bfly/workspace/architec/src python3 -m architec code-review --full /tmp/hippocampus-archi-dogfood --out /tmp/hippocampus-archi-full-20260514.json --skip-auth
+PYTHONPATH=/home/bfly/workspace/architec/src python3 -m architec code-review --diff /tmp/hippocampus-archi-dogfood --out /tmp/hippocampus-archi-diff-20260514.json --skip-auth
+PYTHONPATH=/home/bfly/workspace/architec/src python3 -m architec fix-advice --review /tmp/hippocampus-archi-full-20260514.json --out /tmp/hippocampus-fix-advice-20260514.json
+```
+
+Diff review result:
+
+- `summary.headline`: `No new architecture concerns were identified in the selected diff.`
+- `summary.concern_total=22`, `top_concern_total=0`.
+- `scoped_concern_total=0`, `global_context_concern_total=22`.
+- `displayed_scoped_concern_total=0`, `displayed_global_context_concern_total=0`.
+- Signals still exposed cleanup/archive/semantic/hotspot/topology context, but
+  top-level `concerns[]` and `evidence[]` stayed empty for the selected diff.
+
+This confirms the Decision 041 scope hygiene fix: unrelated full-project
+cleanup/hotspot/topology context no longer occupies incremental top concerns.
+The `concern_total=22` versus `top_concern_total=0` split is acceptable because
+summary now distinguishes selected-scope and global-context counts.
+
+Full review result:
+
+- overall score `88.31`.
+- `summary.concern_total=40`, `top_concern_total=5`.
+- Signals included cleanup, archive, semantic_judge, hotspot, topology,
+  near_duplicate, and shadow_implementation.
+- `near_duplicate` produced 16 concerns and `shadow_implementation` produced 2
+  concerns.
+
+Useful observations that remain credible:
+
+- `shadow-implementation`: `parse_json_block` versus `_try_parse_json` remains
+  a useful parser-helper drift signal.
+- `duplication`: `_print_quiet_footer` versus `_echo_unless_quiet` remains a
+  small but plausible helper consolidation signal.
+- `cleanup`: `tree_sitter_compat.py` remains a reasonable ownership/retention
+  question, not a direct code-change request.
+
+Weak observations that should drive Architec roadmap refinement:
+
+- `shadow-implementation`: `_module_color_map` versus `module_rename_map`
+  looks like a role-taxonomy miss. Both are "mapper" functions, but one maps
+  module roles/tiers to visualization colors while the other maps old module
+  ids to new module ids. The current mapper role is too broad for this case.
+- `near_duplicate`: phase-specific prompt builders and cache helpers
+  (`build_phase_*_messages`, `save_phase*_cache`, `load_phase*_cache`) produce
+  many exact normalized AST matches. These are often intentional variant
+  families rather than independent wheel-building. They may still be useful as
+  architecture context, but they should not flood top concerns as individual
+  repeated findings.
+- `duplication`: `legacy_project_prompts_dir` versus `project_prompts_dir`
+  highlights a compatibility-path variant. The advice should recognize legacy
+  or compatibility intent instead of only suggesting direct reuse.
+
+Follow-up plan adjustments:
+
+1. Add near-duplicate variant-family grouping or suppression for same-file
+   phase/cache/prompt-builder families. The goal is to report one grouped
+   advisory observation, or lower display priority, rather than many individual
+   concerns.
+2. Refine `shadow_implementation` taxonomy beyond coarse role tokens. Mapper
+   pairs need domain/output-shape separation so color mapping and rename mapping
+   do not look like the same implementation role.
+3. Improve `fix-advice` wording for duplication concerns with legacy/compat
+   tokens, so advice offers "document compatibility intent" as a first-class
+   option rather than implying reuse is the main path.

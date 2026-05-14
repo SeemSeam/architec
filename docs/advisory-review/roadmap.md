@@ -109,6 +109,15 @@ In Progress:
 
 Next:
 
+- Improve `near_duplicate` display quality for intentional variant families
+  surfaced by Hippocampus dogfood, especially same-file phase/cache/prompt
+  builder families that currently produce many individual exact-fingerprint
+  concerns.
+- Refine `shadow_implementation` mapper taxonomy so broad mapper role matches
+  do not conflate color mapping, rename mapping, and other unrelated mapping
+  responsibilities.
+- Improve `fix-advice` wording for duplication concerns with legacy/compat
+  evidence so compatibility intent is treated as a first-class advisory option.
 - 继续深化 test/churn risk fusion 的 richer external report formats。
 - 评估 plan/diff consistency 的下一层语义：更细的 semantic intent matching。
 

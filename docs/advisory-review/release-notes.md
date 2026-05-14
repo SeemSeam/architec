@@ -209,6 +209,8 @@ Plan/diff consistency dependency alternatives v1 lets explicit structured depend
 
 Plan/diff consistency public API migrations v1 accepts explicit structured public API migration entries from saved plan-review JSON. Missing selected-diff migration touchpoints emit advisory `plan-diff-consistency` observations. String or prose migration notes remain context, not requirements, and there is no dedicated fix-advice behavior.
 
+A follow-up Hippocampus dogfood run after Decisions 041-047 confirmed that diff/since scope hygiene is working: unrelated global cleanup/hotspot/topology context remains in signals/artifacts but does not fill selected-diff top concerns. The same run identified the next Architec product refinements: grouping intentional near-duplicate variant families, splitting broad mapper roles in `shadow_implementation`, and improving `fix-advice` wording for legacy/compat duplication concerns.
+
 A Hippocampus dogfood audit recorded the next product priority for incremental review: diff/since top concerns need scope hygiene. Changed-file-scoped observations should be visually and structurally separated from global cleanup, hotspot, and topology context so incremental review does not look dominated by unrelated project-wide debt.
 
 The implemented scope-hygiene behavior keeps full review unchanged. For diff/since review, top-level displayed concerns prioritize selected changed-file observations, while global cleanup/hotspot/topology context remains available through labelled context, signals, or artifacts. Summary metrics distinguish selected-scope counts from global-context counts via `scoped_concern_total`, `global_context_concern_total`, `displayed_scoped_concern_total`, and `displayed_global_context_concern_total`.
