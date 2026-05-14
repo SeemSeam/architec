@@ -52,6 +52,7 @@
 - plan/diff consistency dependency alternatives v1 允许 structured dependency entries 声明可接受 import alternatives，selected changed Python files 命中任一模块即满足。见 [046-plan-diff-dependency-alternatives.md](decisions/046-plan-diff-dependency-alternatives.md)。
 - plan/diff consistency public API migrations v1 只消费 explicit structured public API migration entries，缺失 selected-diff migration touchpoints 时输出 advisory observations。见 [047-plan-diff-public-api-migrations.md](decisions/047-plan-diff-public-api-migrations.md)。
 - `near_duplicate` variant-family grouping v1 会对 same-file phase/cache/prompt-builder exact duplicates 做分组或展示限流，避免一个 intentional family 淹没 top concerns。见 [048-near-duplicate-variant-family-grouping.md](decisions/048-near-duplicate-variant-family-grouping.md)。
+- full-review context calibration v1 会校准小型成熟库中的 active changelog/release notes、cleanup/archive same-path 和低压力 topology top concerns 展示。见 [049-full-review-context-calibration.md](decisions/049-full-review-context-calibration.md)。
 
 ## 目录
 

@@ -103,6 +103,7 @@ Done:
 - plan/diff consistency dependency alternatives v1 已落地：structured dependency entries 可声明 acceptable import alternatives，selected changed Python files 命中任一模块即满足；见 [decisions/046-plan-diff-dependency-alternatives.md](decisions/046-plan-diff-dependency-alternatives.md)。
 - plan/diff consistency public API migrations v1 已落地：读取 saved plan-review JSON 中 explicit structured migration touchpoints，缺失 selected-diff public API migration touchpoints 时输出 advisory observations；见 [decisions/047-plan-diff-public-api-migrations.md](decisions/047-plan-diff-public-api-migrations.md)。
 - `near_duplicate` variant-family grouping v1 已落地：同文件 phase/cache/prompt-builder exact duplicate families 会收敛为单个 grouped duplication observation，避免一个 intentional family 淹没 top concerns；见 [decisions/048-near-duplicate-variant-family-grouping.md](decisions/048-near-duplicate-variant-family-grouping.md)。
+- full-review context calibration v1 已落地：active changelog/release notes stale-doc observations 不再进入默认 top concerns，cleanup/archive same-path retention observations 不重复占位，`needs_folder_management=false` 且 flat file count 较小时 topology boundary observations 保留为 signal/artifact context；见 [decisions/049-full-review-context-calibration.md](decisions/049-full-review-context-calibration.md)。
 
 In Progress:
 
@@ -110,11 +111,6 @@ In Progress:
 
 Next:
 
-- Calibrate full-review cleanup/archive/topology display for small mature
-  libraries based on the python-dotenv dogfood run: avoid stale-doc false
-  positives on active changelogs, de-duplicate cleanup/archive concerns for the
-  same path, and keep low-pressure topology findings as context when
-  `needs_folder_management=false`.
 - Refine `shadow_implementation` mapper taxonomy so broad mapper role matches
   do not conflate color mapping, rename mapping, and other unrelated mapping
   responsibilities.

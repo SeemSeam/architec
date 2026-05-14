@@ -131,6 +131,15 @@
 
 `concerns[]` 是默认展示 portfolio，不是完整 concern truth。排序先保留 severity level 优先级，再在同一 level 内尽量展示不同 kind；需要完整集合的消费者应结合 artifacts 或扩展输出，而不是只读取 top-N。
 
+For `review_type: "full"`, the displayed `concerns[]` portfolio applies context
+calibration before ranking. Active changelog/release-note stale-doc observations
+are suppressed or demoted from top-level concerns; cleanup and archive
+observations for the same path do not both occupy displayed concern slots;
+low-pressure topology observations stay signal context when
+`needs_folder_management=false` and flat file count is small. This is display
+calibration only: raw signals and generated artifacts remain available, and no
+schema-breaking change or gate semantics are introduced.
+
 For `review_type: "diff"` and `review_type: "since"`, the displayed
 `concerns[]` portfolio should be selected-scope first. A selected-scope concern
 has a primary `location.path` in the selected changed files/range. Global

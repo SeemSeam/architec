@@ -77,5 +77,11 @@ The next Architec refinements should focus on:
    `needs_folder_management=False` and `flat_file_total` is low, keep topology
    as signal context rather than top-level boundary concerns.
 
+These three items are now captured as full-review context calibration v1 in
+[decision 049](../decisions/049-full-review-context-calibration.md). The scope
+is display/top concerns only: raw cleanup/archive/topology signals and artifacts
+remain available, while default top concerns should be calibrated for user trust
+on small mature libraries.
+
 These are product-signal adjustments for Architec. They do not imply
 python-dotenv should change its repository structure.

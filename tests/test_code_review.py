@@ -563,6 +563,177 @@ def test_run_code_review_full_maps_archive_signal_and_file_concern(tmp_path, mon
     }
 
 
+def test_run_code_review_full_demotes_active_changelog_stale_doc_from_display(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / "CHANGELOG.md").write_text(
+        """
+# Changelog
+
+## Unreleased
+
+- Continue tracking current user-facing changes.
+""",
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "CHANGELOG.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.95,
+                    "evidence": ["content:historical versions"],
+                }
+            ],
+        },
+        "archive_candidates": {
+            "candidate_total": 1,
+            "ready_total": 1,
+            "review_total": 0,
+            "by_tier": {"ready": 1},
+            "by_category": {"stale_doc": 1},
+            "top_candidates": [
+                {
+                    "path": "CHANGELOG.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.9,
+                    "review_required": False,
+                    "archive_tier": "ready",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 2
+    assert result["summary"]["top_concern_total"] == 0
+    assert result["concerns"] == []
+    assert {"cleanup", "archive"}.issubset(set(result["summary"]["signal_kinds"]))
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert artifact["concern_total"] == 2
+    assert [item["location"]["path"] for item in artifact["concerns"]] == [
+        "CHANGELOG.md",
+        "CHANGELOG.md",
+    ]
+
+
+def test_run_code_review_full_dedupes_cleanup_archive_same_path_category_display(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.70,
+                }
+            ],
+        },
+        "archive_candidates": {
+            "candidate_total": 1,
+            "ready_total": 1,
+            "review_total": 0,
+            "top_candidates": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.95,
+                    "archive_tier": "ready",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 2
+    assert result["summary"]["top_concern_total"] == 1
+    assert [item["location"]["path"] for item in result["concerns"]] == ["docs/legacy.md"]
+    assert "archive.category=stale_doc" in result["concerns"][0]["evidence"]
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert artifact["concern_total"] == 2
+    assert len(artifact["concerns"]) == 2
+
+
+def test_run_code_review_full_demotes_small_flat_topology_boundary_from_display(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "topology": {
+            "source_root": "src/package",
+            "needs_folder_management": False,
+            "flat_file_total": 4,
+            "confidence": 0.92,
+            "root_placement_review": {
+                "review_root_files": [{"path": "src/package/helpers.py"}],
+            },
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 1
+    assert result["summary"]["top_concern_total"] == 0
+    assert result["concerns"] == []
+    topology = next(signal for signal in result["signals"] if signal["kind"] == "topology")
+    assert topology["metrics"] == {"needs_folder_management": False, "flat_file_total": 4}
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert artifact["concern_total"] == 1
+    assert artifact["concerns"][0]["location"]["path"] == "src/package/helpers.py"
+
+
+def test_run_code_review_full_displays_larger_flat_topology_boundary(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "topology": {
+            "source_root": "src/package",
+            "needs_folder_management": False,
+            "flat_file_total": 11,
+            "confidence": 0.92,
+            "root_placement_review": {
+                "review_root_files": [{"path": "src/package/helpers.py"}],
+            },
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 1
+    assert result["summary"]["top_concern_total"] == 1
+    assert result["concerns"][0]["kind"] == "boundary"
+    assert result["concerns"][0]["location"]["path"] == "src/package/helpers.py"
+
+
 def test_run_code_review_full_limits_ranked_concerns_to_top_five(tmp_path, monkeypatch) -> None:
     report = {
         **_analysis_report(),
@@ -583,6 +754,7 @@ def test_run_code_review_full_limits_ranked_concerns_to_top_five(tmp_path, monke
             {"path": "src/f.py", "confidence": 0.2},
         ],
         "topology": {
+            "needs_folder_management": True,
             "flat_file_total": 3,
             "confidence": 0.94,
             "root_placement_review": {
@@ -926,6 +1098,7 @@ def test_run_code_review_full_non_numeric_confidence_uses_defaults(tmp_path, mon
         "semantic_judge": {},
         "hotspots": [{"path": "src/hotspot.py", "confidence": {"score": 1}}],
         "topology": {
+            "needs_folder_management": True,
             "flat_file_total": 2,
             "confidence": "medium",
             "root_placement_review": {

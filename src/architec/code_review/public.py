@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ CONCERN_REFERENCES_LIMIT = 3
 SIGNAL_METRIC_DICT_LIMIT = 12
 CONCERNS_ARTIFACT_FILE = "code-review-concerns.json"
 INCREMENTAL_SELECTED_SCOPE_KINDS = {"architecture-contract", "plan-diff-consistency"}
+SMALL_FLAT_TOPOLOGY_FILE_LIMIT = 10
 
 
 def _list(value: object) -> list[Any]:
@@ -330,6 +332,148 @@ def _ranked_concerns(concerns: list[dict[str, Any]], *, limit: int = 5) -> list[
                     break
         selected.extend(level_selected)
     return selected[:limit]
+
+
+def _evidence_value(concern: dict[str, Any], prefix: str) -> str:
+    for item in _list(concern.get("evidence")):
+        text = str(item)
+        if text.startswith(prefix):
+            return text.split("=", 1)[1]
+    return ""
+
+
+def _has_evidence_prefix(concern: dict[str, Any], prefix: str) -> bool:
+    return bool(_evidence_value(concern, prefix))
+
+
+def _cleanup_archive_category(concern: dict[str, Any]) -> str:
+    return (
+        _evidence_value(concern, "cleanup.category=")
+        or _evidence_value(concern, "archive.category=")
+    ).strip()
+
+
+def _is_cleanup_archive_display_concern(concern: dict[str, Any]) -> bool:
+    if str(concern.get("kind", "") or "") != "cleanup":
+        return False
+    return _has_evidence_prefix(concern, "cleanup.category=") or _has_evidence_prefix(
+        concern,
+        "archive.category=",
+    )
+
+
+def _is_changelog_like_path(path: str) -> bool:
+    text = path.lower().replace("\\", "/")
+    name = Path(text).name.replace("_", "-")
+    return bool(
+        name in {"changelog.md", "changes.md", "history.md", "release-notes.md", "releasenotes.md"}
+        or "changelog" in name
+        or "release-notes" in text
+        or "release_notes" in text
+    )
+
+
+def _has_active_changelog_marker(project_root: str | Path | None, path: str) -> bool:
+    if project_root is None:
+        return False
+    try:
+        text = (Path(project_root) / path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    marker = re.compile(
+        r"(?im)^\s{0,3}#{1,4}\s+"
+        r"(?:\[?(?:unreleased|current|next)\]?|\[?v?\d+\.\d+(?:\.\d+)?\]?|\d{4}-\d{2}-\d{2})"
+    )
+    dated_heading = re.compile(r"(?im)^\s{0,3}#{1,4}\s+.*\d{4}-\d{2}-\d{2}")
+    return bool(marker.search(text) or dated_heading.search(text))
+
+
+def _is_active_changelog_stale_doc_concern(
+    concern: dict[str, Any],
+    *,
+    project_root: str | Path | None,
+) -> bool:
+    category = _cleanup_archive_category(concern)
+    if category != "stale_doc":
+        return False
+    path = _concern_location_path(concern)
+    return bool(
+        path
+        and _is_changelog_like_path(path)
+        and _has_active_changelog_marker(project_root, path)
+    )
+
+
+def _is_small_flat_topology_concern(concern: dict[str, Any]) -> bool:
+    if str(concern.get("kind", "") or "") != "boundary":
+        return False
+    if not _has_evidence_prefix(concern, "topology.needs_folder_management="):
+        return False
+    needs_folder_management = _evidence_value(
+        concern,
+        "topology.needs_folder_management=",
+    ).lower() == "true"
+    try:
+        flat_file_total = int(_evidence_value(concern, "topology.flat_file_total=") or 0)
+    except ValueError:
+        return False
+    return not needs_folder_management and flat_file_total <= SMALL_FLAT_TOPOLOGY_FILE_LIMIT
+
+
+def _cleanup_archive_display_key(concern: dict[str, Any]) -> tuple[str, str] | None:
+    if not _is_cleanup_archive_display_concern(concern):
+        return None
+    path = _concern_location_path(concern)
+    category = _cleanup_archive_category(concern)
+    if not path or not category:
+        return None
+    return (path, category)
+
+
+def _preferred_cleanup_archive_concern(
+    current: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    current_key = (
+        _safe_confidence(current.get("confidence"), 0.0),
+        str(current.get("concern_id", "") or ""),
+    )
+    candidate_key = (
+        _safe_confidence(candidate.get("confidence"), 0.0),
+        str(candidate.get("concern_id", "") or ""),
+    )
+    return candidate if candidate_key > current_key else current
+
+
+def _dedupe_cleanup_archive_display_concerns(
+    concerns: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    deduped: dict[tuple[str, str], dict[str, Any]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for concern in concerns:
+        key = _cleanup_archive_display_key(concern)
+        if key is None:
+            passthrough.append(concern)
+            continue
+        if key in deduped:
+            deduped[key] = _preferred_cleanup_archive_concern(deduped[key], concern)
+        else:
+            deduped[key] = concern
+    return [*passthrough, *deduped.values()]
+
+
+def _calibrated_full_review_display_concerns(
+    concerns: list[dict[str, Any]],
+    *,
+    project_root: str | Path | None,
+) -> list[dict[str, Any]]:
+    calibrated = [
+        concern
+        for concern in concerns
+        if not _is_active_changelog_stale_doc_concern(concern, project_root=project_root)
+        and not _is_small_flat_topology_concern(concern)
+    ]
+    return _dedupe_cleanup_archive_display_concerns(calibrated)
 
 
 def _truncate_list_field(
@@ -881,9 +1025,14 @@ def _display_concerns_for_review(
     *,
     review_type: str,
     changed_files: list[str],
+    project_root: str | Path | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int] | None]:
     if review_type not in {"diff", "since"}:
-        return _ranked_concerns(concerns, limit=CONCERN_LIMIT), None
+        calibrated = _calibrated_full_review_display_concerns(
+            concerns,
+            project_root=project_root,
+        )
+        return _ranked_concerns(calibrated, limit=CONCERN_LIMIT), None
 
     changed_file_set = set(changed_files)
     scoped: list[dict[str, Any]] = []
@@ -1021,6 +1170,7 @@ def _result_from_report(
         generated_concerns,
         review_type=review_type,
         changed_files=changed_files,
+        project_root=project_root,
     )
     signals = _signals(
         report,

@@ -58,6 +58,8 @@ archi code-review --diff --risk-context <risk.json> .
 - 2-3 条值得关注的结构叙事。
 - top concerns，完整清单放 artifacts。
 
+Full-review context calibration v1 见 [Decision 049](../decisions/049-full-review-context-calibration.md)：full review 仍保留 cleanup、archive、semantic judge、hotspot 和 topology signals，但默认 top concerns 需要避免低价值展示噪声。Active changelog/release notes stale-doc observations 应从 top-level concerns 抑制或降级；cleanup/archive 对同一路径的 retention 观察不应同时占据 top concern slots；当 `needs_folder_management=false` 且 flat file count 较小时，topology boundary 观察应保留为 signal context，而不是默认 top-level boundary concern。Raw signals 和 generated artifacts 仍可保留完整上下文。
+
 全量审查中的 AI/vibe coding 信号当前包括：
 
 - `near_duplicate`：规范化 AST 指纹重复，输出 `duplication` concern，并通过 `references[]` 标出 reference implementation。
