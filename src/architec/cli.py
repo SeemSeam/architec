@@ -293,6 +293,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_argument(parser, '--base', default='', help='git base ref (only with --diff)')
     _add_argument(parser, '--head', default='', help='git head ref (only with --diff)')
+    _add_argument(
+        parser,
+        '--plan-review',
+        default='',
+        metavar='PLAN_JSON',
+        help='optional plan-review JSON for diff consistency observations (only with --diff)',
+    )
+    _add_argument(
+        parser,
+        '--risk-context',
+        default='',
+        metavar='RISK_JSON',
+        help='optional external risk context JSON for code-review concerns',
+    )
     _add_argument(parser, '--component', default='', help='reserved component hint')
     _add_argument(
         parser,
@@ -376,6 +390,20 @@ def build_code_review_parser() -> argparse.ArgumentParser:
     )
     _add_argument(parser, '--base', default='', help='git base ref (only with --diff)')
     _add_argument(parser, '--head', default='', help='git head ref (only with --diff)')
+    _add_argument(
+        parser,
+        '--plan-review',
+        default='',
+        metavar='PLAN_JSON',
+        help='optional plan-review JSON for diff/since consistency observations',
+    )
+    _add_argument(
+        parser,
+        '--risk-context',
+        default='',
+        metavar='RISK_JSON',
+        help='optional external risk context JSON for code-review concerns',
+    )
     _add_argument(
         parser,
         '--out',
@@ -462,26 +490,39 @@ def _plan_review_result(args: argparse.Namespace) -> dict[str, Any]:
 
 def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
     since_ref = str(args.since or "").strip()
+    plan_review_path = str(getattr(args, "plan_review", "") or "").strip()
+    risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
     if since_ref:
         emit_progress("archi code-review [3/3] running since code review")
+        kwargs: dict[str, Any] = {"ref": since_ref, "progress": emit_progress}
+        if plan_review_path:
+            kwargs["plan_review_path"] = plan_review_path
+        if risk_context_path:
+            kwargs["risk_context_path"] = risk_context_path
         return run_code_review_since(
             args.path,
-            ref=since_ref,
-            progress=emit_progress,
+            **kwargs,
         )
     if bool(args.diff):
         emit_progress("archi code-review [3/3] running diff code review")
+        kwargs = {
+            "base": str(args.base or "").strip(),
+            "head": str(args.head or "").strip(),
+            "progress": emit_progress,
+        }
+        if plan_review_path:
+            kwargs["plan_review_path"] = plan_review_path
+        if risk_context_path:
+            kwargs["risk_context_path"] = risk_context_path
         return run_code_review_diff(
             args.path,
-            base=str(args.base or "").strip(),
-            head=str(args.head or "").strip(),
-            progress=emit_progress,
+            **kwargs,
         )
     emit_progress("archi code-review [3/3] running full code review")
-    return run_code_review_full(
-        args.path,
-        progress=emit_progress,
-    )
+    kwargs = {"progress": emit_progress}
+    if risk_context_path:
+        kwargs["risk_context_path"] = risk_context_path
+    return run_code_review_full(args.path, **kwargs)
 
 
 def _status_result(args: argparse.Namespace) -> dict[str, Any]:
@@ -506,12 +547,24 @@ def _validate_args(args: argparse.Namespace) -> int | None:
     if (args.base or args.head) and not args.diff:
         print('--base/--head require --diff', file=sys.stderr)
         return 2
+    if getattr(args, "plan_review", "") and bool(args.check):
+        print('--plan-review cannot be used with --check', file=sys.stderr)
+        return 2
+    if getattr(args, "plan_review", "") and not args.diff:
+        print('--plan-review requires --diff', file=sys.stderr)
+        return 2
+    if getattr(args, "risk_context", "") and bool(args.check):
+        print('--risk-context cannot be used with --check', file=sys.stderr)
+        return 2
     return None
 
 
 def _validate_code_review_args(args: argparse.Namespace) -> int | None:
     if (args.base or args.head) and not args.diff:
         print('--base/--head require --diff', file=sys.stderr)
+        return 2
+    if getattr(args, "plan_review", "") and bool(args.full):
+        print('--plan-review requires --diff or --since', file=sys.stderr)
         return 2
     return None
 
@@ -549,17 +602,24 @@ def _run_command(
         return _checked_result(args, checks)
     if bool(args.diff):
         emit_progress("archi [3/3] running diff code review")
-        return run_code_review_diff(
-            args.path,
-            base=str(args.base or "").strip(),
-            head=str(args.head or "").strip(),
-            progress=emit_progress,
-        )
+        kwargs: dict[str, Any] = {
+            "base": str(args.base or "").strip(),
+            "head": str(args.head or "").strip(),
+            "progress": emit_progress,
+        }
+        plan_review_path = str(getattr(args, "plan_review", "") or "").strip()
+        if plan_review_path:
+            kwargs["plan_review_path"] = plan_review_path
+        risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
+        if risk_context_path:
+            kwargs["risk_context_path"] = risk_context_path
+        return run_code_review_diff(args.path, **kwargs)
     emit_progress("archi [3/3] running full code review")
-    return run_code_review_full(
-        args.path,
-        progress=emit_progress,
-    )
+    kwargs = {"progress": emit_progress}
+    risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
+    if risk_context_path:
+        kwargs["risk_context_path"] = risk_context_path
+    return run_code_review_full(args.path, **kwargs)
 
 
 def _interactive_terminal() -> bool:

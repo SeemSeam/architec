@@ -20,6 +20,12 @@ Prioritize the next architecture-stability work in this order:
 
 Keep all of these advisory-only. They should produce concerns, signals, evidence, and fix-advice options, not merge decisions.
 
+The first phase should land architecture contracts before adding another generic detector. The intended first contract concern is `architecture-contract`, backed by explicit repository rules such as ownership, allowed dependency direction, facade usage, or public API boundary expectations.
+
+The second phase should connect `plan-review` artifacts to `code-review --diff`, so coding-agent changes can be compared with declared plan touchpoints and boundary expectations.
+
+The third phase should read external test, coverage, and churn reports as optional context. It should enrich concern risk context rather than execute tests or create a separate health verdict.
+
 ## Non-Goals
 
 This does not:
@@ -35,4 +41,16 @@ This does not:
 - The next phase focuses on preventing architecture drift rather than adding more smell detectors.
 - Project-specific boundary contracts become the highest-leverage path toward long-term maintainability.
 - Plan-review and code-review should become more connected, so coding-agent changes can be checked against declared intent.
+- Test/churn fusion waits until it can consume existing project reports without owning test execution.
 - File-level shadow implementation remains deferred until it has better scoping, fixtures, and taxonomy.
+
+## Acceptance Signals
+
+This direction is working when:
+
+- a repository can express at least one dependency-direction or ownership contract in versioned config;
+- `code-review --diff` can report a changed-file-scoped contract concern with rule evidence;
+- a repository without contract config produces no contract signal and no contract concern;
+- a saved plan-review result can be compared with the current diff without requiring a legacy goal flag;
+- test/churn context can raise or annotate concern risk using external data, while preserving advisory-only output;
+- empty results remain neutral observations rather than claims of architectural safety.

@@ -146,6 +146,14 @@ def _shadow_reference_from_evidence(evidence: list[str]) -> dict[str, Any]:
     return {}
 
 
+def _evidence_value(evidence: list[str], key: str) -> str:
+    prefix = f"{key}="
+    for item in evidence:
+        if item.startswith(prefix):
+            return item[len(prefix):].strip()
+    return ""
+
+
 def _format_location(location: dict[str, Any]) -> str:
     path = str(location.get("path", "") or "").strip()
     symbol = str(location.get("symbol", "") or "").strip()
@@ -196,6 +204,47 @@ def _duplication_suggestion(
         "risks": [
             "Normalized AST similarity does not prove semantic equivalence.",
             "One implementation may contain a local bug or behavior that should not be copied.",
+        ],
+    }
+
+
+def _architecture_contract_suggestion(
+    concern: dict[str, Any],
+    *,
+    concern_id: str,
+    path: str,
+    evidence: list[str],
+) -> dict[str, Any]:
+    location = _dict(concern.get("location"))
+    target = _format_location(location)
+    rule_id = _evidence_value(evidence, "architecture_contract.rule_id")
+    imported = _evidence_value(evidence, "architecture_contract.import")
+    restricted = _evidence_value(evidence, "architecture_contract.restricted_import")
+    owner = _evidence_value(evidence, "architecture_contract.owner")
+    rule_text = f"rule {rule_id}" if rule_id else "the matched architecture contract"
+    import_text = imported or restricted or "the matched import"
+    options = [
+        f"Compare {target} with {rule_text} for import {import_text}.",
+        "Consider routing the dependency through the intended boundary or facade if the contract should stay in place.",
+        "If the direct dependency is intentional, update the contract record or related plan with the reason for the exception.",
+    ]
+    hint = str(concern.get("next_steps_hint", "") or "").strip()
+    if hint:
+        options.append(f"Use the rule guidance as review context: {hint}")
+    tradeoffs = [
+        "Keeping the contract narrow can reduce boundary drift but may require a small adapter or facade change.",
+        "Documenting an intentional exception can preserve local momentum but increases the contract surface maintainers must revisit.",
+    ]
+    if owner:
+        tradeoffs.append(f"Coordinate the boundary decision with owner {owner}.")
+    return {
+        "target": path,
+        "concern": concern_id,
+        "options": options,
+        "tradeoffs": tradeoffs,
+        "risks": [
+            "Import matching is static and may not capture runtime dependency direction.",
+            "Advice does not decide whether the contract or the changed import is the better long-term boundary.",
         ],
     }
 
@@ -274,6 +323,13 @@ def _suggestion(concern: dict[str, Any]) -> dict[str, Any]:
         )
     if kind == "shadow-implementation":
         return _shadow_suggestion(
+            concern,
+            concern_id=concern_id,
+            path=path,
+            evidence=evidence,
+        )
+    if kind == "architecture-contract" and evidence:
+        return _architecture_contract_suggestion(
             concern,
             concern_id=concern_id,
             path=path,

@@ -82,6 +82,20 @@ archi fix-advice --review <review.json>
 
 如果 concern 缺少结构化 `existing_implementation` reference，输出保守 fallback，并说明 reference evidence insufficient。该分支不判断哪个实现正确，不输出 patch，不承诺合并方向。
 
+## Architecture Contract Advice
+
+当 concern 的 `kind` 是 `architecture-contract` 时，`fix-advice` 使用 contract 专用建议分支。
+
+该分支读取 `architecture_contract.rule_id`、`architecture_contract.import`、`architecture_contract.restricted_import` 和可选 `architecture_contract.owner`。规则的 `note` 不进入 evidence，但会通过 concern 的 `next_steps_hint` 作为 review context 出现在建议里。
+
+建议围绕这些 advisory options：
+
+- 比较 changed file 中的 import 与匹配到的 contract。
+- 如果 contract 应保持，可考虑通过已有边界、facade 或适配层路由依赖。
+- 如果 direct dependency 是有意的，可更新 contract 记录或相关 plan，说明例外理由。
+
+该分支不判断 contract 或 changed import 哪一方正确，不输出 patch，不承诺执行顺序。
+
 ## 空/降级输出
 
 - 如果 review 结果没有 concern，或当前 filters 没有匹配 concern，输出空 `suggestions` 和中性摘要：`No fix advice suggestions were generated for this review.`

@@ -89,6 +89,10 @@ Done:
 - AI signal scanners 已补 source/generated-state exclusion：`near_duplicate` 和 `shadow_implementation` 默认跳过 `.ccb`、release-flow-test、generated/vendor/test/cache 等目录，见 [decisions/033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md)。
 - 公开 advisory 命令 empty/degraded 文案已标准化：no-finding、no-events、合法空 suggestions 和 unable-to-analyze 输入降级保持中性表达，见 [decisions/034-advisory-empty-state-wording.md](decisions/034-advisory-empty-state-wording.md)。
 - 长期架构稳定性下一阶段已收敛为 architecture contracts、plan/diff consistency 和 test/churn risk fusion，见 [topics/architecture-stability.md](topics/architecture-stability.md) 和 [decisions/035-architecture-stability-next-priorities.md](decisions/035-architecture-stability-next-priorities.md)。
+- architecture contracts v1 已落地：`.architecture-rules.toml` 可声明 changed-file-scoped dependency restrictions，`code-review --diff/--since` 输出 `architecture-contract` concerns，见 [decisions/036-architecture-contracts-v1.md](decisions/036-architecture-contracts-v1.md)。
+- plan/diff consistency v1 已落地：`code-review --diff/--since --plan-review <plan.json>` 可将 saved plan-review touchpoints 与 changed files 对齐，输出 `plan-diff-consistency` observations，见 [decisions/037-plan-diff-consistency-v1.md](decisions/037-plan-diff-consistency-v1.md)。
+- `fix-advice` 已为 `architecture-contract` concern 增加专用边界导向 advisory options，见 [decisions/038-architecture-contract-fix-advice.md](decisions/038-architecture-contract-fix-advice.md)。
+- risk context fusion v1 已落地：`code-review --risk-context <risk.json>` 可读取外部 coverage/churn/test-map facts，并附加到已有 concerns，见 [decisions/039-risk-context-fusion-v1.md](decisions/039-risk-context-fusion-v1.md)。
 
 In Progress:
 
@@ -96,9 +100,8 @@ In Progress:
 
 Next:
 
-- 设计 architecture contracts：目录/包 ownership、allowed dependency direction、facade/public API expectations，并定义 advisory concern 输出契约。
-- 设计 plan/diff consistency：将 `plan-review` 解析出的 intended changes 与 `code-review --diff` 的 changed files/import edges 对齐。
-- 设计 test/churn risk fusion：读取已有测试、coverage 或 churn 报告，作为 code-review concerns 的风险上下文。
+- 继续深化 plan/diff consistency 的 import-edge expectation；路径级 v1 已完成。
+- 继续深化 test/churn risk fusion：complexity/public API risk、historical recurrence 和 richer external report formats。
 
 Deferred:
 

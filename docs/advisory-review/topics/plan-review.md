@@ -6,6 +6,7 @@
 
 ```bash
 archi plan-review <plan.md>
+archi plan-review <plan.md> --out plan.json
 ```
 
 可选参数：
@@ -71,6 +72,7 @@ Do not change cleanup archive behavior.
 - `concerns` 统一表达可能撞上的架构边界、已有实现、稳定性约束和热点区域。
 - `suggested_adjustments` 表达可考虑的替代方向。复用已有实现属于一种 adjustment，而不是独立输出类别。
 - `plan_fingerprint` 供后续 `code-review --diff` 做一致性观察。
+- 保存后的 JSON 可通过 `archi code-review --diff --plan-review plan.json .` 或 `archi code-review --since <ref> --plan-review plan.json .` 与 selected changed files 做路径级一致性观察。
 - `plan_fingerprint` 保留 YAML 中 `changes` 和 `dependencies` 的原始顺序；同一触达对象列表重新排序会生成不同 fingerprint。这让 fingerprint 表示“这份具体方案文本的承诺”，而不是去重后的对象集合。
 
 ## 空/降级输出

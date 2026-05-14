@@ -36,7 +36,7 @@
 字段说明：
 
 - `concern_id`：concern 的引用标识，不表达排序位置。当前 code-review 生成的 id 使用 `code-review:<kind>:<hash>`，hash 来自 kind、source mapper、primary location、facts 和可用 reference/fingerprint 等事实。旧 review 中没有稳定 hash 格式的 id 仍合法。
-- `kind`：关注点类型，例如 `boundary`、`duplication`、`shadow-implementation`、`hotspot`、`cleanup`、`stability`、`missing-context`。
+- `kind`：关注点类型，例如 `boundary`、`architecture-contract`、`plan-diff-consistency`、`duplication`、`shadow-implementation`、`hotspot`、`cleanup`、`stability`、`missing-context`。
 - `level`：关注级别，不代表门禁裁决。
 - `confidence`：0 到 1 的证据置信度。
 - `location`：尽量定位到文件、行、符号或 import 边。
@@ -60,6 +60,14 @@
 例如 `near_duplicate` duplication concern 的 `location` 指向 duplicate implementation，`references[]` 使用 `role: "reference"` 指向 reference implementation。`shadow-implementation` concern 的 `location` 指向疑似 shadow implementation，`references[]` 使用 `role: "existing_implementation"` 指向可对照的已有实现；函数级 concern 使用 `location.symbol_kind: "function"`，类级 concern 使用 `location.symbol_kind: "class"`。file/module-level shadow implementation 目前只做 internal dry-run metrics，不进入 ReviewConcern，也不新增 `symbol_kind: "module"` 的 shadow concern。`fix-advice` 按 role 区分 duplication reference 和 shadow existing implementation，不把两者混用。`concerns[].evidence` 中保留字符串事实以兼容旧消费者，但新消费者应优先读取结构化 `references[]`。
 
 在 diff/since scoped review 中，`shadow-implementation` 和 `near_duplicate` 的 `location.path` 必须位于 changed files；`references[]` 可以指向未变更文件。对应 signal metrics 使用 `scoped_to_changed_files`、`changed_file_total` 和 `candidate_total_before_scope` 标识它不是全仓总量。`near_duplicate` 的 scope 条件只看 primary `location.path`，不因为 reference path changed 而报告历史旧账。
+
+`architecture-contract` concern 的 `location` 指向 changed file 中的 import 行，`evidence` 至少包含 `architecture_contract.rule_id`、`architecture_contract.source_glob`、`architecture_contract.import` 和 `architecture_contract.restricted_import`。规则的 `note` 属于 human guidance，进入 `next_steps_hint` 而不是 evidence。没有 `.architecture-rules.toml` contract config 时，code-review 不输出 contract signal 或 concern。
+
+`fix-advice` 会为 `architecture-contract` concern 消费这些 factual evidence，并把 `next_steps_hint` 作为可选 review context。它不把 rule note 当作 evidence，也不判断 contract 或 changed import 哪一方正确。
+
+`plan-diff-consistency` concern 的 `location` 指向计划外 changed file 或计划中未触达的路径，`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path facts。它只表达 saved plan-review JSON 与 selected diff 的路径级不一致，不表达 correctness 或 merge readiness。
+
+`risk_context` facts 是外部报告提供的 companion evidence。它们可以附加到既有 concern 的 `evidence[]`，例如 `risk_context.coverage=0.42`、`risk_context.churn=13` 或 `risk_context.related_test_total=0`。这些 facts 不参与 `concern_id` 生成，不改变 concern ranking，也不表示行为正确性。
 
 最低验收：
 

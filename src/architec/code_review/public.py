@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from architec.analysis.public import run_analysis
+from architec.code_review.architecture_contracts import architecture_contract_scan
 from architec.code_review.near_duplicate import near_duplicate_concerns, near_duplicate_scan
+from architec.code_review.plan_diff_consistency import load_plan_review, plan_diff_consistency_scan
+from architec.code_review.risk_context import apply_risk_context, load_risk_context
 from architec.code_review.shadow_implementation import shadow_implementation_scan
 from architec.events.public import append_review_event
 from architec.support.io_utils import ProgressFn, clamp, write_json
@@ -501,10 +504,39 @@ def _signals(
     report: dict[str, Any],
     concerns: list[dict[str, Any]],
     *,
+    architecture_contract_scan_result: dict[str, Any] | None = None,
     near_duplicate_scope: dict[str, Any] | None = None,
+    plan_diff_scan: dict[str, Any] | None = None,
+    risk_context_scan: dict[str, Any] | None = None,
     shadow_scan: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     signals: list[dict[str, Any]] = []
+    contract_scan = _dict(architecture_contract_scan_result)
+    contract_rule_total = int(contract_scan.get("rule_total", 0) or 0)
+    if contract_rule_total:
+        contract_concern_total = sum(
+            1
+            for concern in concerns
+            if isinstance(concern, dict)
+            and str(concern.get("kind", "") or "") == "architecture-contract"
+        )
+        signals.append(
+            {
+                "kind": "architecture_contract",
+                "summary": (
+                    f"{contract_concern_total} architecture contract concerns detected in changed files."
+                ),
+                "metrics": {
+                    "rule_total": contract_rule_total,
+                    "checked_file_total": int(contract_scan.get("checked_file_total", 0) or 0),
+                    "concern_total": contract_concern_total,
+                    "concern_total_before_limit": int(
+                        contract_scan.get("concern_total_before_limit", contract_concern_total) or 0
+                    ),
+                    "scoped_to_changed_files": bool(contract_scan.get("scoped_to_changed_files")),
+                },
+            }
+        )
     cleanup = _dict(report.get("cleanup"))
     if cleanup:
         candidate_total = int(cleanup.get("candidate_total", 0) or 0)
@@ -650,6 +682,48 @@ def _signals(
                 "metrics": metrics,
             }
         )
+    plan_scan = _dict(plan_diff_scan)
+    planned_path_total = int(plan_scan.get("planned_path_total", 0) or 0)
+    if planned_path_total:
+        plan_concern_total = sum(
+            1
+            for concern in concerns
+            if isinstance(concern, dict)
+            and str(concern.get("kind", "") or "") == "plan-diff-consistency"
+        )
+        signals.append(
+            {
+                "kind": "plan_diff_consistency",
+                "summary": f"{plan_concern_total} plan/diff consistency observations detected.",
+                "metrics": {
+                    "planned_path_total": planned_path_total,
+                    "changed_file_total": int(plan_scan.get("changed_file_total", 0) or 0),
+                    "concern_total": plan_concern_total,
+                    "concern_total_before_limit": int(
+                        plan_scan.get("concern_total_before_limit", plan_concern_total) or 0
+                    ),
+                    "scoped_to_changed_files": bool(plan_scan.get("scoped_to_changed_files")),
+                },
+            }
+        )
+    risk_scan = _dict(risk_context_scan)
+    if risk_scan:
+        enriched_total = int(risk_scan.get("enriched_concern_total", 0) or 0)
+        signals.append(
+            {
+                "kind": "risk_context",
+                "summary": f"{enriched_total} concerns enriched with external risk context.",
+                "metrics": {
+                    "input_file_total": int(risk_scan.get("input_file_total", 0) or 0),
+                    "enriched_concern_total": enriched_total,
+                    "changed_test_total": int(risk_scan.get("changed_test_total", 0) or 0),
+                    "coverage_file_total": int(risk_scan.get("coverage_file_total", 0) or 0),
+                    "churn_file_total": int(risk_scan.get("churn_file_total", 0) or 0),
+                    "test_map_file_total": int(risk_scan.get("test_map_file_total", 0) or 0),
+                    "by_factor": _dict(risk_scan.get("by_factor")),
+                },
+            }
+        )
     return signals
 
 
@@ -784,12 +858,40 @@ def _near_duplicate_scan_for_review(
     return {"concerns": []}
 
 
+def _architecture_contract_scan_for_review(
+    report: dict[str, Any],
+    *,
+    review_type: str,
+    project_root: str | Path | None,
+) -> dict[str, Any]:
+    if project_root is None or review_type not in {"diff", "since"}:
+        return {"concerns": []}
+    changed_files = _changed_files_from_report(report)
+    if not changed_files:
+        return {"concerns": []}
+    return architecture_contract_scan(project_root, changed_files=changed_files)
+
+
+def _plan_diff_scan_for_review(
+    report: dict[str, Any],
+    *,
+    review_type: str,
+    plan_review: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if plan_review is None or review_type not in {"diff", "since"}:
+        return {"concerns": []}
+    changed_files = _changed_files_from_report(report)
+    return plan_diff_consistency_scan(plan_review, changed_files=changed_files)
+
+
 def _result_from_report(
     report: dict[str, Any],
     *,
     review_type: str,
     since_ref: str = "",
     project_root: str | Path | None = None,
+    plan_review: dict[str, Any] | None = None,
+    risk_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     duplicate_concerns = (
         near_duplicate_concerns(project_root)
@@ -808,6 +910,18 @@ def _result_from_report(
         project_root=project_root,
     )
     shadow_concerns = list(shadow_scan.get("concerns", []))
+    architecture_scan = _architecture_contract_scan_for_review(
+        report,
+        review_type=review_type,
+        project_root=project_root,
+    )
+    architecture_concerns = list(architecture_scan.get("concerns", []))
+    plan_diff_scan = _plan_diff_scan_for_review(
+        report,
+        review_type=review_type,
+        plan_review=plan_review,
+    )
+    plan_diff_concerns = list(plan_diff_scan.get("concerns", []))
     generated_concerns = [
         *_cleanup_concerns(report),
         *_archive_concerns(report),
@@ -815,12 +929,18 @@ def _result_from_report(
         *_topology_concerns(report),
         *duplicate_concerns,
         *shadow_concerns,
+        *architecture_concerns,
+        *plan_diff_concerns,
     ]
+    generated_concerns, risk_scan = apply_risk_context(generated_concerns, risk_context)
     concerns = _ranked_concerns(generated_concerns, limit=CONCERN_LIMIT)
     signals = _signals(
         report,
         generated_concerns,
+        architecture_contract_scan_result=architecture_scan,
         near_duplicate_scope=near_duplicate_scope,
+        plan_diff_scan=plan_diff_scan,
+        risk_context_scan=risk_scan,
         shadow_scan=shadow_scan,
     )
     result = {
@@ -860,6 +980,7 @@ def _with_review_event(project_root: str | Path, result: dict[str, Any]) -> dict
 def run_code_review_full(
     project_root: str | Path,
     *,
+    risk_context_path: str | Path | None = None,
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     report = run_analysis(
@@ -870,7 +991,13 @@ def run_code_review_full(
         head="",
         progress=progress,
     )
-    result = _result_from_report(report, review_type="full", project_root=project_root)
+    risk_context = load_risk_context(risk_context_path) if risk_context_path else None
+    result = _result_from_report(
+        report,
+        review_type="full",
+        project_root=project_root,
+        risk_context=risk_context,
+    )
     return _with_review_event(project_root, result)
 
 
@@ -879,6 +1006,8 @@ def run_code_review_diff(
     *,
     base: str = "",
     head: str = "",
+    plan_review_path: str | Path | None = None,
+    risk_context_path: str | Path | None = None,
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     report = run_analysis(
@@ -889,7 +1018,15 @@ def run_code_review_diff(
         head=str(head or "").strip(),
         progress=progress,
     )
-    result = _result_from_report(report, review_type="diff", project_root=project_root)
+    plan_review = load_plan_review(plan_review_path) if plan_review_path else None
+    risk_context = load_risk_context(risk_context_path) if risk_context_path else None
+    result = _result_from_report(
+        report,
+        review_type="diff",
+        project_root=project_root,
+        plan_review=plan_review,
+        risk_context=risk_context,
+    )
     return _with_review_event(project_root, result)
 
 
@@ -897,6 +1034,8 @@ def run_code_review_since(
     project_root: str | Path,
     *,
     ref: str,
+    plan_review_path: str | Path | None = None,
+    risk_context_path: str | Path | None = None,
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     since_ref = str(ref or "").strip()
@@ -913,7 +1052,16 @@ def run_code_review_since(
         if not _is_since_range_error(exc):
             raise
         return _empty_since_range_result(since_ref)
-    result = _result_from_report(report, review_type="since", since_ref=since_ref, project_root=project_root)
+    plan_review = load_plan_review(plan_review_path) if plan_review_path else None
+    risk_context = load_risk_context(risk_context_path) if risk_context_path else None
+    result = _result_from_report(
+        report,
+        review_type="since",
+        since_ref=since_ref,
+        project_root=project_root,
+        plan_review=plan_review,
+        risk_context=risk_context,
+    )
     return _with_review_event(project_root, result)
 
 

@@ -29,12 +29,22 @@ class CleanupMetadataRule:
 
 
 @dataclass(frozen=True)
+class ArchitectureContractRule:
+    rule_id: str = ""
+    source_glob: str = ""
+    owner: str = ""
+    restricted_imports: tuple[str, ...] = ()
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class ArchitectureRules:
     ignore_paths: tuple[str, ...] = ()
     ignore_globs: tuple[str, ...] = ()
     ignore_extensions: tuple[str, ...] = ()
     cleanup_extra_kinds: tuple[str, ...] = ("doc", "config", "prompt", "script")
     cleanup_metadata_rules: tuple[CleanupMetadataRule, ...] = ()
+    architecture_contract_rules: tuple[ArchitectureContractRule, ...] = ()
 
 
 def _string_list(raw: object) -> tuple[str, ...]:
@@ -140,6 +150,48 @@ def _cleanup_metadata_rules(raw: object) -> tuple[CleanupMetadataRule, ...]:
     return tuple(rules)
 
 
+def _module_pattern_list(raw: object) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        return ()
+    values: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        values.append(text)
+    return tuple(values)
+
+
+def _architecture_contract_rules(raw: object) -> tuple[ArchitectureContractRule, ...]:
+    if not isinstance(raw, list):
+        return ()
+    rules: list[ArchitectureContractRule] = []
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            continue
+        source_glob = _normalized_relpath_text(
+            item.get("source_glob", item.get("source", ""))
+        )
+        restricted_imports = _module_pattern_list(
+            item.get("restricted_imports", item.get("forbidden_imports", []))
+        )
+        if not source_glob or not restricted_imports:
+            continue
+        rule_id = _normalized_text(item.get("id", item.get("rule_id", "")))
+        rules.append(
+            ArchitectureContractRule(
+                rule_id=rule_id or f"architecture-contract-{index}",
+                source_glob=source_glob,
+                owner=_normalized_text(item.get("owner", "")),
+                restricted_imports=restricted_imports,
+                note=_normalized_text(item.get("note", item.get("message", ""))),
+            )
+        )
+    return tuple(rules)
+
+
 def _section_rules(raw: object, *, default_cleanup_extra_kinds: tuple[str, ...] = ()) -> ArchitectureRules:
     if not isinstance(raw, dict):
         return ArchitectureRules(cleanup_extra_kinds=default_cleanup_extra_kinds)
@@ -149,6 +201,7 @@ def _section_rules(raw: object, *, default_cleanup_extra_kinds: tuple[str, ...] 
         ignore_extensions=_extension_list(raw.get("ignore_extensions", [])),
         cleanup_extra_kinds=_string_list(raw.get("cleanup_extra_kinds", list(default_cleanup_extra_kinds))),
         cleanup_metadata_rules=_cleanup_metadata_rules(raw.get("cleanup_metadata", [])),
+        architecture_contract_rules=_architecture_contract_rules(raw.get("architecture_contracts", [])),
     )
 
 
@@ -189,6 +242,10 @@ def load_architecture_rules(project_root: str | Path, *, tool_name: str) -> Arch
         ignore_extensions=_merge_lists(shared.ignore_extensions, specific.ignore_extensions),
         cleanup_extra_kinds=_merge_lists(shared.cleanup_extra_kinds, specific.cleanup_extra_kinds),
         cleanup_metadata_rules=(*shared.cleanup_metadata_rules, *specific.cleanup_metadata_rules),
+        architecture_contract_rules=(
+            *shared.architecture_contract_rules,
+            *specific.architecture_contract_rules,
+        ),
     )
 
 
@@ -299,6 +356,7 @@ def cleanup_metadata_for_candidate(
 
 
 __all__ = [
+    "ArchitectureContractRule",
     "ArchitectureRules",
     "CleanupMetadataRule",
     "RULES_FILE_NAME",

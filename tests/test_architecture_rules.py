@@ -52,3 +52,38 @@ def test_load_archi_rules_merges_cleanup_metadata_rules_and_resolves_candidate_m
     assert expired_metadata["ttl_days"] == 30
     assert expired_metadata["expires_at"] == "2000-01-01"
     assert expired_metadata["expired"] is True
+
+
+def test_load_archi_rules_reads_architecture_contract_rules(tmp_path) -> None:
+    (tmp_path / ".architecture-rules.toml").write_text(
+        "\n".join(
+            [
+                "[[shared.architecture_contracts]]",
+                'id = "api-no-storage"',
+                'source_glob = "src/api/**"',
+                'owner = "api"',
+                'restricted_imports = ["app.storage", "app.storage.*"]',
+                'note = "Use the service facade."',
+                "",
+                "[[archi.architecture_contracts]]",
+                'id = "domain-no-cli"',
+                'source_glob = "src/domain/**"',
+                'forbidden_imports = ["app.cli"]',
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rules = load_archi_rules(tmp_path)
+
+    assert [rule.rule_id for rule in rules.architecture_contract_rules] == [
+        "api-no-storage",
+        "domain-no-cli",
+    ]
+    api_rule = rules.architecture_contract_rules[0]
+    assert api_rule.source_glob == "src/api/**"
+    assert api_rule.owner == "api"
+    assert api_rule.restricted_imports == ("app.storage", "app.storage.*")
+    assert api_rule.note == "Use the service facade."

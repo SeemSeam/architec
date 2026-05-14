@@ -10,9 +10,9 @@
 - AI/vibe coding 特有坏味覆盖不足，尤其是近重复、影子实现和孤儿抽象。
 - 跨边界耦合主要看 import，还没有覆盖共享类型、隐式契约、共享状态和稳定性倒置。
 - 审查结果需要更强排序，避免把所有 concern 平铺成噪音清单。
-- 项目特定 architecture contracts 还没有表达入口，无法稳定检查 ownership、allowed dependency direction 或 facade/public API expectations。
-- `plan-review` 和 `code-review --diff` 的连接还不够强，暂不能系统识别实现是否偏离了已审查的方案范围。
-- 测试、coverage、churn 和 complexity 还没有与结构 concern 融合，暂不能识别“高 churn + 低测试 + 架构风险”的组合模式。
+- 项目特定 architecture contracts 已有第一步表达入口，可检查 changed-file-scoped restricted imports；ownership、facade/public API expectations 仍未覆盖。
+- `plan-review` 和 `code-review --diff` 已有路径级连接，可识别 changed files 是否偏离 saved plan touchpoints；更深的 import-edge expectation 和语义意图匹配仍未覆盖。
+- 外部 coverage/churn/test-map 已可作为 optional risk context 附加到结构 concern；complexity、public API 和更深历史风险融合仍未覆盖。
 
 ## 深化主线
 
@@ -22,4 +22,4 @@
 
 这三条是深化审查能力的主线。新增信号必须服务于这三条，不能只为了扩大检查项数量。
 
-下一阶段优先级见 [architecture-stability.md](architecture-stability.md)：先补 architecture contracts、plan/diff consistency 和 test/churn risk fusion，再评估更多 smell detectors。
+下一阶段优先级见 [architecture-stability.md](architecture-stability.md)：architecture contracts、路径级 plan/diff consistency 和 risk context fusion 已有 v1；下一步应继续深化 contracts、plan/diff import-edge expectations，以及 complexity/public API 风险融合。

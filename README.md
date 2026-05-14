@@ -188,6 +188,8 @@ archi .
 archi code-review --full .
 archi --diff .
 archi code-review --diff .
+archi code-review --diff --plan-review plan.json .
+archi code-review --diff --risk-context risk.json .
 archi code-review --since main .
 ```
 
@@ -202,6 +204,16 @@ Exact `near_duplicate` detection and conservative `shadow_implementation`
 detection both support changed-file-scoped diff/since review: the primary
 concern location is in the changed files, while structured references can point
 to unchanged existing implementations.
+
+Saved plan-review JSON can be supplied to diff/since review with
+`--plan-review <plan.json>`. This adds path-level `plan-diff-consistency`
+observations when changed files fall outside the saved plan touchpoints, or
+when planned paths are not present in the selected diff.
+
+External risk context JSON can be supplied with `--risk-context <risk.json>`.
+It may contain coverage-by-file, churn-by-file, source-to-test mappings, or
+changed test files. `architec` only attaches those facts to existing concerns;
+it does not execute tests or create coverage reports.
 
 Displayed top concerns use portfolio ranking: severity remains first, and
 same-level concerns prefer a mix of kinds before filling remaining slots.
@@ -233,6 +245,9 @@ dependencies:
 
 ```bash
 archi plan-review plan.md
+archi plan-review plan.md --out plan.json
+archi code-review --diff --plan-review plan.json .
+archi code-review --diff --risk-context risk.json .
 ```
 
 The top-level `--goal` flag has been removed. Write the intent as a plan Markdown file and use `archi plan-review <plan.md>`.

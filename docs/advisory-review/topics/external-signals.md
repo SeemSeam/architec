@@ -27,6 +27,8 @@
 
 下一阶段 test/churn risk fusion 应继续遵守这个边界：读取用户已有报告，把它们作为 code-review concern 的风险上下文，而不是由 `architec` 执行测试或生成覆盖率。
 
+V1 见 [Decision 039](../decisions/039-risk-context-fusion-v1.md)：`code-review --risk-context <risk.json>` 读取外部 coverage/churn/test-map JSON，把匹配路径的事实附加到已有 concerns，并输出 `risk_context` signal。没有输入时不输出该 signal。
+
 ## 依赖信号
 
 依赖信号只做架构视角：

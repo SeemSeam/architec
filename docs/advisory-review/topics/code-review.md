@@ -7,7 +7,9 @@
 ```bash
 archi code-review --full .
 archi code-review --diff .
+archi code-review --diff --plan-review <plan.json> .
 archi code-review --since <ref> .
+archi code-review --diff --risk-context <risk.json> .
 ```
 
 模式关系：
@@ -64,6 +66,36 @@ archi code-review --since <ref> .
 `near_duplicate` 和 `shadow_implementation` 在增量模式中只报告 `location.path` 位于 changed files 的 concern，`references[]` 可以指向未变更的 existing/reference implementation。`near_duplicate` 不因为 reference path changed 而报告历史旧账。
 
 File/module-level `shadow_implementation` 目前只保留为 internal dry-run calibration helper。它不会被 `code-review` 调用，不会产生 `signals[]`，也不会产生 `location.symbol_kind: "module"` 的 `shadow-implementation` concern。
+
+Architecture contracts v1 在增量模式中读取 `.architecture-rules.toml` 的 `architecture_contracts` 规则，只检查 changed Python files。匹配 `source_glob` 且导入 `restricted_imports` 的文件会产生 `kind: "architecture-contract"` concern；没有 contract config 时不输出 contract signal 或 concern。
+
+示例：
+
+```toml
+[[archi.architecture_contracts]]
+id = "api-no-storage"
+source_glob = "src/api/**"
+owner = "api-platform"
+restricted_imports = ["app.storage"]
+note = "Use the service facade."
+```
+
+Plan/diff consistency v1 在增量模式中可选读取已保存的 `plan-review` JSON：
+
+```bash
+archi plan-review plan.md --out plan.json
+archi code-review --diff --plan-review plan.json .
+```
+
+它比较 `understood_plan.changes[].path` 与本次 `change_analysis.changed_files`，对计划外 changed file 或计划中未触达路径输出 `kind: "plan-diff-consistency"` concern，并输出 `plan_diff_consistency` signal。该观察只表达实现与已审查计划的路径级偏离，不判断计划或代码哪一方正确。
+
+Risk context fusion v1 可选读取外部 JSON：
+
+```bash
+archi code-review --diff --risk-context risk.json .
+```
+
+`risk.json` 可以包含 `coverage_by_file`、`churn_by_file`、`test_files_by_source` 和 `changed_tests`。`code-review` 只把这些外部事实附加到已有 concerns，并输出 `risk_context` signal；它不执行测试、不生成 coverage、不计算新的健康分。
 
 ## 增量审查
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 
 import architec.code_review.public as code_review
 import pytest
@@ -1036,6 +1037,238 @@ def test_code_review_diff_without_scoped_near_duplicate_omits_signal(tmp_path, m
     assert all(item["kind"] != "near_duplicate" for item in result["signals"])
 
 
+def test_code_review_diff_adds_changed_file_architecture_contract_concern(tmp_path, monkeypatch) -> None:
+    (tmp_path / ".architecture-rules.toml").write_text(
+        "\n".join(
+            [
+                "[[archi.architecture_contracts]]",
+                'id = "api-no-storage"',
+                'source_glob = "src/api/**"',
+                'owner = "api-platform"',
+                'restricted_imports = ["app.storage"]',
+                'note = "Use the service facade."',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    api_dir = tmp_path / "src" / "api"
+    api_dir.mkdir(parents=True)
+    (api_dir / "handler.py").write_text(
+        "from app.storage import repository\n\n\ndef handle():\n    return repository.load()\n",
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    concern = next(item for item in result["concerns"] if item["kind"] == "architecture-contract")
+    assert concern["location"]["path"] == "src/api/handler.py"
+    assert concern["location"]["line"] == 1
+    assert "architecture_contract.rule_id=api-no-storage" in concern["evidence"]
+    assert "architecture_contract.import=app.storage" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "architecture_contract")
+    assert signal["summary"] == "1 architecture contract concerns detected in changed files."
+    assert signal["metrics"] == {
+        "rule_total": 1,
+        "checked_file_total": 1,
+        "concern_total": 1,
+        "concern_total_before_limit": 1,
+        "scoped_to_changed_files": True,
+    }
+
+
+def test_code_review_since_adds_changed_file_architecture_contract_concern(tmp_path, monkeypatch) -> None:
+    (tmp_path / ".architecture-rules.toml").write_text(
+        "\n".join(
+            [
+                "[[archi.architecture_contracts]]",
+                'id = "domain-no-cli"',
+                'source_glob = "src/domain/**"',
+                'restricted_imports = ["app.cli"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    domain_dir = tmp_path / "src" / "domain"
+    domain_dir.mkdir(parents=True)
+    (domain_dir / "model.py").write_text("import app.cli\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/domain/model.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_since(tmp_path, ref="main")
+
+    assert result["review_type"] == "since"
+    concern = next(item for item in result["concerns"] if item["kind"] == "architecture-contract")
+    assert concern["location"]["path"] == "src/domain/model.py"
+    assert "architecture_contract.import=app.cli" in concern["evidence"]
+
+
+def test_code_review_architecture_contracts_stay_empty_without_config(tmp_path, monkeypatch) -> None:
+    source_dir = tmp_path / "src" / "api"
+    source_dir.mkdir(parents=True)
+    (source_dir / "handler.py").write_text("import app.storage\n", encoding="utf-8")
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    assert all(item["kind"] != "architecture-contract" for item in result["concerns"])
+    assert all(item["kind"] != "architecture_contract" for item in result["signals"])
+
+
+def test_code_review_since_bad_ref_does_not_run_architecture_contract_scan(tmp_path, monkeypatch) -> None:
+    def raise_bad_ref(*args, **kwargs):
+        raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
+
+    def fail_contract_scan(*args, **kwargs):
+        raise AssertionError("architecture contract scan should not run")
+
+    monkeypatch.setattr(code_review, "run_analysis", raise_bad_ref)
+    monkeypatch.setattr(code_review, "architecture_contract_scan", fail_contract_scan)
+
+    result = code_review.run_code_review_since(tmp_path, ref="missing")
+
+    assert result["review_type"] == "since"
+    assert result["concerns"] == []
+    assert result["signals"] == []
+
+
+def test_code_review_diff_adds_plan_diff_consistency_concerns(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [
+                        {"path": "src/api/handler.py", "intent": "adjust API behavior"},
+                        {"path": "src/service/model.py", "intent": "update service model"},
+                    ],
+                    "dependencies": [],
+                },
+                "plan_fingerprint": "abc123",
+                "artifacts": {"plan_path": "plans/api.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 2,
+            "changed_files": ["src/api/handler.py", "src/infra/cache.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    plan_concerns = [item for item in result["concerns"] if item["kind"] == "plan-diff-consistency"]
+    assert {item["location"]["path"] for item in plan_concerns} == {
+        "src/infra/cache.py",
+        "src/service/model.py",
+    }
+    assert any(
+        "plan_diff_consistency.observation=unexpected_changed_file" in item["evidence"]
+        for item in plan_concerns
+    )
+    assert any(
+        "plan_diff_consistency.observation=planned_path_not_changed" in item["evidence"]
+        for item in plan_concerns
+    )
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["summary"] == "2 plan/diff consistency observations detected."
+    assert signal["metrics"] == {
+        "planned_path_total": 2,
+        "changed_file_total": 2,
+        "concern_total": 2,
+        "concern_total_before_limit": 2,
+        "scoped_to_changed_files": True,
+    }
+
+
+def test_code_review_diff_with_plan_and_empty_diff_reports_missing_planned_path(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/service/model.py", "intent": "update model"}],
+                    "dependencies": [],
+                },
+                "plan_fingerprint": "empty-diff-plan",
+                "artifacts": {"plan_path": "plans/model.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 0,
+            "changed_files": [],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(item for item in result["concerns"] if item["kind"] == "plan-diff-consistency")
+    assert concern["location"]["path"] == "src/service/model.py"
+    assert "plan_diff_consistency.observation=planned_path_not_changed" in concern["evidence"]
+    assert "plan_diff_consistency.changed_file_total=0" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"] == {
+        "planned_path_total": 1,
+        "changed_file_total": 0,
+        "concern_total": 1,
+        "concern_total_before_limit": 1,
+        "scoped_to_changed_files": True,
+    }
+
+
+def test_code_review_since_plan_review_bad_ref_does_not_read_plan(tmp_path, monkeypatch) -> None:
+    def raise_bad_ref(*args, **kwargs):
+        raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
+
+    missing_plan = tmp_path / "missing-plan-review.json"
+    monkeypatch.setattr(code_review, "run_analysis", raise_bad_ref)
+
+    result = code_review.run_code_review_since(tmp_path, ref="missing", plan_review_path=missing_plan)
+
+    assert result["review_type"] == "since"
+    assert result["concerns"] == []
+    assert result["signals"] == []
+    assert result["artifacts"] == {}
+
+
 def test_code_review_since_bad_ref_does_not_run_near_duplicate_detector(tmp_path, monkeypatch) -> None:
     def raise_bad_ref(*args, **kwargs):
         raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
@@ -1052,6 +1285,104 @@ def test_code_review_since_bad_ref_does_not_run_near_duplicate_detector(tmp_path
     assert result["concerns"] == []
     assert result["signals"] == []
     assert result["artifacts"] == {}
+
+
+def test_code_review_full_does_not_run_incremental_contract_or_plan_scanners(tmp_path, monkeypatch) -> None:
+    def fail_architecture_contract_scan(*args, **kwargs):
+        raise AssertionError("architecture contract scan should not run for full review")
+
+    def fail_plan_diff_scan(*args, **kwargs):
+        raise AssertionError("plan diff scan should not run for full review")
+
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+    monkeypatch.setattr(code_review, "architecture_contract_scan", fail_architecture_contract_scan)
+    monkeypatch.setattr(code_review, "plan_diff_consistency_scan", fail_plan_diff_scan)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["review_type"] == "full"
+    assert all(item["kind"] != "architecture_contract" for item in result["signals"])
+    assert all(item["kind"] != "plan_diff_consistency" for item in result["signals"])
+
+
+def test_code_review_full_enriches_concerns_with_external_risk_context(tmp_path, monkeypatch) -> None:
+    risk_path = tmp_path / "risk-context.json"
+    risk_path.write_text(
+        json.dumps(
+            {
+                "coverage_by_file": {"src/legacy/old_service.py": {"line_rate": 0.42}},
+                "churn_by_file": {"src/legacy/old_service.py": {"changes": 13}},
+                "test_files_by_source": {"src/legacy/old_service.py": []},
+                "changed_tests": ["tests/test_legacy.py"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    enriched = [
+        concern
+        for concern in result["concerns"]
+        if concern["location"]["path"] == "src/legacy/old_service.py"
+        and "risk_context.coverage=0.42" in concern["evidence"]
+    ]
+    assert enriched
+    assert "risk_context.coverage_level=low" in enriched[0]["evidence"]
+    assert "risk_context.churn=13" in enriched[0]["evidence"]
+    assert "risk_context.churn_level=high" in enriched[0]["evidence"]
+    artifact_path = result["artifacts"]["code_review_concerns_json"]
+    artifact = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
+    full_enriched = [
+        concern
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] == "src/legacy/old_service.py"
+        and "risk_context.related_test_total=0" in concern["evidence"]
+    ]
+    assert full_enriched
+    signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
+    assert signal["summary"] == "2 concerns enriched with external risk context."
+    assert signal["metrics"] == {
+        "input_file_total": 1,
+        "enriched_concern_total": 2,
+        "changed_test_total": 1,
+        "coverage_file_total": 1,
+        "churn_file_total": 1,
+        "test_map_file_total": 1,
+        "by_factor": {
+            "high_churn": 2,
+            "low_coverage": 2,
+            "missing_related_tests": 2,
+        },
+    }
+
+
+def test_code_review_without_risk_context_has_no_risk_signal(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert all(item["kind"] != "risk_context" for item in result["signals"])
+    encoded = json.dumps(result["concerns"], sort_keys=True)
+    assert "risk_context." not in encoded
+
+
+def test_code_review_since_bad_ref_does_not_read_risk_context(tmp_path, monkeypatch) -> None:
+    def raise_bad_ref(*args, **kwargs):
+        raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
+
+    missing_risk = tmp_path / "missing-risk.json"
+    monkeypatch.setattr(code_review, "run_analysis", raise_bad_ref)
+
+    result = code_review.run_code_review_since(tmp_path, ref="missing", risk_context_path=missing_risk)
+
+    assert result["review_type"] == "since"
+    assert result["concerns"] == []
+    assert result["signals"] == []
 
 
 def test_code_review_full_output_avoids_gate_terms(tmp_path, monkeypatch) -> None:

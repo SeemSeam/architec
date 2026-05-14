@@ -189,6 +189,14 @@ AI signal scanners now exclude local agent state and generated-state directories
 
 Advisory empty and degraded states now use standardized neutral wording. Diff/since no-finding headlines say no new architecture concerns were identified in the selected range, status reports no recorded events or no full score source without implying project health, and fix-advice explains legal empty suggestions as no matching concerns for the selected filters.
 
+Architecture contracts v1 now lets projects declare changed-file-scoped dependency restrictions in `.architecture-rules.toml`. `code-review --diff` and `code-review --since <ref>` emit `architecture-contract` concerns when a changed Python file imports a restricted module; projects without contract config emit no contract signal.
+
+Plan/diff consistency v1 connects saved plan-review JSON to incremental code review. `code-review --diff --plan-review <plan.json>` and `code-review --since <ref> --plan-review <plan.json>` compare `understood_plan.changes[].path` with the selected changed files and emit `plan-diff-consistency` observations for unexpected changed areas or planned paths not touched by the diff.
+
+`fix-advice` now has a dedicated `architecture-contract` branch. It consumes the matched rule/import evidence and optional rule guidance to suggest boundary-oriented options without deciding whether the contract or the changed import is correct.
+
+Risk context fusion v1 lets `code-review` read optional external coverage/churn/test-map JSON through `--risk-context <risk.json>`. Matching file facts are appended to existing concerns and summarized in a `risk_context` signal; `architec` does not execute tests or generate those reports.
+
 `CodeReviewResult.concerns[]` now uses portfolio ranking for the displayed top concerns. Severity level remains the first ordering boundary, and same-level results prefer a mix of concern kinds before filling remaining slots with the same kind. `summary.concern_total` remains the pre-display total.
 
 CodeReviewResult now records `summary.payload_bytes` as a compact main-payload estimate and applies a conservative display guard to oversized concern evidence, references, blast radius, and one-level signal metric maps. Truncation metadata is recorded in `artifacts.payload_truncation`.

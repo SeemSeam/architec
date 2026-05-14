@@ -6,7 +6,9 @@
 archi plan-review <plan.md>
 archi code-review --full .
 archi code-review --diff .
+archi code-review --diff --plan-review <plan.json> .
 archi code-review --since <ref> .
+archi code-review --diff --risk-context <risk.json> .
 archi fix-advice --review <review.json>
 archi status --trend
 archi status --snapshot
@@ -34,6 +36,10 @@ archi status --snapshot
 `status --trend` / `status --snapshot` 是 advisory project status 模式。既有 `archi status --json` 和裸 `archi status` 仍保留为 auth/session 状态查询，兼容策略见 [decisions/011-status-command-coexistence.md](decisions/011-status-command-coexistence.md)。
 
 `code-review --diff` 和 `code-review --since` 使用与 `--full` 相同的基础 LLM preflight，不额外要求 `architect_component_scoring`。当 `code-review --since <ref>` 的引用或 range 不可解析时，输出结构化 CodeReviewResult 降级对象，不回退到 full review 或无关工作树 diff。
+
+`code-review --diff` 和 `code-review --since <ref>` 可选读取 `--plan-review <plan.json>`，将已保存的 `plan-review` JSON 与本次 changed files 对齐，输出 `plan-diff-consistency` observations。该输入只用于一致性观察，不改变 diff/since 的范围，也不作为门禁。
+
+`code-review --full`、`--diff` 和 `--since <ref>` 还可选读取 `--risk-context <risk.json>`。该 JSON 由外部工具生成，包含 coverage-by-file、churn-by-file、source-to-test mapping 或 changed test files；`architec` 只把这些事实附加到已有 concerns，并输出 `risk_context` signal，不执行测试或生成覆盖率。
 
 ## 规则与约束来源
 

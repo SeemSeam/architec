@@ -39,6 +39,10 @@
 - AI signal scanners 默认排除本地 agent state、generated artifacts、vendor、fixtures、tests 和 cache 目录。见 [033-ai-signal-source-scope-exclusions.md](decisions/033-ai-signal-source-scope-exclusions.md)。
 - 公开 advisory 命令的 empty/degraded 文案使用中性 no-finding / unable-to-analyze 表述。见 [034-advisory-empty-state-wording.md](decisions/034-advisory-empty-state-wording.md)。
 - 下一阶段架构稳定性优先级是 boundary contracts、plan/diff consistency 和 test/churn risk fusion。见 [035-architecture-stability-next-priorities.md](decisions/035-architecture-stability-next-priorities.md)。
+- architecture contracts v1 使用 `.architecture-rules.toml` 中的 changed-file-scoped dependency restrictions，输出 `architecture-contract` concerns。见 [036-architecture-contracts-v1.md](decisions/036-architecture-contracts-v1.md)。
+- plan/diff consistency v1 允许 `code-review --diff/--since` 读取已保存的 `plan-review` JSON，并输出路径级 `plan-diff-consistency` observations。见 [037-plan-diff-consistency-v1.md](decisions/037-plan-diff-consistency-v1.md)。
+- `fix-advice` 为 `architecture-contract` concern 输出边界导向 advisory options。见 [038-architecture-contract-fix-advice.md](decisions/038-architecture-contract-fix-advice.md)。
+- risk context fusion v1 允许 `code-review` 读取可选外部 coverage/churn/test-map JSON，并把风险事实附加到既有 concerns。见 [039-risk-context-fusion-v1.md](decisions/039-risk-context-fusion-v1.md)。
 
 ## 目录
 
@@ -75,7 +79,9 @@
 archi plan-review <plan.md>
 archi code-review --full .
 archi code-review --diff .
+archi code-review --diff --plan-review <plan.json> .
 archi code-review --since <ref> .
+archi code-review --diff --risk-context <risk.json> .
 archi fix-advice --review <review.json>
 archi status --trend
 archi status --snapshot
@@ -97,4 +103,4 @@ archi status --snapshot
 
 ## 状态
 
-active · updated 2026-05-13
+active · updated 2026-05-14

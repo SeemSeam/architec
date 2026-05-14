@@ -328,6 +328,65 @@ def test_fix_advice_shadow_output_avoids_execution_and_gate_terms() -> None:
     assert "block" not in payload
 
 
+def test_build_fix_advice_architecture_contract_uses_rule_evidence_and_hint() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:architecture-contract:abc123",
+                "kind": "architecture-contract",
+                "location": {"path": "src/api/handler.py", "line": 1, "symbol": "", "symbol_kind": "module"},
+                "evidence": [
+                    "architecture_contract.rule_id=api-no-storage",
+                    "architecture_contract.source_glob=src/api/**",
+                    "architecture_contract.import=app.storage",
+                    "architecture_contract.restricted_import=app.storage",
+                    "architecture_contract.owner=api-platform",
+                ],
+                "next_steps_hint": "Use the service facade.",
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    suggestion = result["suggestions"][0]
+    rendered = json.dumps(suggestion)
+    assert suggestion["target"] == "src/api/handler.py"
+    assert "src/api/handler.py:1" in rendered
+    assert "rule api-no-storage" in rendered
+    assert "import app.storage" in rendered
+    assert "Use the service facade." in rendered
+    assert "owner api-platform" in rendered
+    assert "does not decide whether the contract or the changed import" in suggestion["risks"][1]
+
+
+def test_fix_advice_architecture_contract_output_avoids_execution_and_gate_terms() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:architecture-contract:abc123",
+                "kind": "architecture-contract",
+                "location": {"path": "src/api/handler.py", "line": 1, "symbol": "", "symbol_kind": "module"},
+                "evidence": [
+                    "architecture_contract.rule_id=api-no-storage",
+                    "architecture_contract.import=app.storage",
+                    "architecture_contract.restricted_import=app.storage",
+                ],
+            }
+        ]
+    }
+
+    payload = json.dumps(build_fix_advice(review), sort_keys=True).lower()
+
+    assert "patch" not in payload
+    assert "apply" not in payload
+    assert "must-fix" not in payload
+    assert "verdict" not in payload
+    assert "pass" not in payload
+    assert "fail" not in payload
+    assert "block" not in payload
+
+
 def test_run_fix_advice_reads_review_json(tmp_path) -> None:
     review_path = tmp_path / "review.json"
     review_path.write_text(json.dumps(_review()), encoding="utf-8")

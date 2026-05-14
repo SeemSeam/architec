@@ -16,15 +16,41 @@ Current advisory-review coverage is strong for early structural warning:
 
 This is enough to catch many vibe-coding drift patterns: repeated functions, reimplemented classes, hotspots gaining more responsibility, cleanup/archive debt, and package-boundary observations.
 
+## Capability Matrix
+
+| Maintenance goal | Current capability | Maturity |
+| --- | --- | --- |
+| Prevent obvious duplicate code | `near_duplicate` reports exact normalized Python function repeats in full and changed-file-scoped diff/since reviews. | Strong for exact Python function repeats; weak for fuzzy or cross-language repeats. |
+| Detect repeated wheel-building | `shadow_implementation` reports Python function/class implementations that resemble an existing implementation without a reuse edge. | Strong for high-confidence symbol-level Python cases; module-level remains dry-run only. |
+| Keep incremental reviews focused | `code-review --diff` and `--since` only report changed-file primary `near_duplicate` and `shadow_implementation` concerns. | Strong for avoiding historical-debt noise in incremental feedback. |
+| Track architecture drift over time | review events plus `status --trend` can show recurring weakening components and score source history; optional risk context can attach coverage/churn/test-map facts to concerns. | Useful, but still depends on external report quality. |
+| Preserve boundary intent | `.architecture-rules.toml` can encode changed-file-scoped restricted imports; topology and hotspot concerns expose structural pressure. | Partial. Ownership, facade expectations, and richer contracts remain future work. |
+| Align implementation with a reviewed plan | Saved `plan-review` JSON can be supplied to `code-review --diff/--since` for path-level plan/diff consistency observations. | Partial. Stronger import-edge and semantic intent matching remain future work. |
+| Protect mainline behavior | `architec` does not execute tests, prove behavior, or inspect runtime errors. | Out of scope unless external test/churn reports are supplied. |
+
+## Guarantee Model
+
+`architec` should be treated as an architecture feedback loop, not a proof system. It can make drift visible and harder to miss, but it cannot guarantee that the main branch is correct or maintainable without project process around it.
+
+The practical guarantee target is narrower:
+
+- every reviewed diff gets a bounded set of architecture concerns;
+- repeated implementation and changed-file duplication are visible before they accumulate;
+- project-specific boundary contracts can be checked once they are defined;
+- trends can show whether structural pressure is increasing across reviews;
+- fix-advice can turn concerns into neutral repair options.
+
+The tool still depends on maintainers or coding agents to act on those observations. Long-term stability requires running it consistently and versioning the project rules it should enforce.
+
 ## Current Limits
 
 The current system does not guarantee mainline quality:
 
 - It does not prove behavior correctness or replace tests.
 - It does not enforce merge decisions or block CI.
-- It does not yet encode project-specific architecture contracts such as allowed dependency directions or ownership boundaries.
-- It does not strongly compare a plan against the actual diff beyond the current plan-review and fingerprint foundation.
-- It does not yet combine test coverage, churn, complexity, and review concerns into compound risk.
+- It encodes first-step project-specific architecture contracts for changed-file import restrictions, but broader ownership and facade expectations remain future work.
+- It only compares saved plan-review paths against selected changed files; deeper semantic intent and import-edge expectations remain future work.
+- It only combines coverage, churn, and source-to-test facts when an external risk context JSON is supplied; it does not execute tests or collect those reports itself.
 - File/module-level shadow implementation remains dry-run only because current evidence is not precise enough for a public signal.
 - TypeScript/Go and other languages are still outside the current AI-signal scope.
 
@@ -44,6 +70,15 @@ The next architecture-stability work should prioritize contract and drift contro
 
    Output should remain advisory concerns, not pass/fail gates.
 
+   First implementation target:
+
+   - a small project-local config format for ownership and dependency direction;
+   - import-edge extraction reused from existing topology analysis where possible;
+   - new `architecture-contract` concerns with evidence such as source path, imported module, matched rule id, restricted import, and optional owner;
+   - no default output when no contract config exists.
+
+   V1 is recorded in [Decision 036](../decisions/036-architecture-contracts-v1.md). `fix-advice` options for contract concerns remain a later small step.
+
 2. **Plan/Diff Consistency**
 
    Strengthen the link between `plan-review` and `code-review --diff`:
@@ -52,6 +87,15 @@ The next architecture-stability work should prioritize contract and drift contro
    - report unexpected dependency edges introduced by the diff;
    - highlight public API or boundary changes not described by the plan;
    - keep observations factual and scoped to the selected diff.
+
+   First implementation target:
+
+   - make `plan-review --out plan.json` or an equivalent saved plan artifact the explicit input;
+   - compare planned touchpoints to `change_analysis.changed_files`;
+   - surface `plan-diff-consistency` concerns for unexpected changed areas, missing expected areas, and boundary changes not named in the plan;
+   - keep plan/diff mismatch as an observation, not a claim that the implementation is wrong.
+
+   V1 is recorded in [Decision 037](../decisions/037-plan-diff-consistency-v1.md). It compares saved `plan-review` paths with changed files; import-edge expectations remain a later step.
 
 3. **Test/Churn Risk Fusion**
 
@@ -63,6 +107,15 @@ The next architecture-stability work should prioritize contract and drift contro
    - repeated weakening in status events.
 
    These should become risk multipliers or companion signals, not verdicts.
+
+   First implementation target:
+
+   - read optional external reports from stable file paths or explicit CLI flags;
+   - support simple JSON inputs for coverage-by-file, churn-by-file, and changed test files;
+   - enrich existing concerns with companion risk facts rather than inventing a separate health score;
+   - never execute the test runner as part of `code-review`.
+
+   V1 is recorded in [Decision 039](../decisions/039-risk-context-fusion-v1.md). It reads an optional `--risk-context` JSON and adds companion evidence plus a `risk_context` signal.
 
 4. **Module-Level Shadow Re-evaluation**
 
@@ -88,3 +141,13 @@ Recommended use for long-term maintenance:
 - keep boundary-contract decisions in versioned config or plan docs before asking agents to implement broad changes.
 
 The intended effect is not a guarantee that the code is correct. It is a feedback loop that makes structural drift visible early enough that maintainers and agents can correct course.
+
+## What Still Blocks Stronger Architecture Protection
+
+The next major gap is not another generic smell detector. It is the absence of repository-specific rules. Without contracts, `architec` can say that code is getting more complex or duplicative, but it cannot know that `src/api` must not import `src/storage` directly, or that a feature package must only expose a facade.
+
+The second gap is intent tracking. Vibe-coding drift often starts when implementation wanders away from a reviewed plan. Path-level plan/diff consistency is now available when a saved `plan-review` JSON is provided, but deeper semantic intent and import-edge expectations remain future work.
+
+The third gap is risk fusion. Architecture concerns matter more when they appear in high-churn, under-tested, public API code. V1 can combine externally supplied coverage/churn/test-map facts with concerns, but richer complexity, public API, and historical fusion remain future work.
+
+These three gaps define the implementation sequence: contracts first, path-level plan/diff consistency second, test/churn fusion third.

@@ -545,6 +545,16 @@ archi --diff .
 archi code-review --diff .
 ```
 
+如果已经保存了方案审查结果，可以把它作为增量一致性观察输入：
+
+```bash
+archi plan-review plan.md --out plan.json
+archi code-review --diff --plan-review plan.json .
+archi code-review --since main --plan-review plan.json .
+```
+
+`--plan-review` 读取 saved plan-review JSON，并把 `understood_plan.changes[].path` 与本次 changed files 对齐。输出的 `plan-diff-consistency` concerns 只表示路径级偏离观察，不表示代码或方案哪一方正确。
+
 指定比较范围：
 
 ```bash
@@ -559,6 +569,7 @@ archi --diff --base main --head HEAD .
 - CodeReviewResult 的 `concern_id` 是基于 concern facts 生成的引用标识，不代表展示顺序
 - diff/since code-review 使用基础 LLM preflight，不额外要求 `architect_component_scoring`
 - `code-review --since <ref>` 遇到不可解析 ref/range 时返回结构化降级结果，不回退到全量审查
+- `--plan-review <plan.json>` 只可用于 diff/since consistency observations；full review 不读取 plan-review JSON
 
 ### 6.7 状态快照（替代 legacy baseline）
 
@@ -621,8 +632,8 @@ archi --refresh-from-hippo .
 ### 7.3 先审查方案，再审查差异
 
 ```bash
-archi plan-review plan.md
-archi code-review --diff .
+archi plan-review plan.md --out plan.json
+archi code-review --diff --plan-review plan.json .
 ```
 
 ### 7.4 查看 cleanup / archive signals
@@ -674,6 +685,7 @@ archi code-review --diff . --out review.json
 | `--diff` | 启用增量差异分析 |
 | `--base` | 差异分析的起始 git 引用 |
 | `--head` | 差异分析的结束 git 引用 |
+| `--plan-review` | saved plan-review JSON；仅用于 diff/since 的路径级一致性观察 |
 | `--component` | 预留参数，当前未参与核心分析流程 |
 | `--format` | 输出格式偏好，当前接受 `json/md/html/all`，但核心流程仍会统一生成主输出文件 |
 | `--refresh-from-hippo` | 先刷新 Hippo 输入，再继续后续流程 |
@@ -687,7 +699,7 @@ archi code-review --diff . --out review.json
 - `archi plan-review <plan.md>`
   审查方案 Markdown，输出 understood plan、concerns、suggested adjustments 和 fingerprint
 - `archi code-review --full|--diff|--since <ref> [path]`
-  显式执行全量、当前 diff 或 since-ref 的建议型代码审查
+  显式执行全量、当前 diff 或 since-ref 的建议型代码审查；diff/since 可加 `--plan-review <plan.json>`
 
 ## 9. 输出文件说明
 
