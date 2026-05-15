@@ -1702,6 +1702,59 @@ def test_run_code_review_static_full_uses_deterministic_signals_without_analysis
     assert "code_review_discovery_json" in result["artifacts"]
 
 
+def test_run_code_review_static_diff_uses_changed_file_scope_without_analysis(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_near_duplicate_project(tmp_path)
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "git_changed_files",
+        lambda *args, **kwargs: [{"path": "src/changed.py", "added": 4, "deleted": 1}],
+    )
+
+    result = code_review.run_code_review_static_diff(tmp_path, reason="backend unavailable")
+
+    assert result["mode"] == "code_review"
+    assert result["review_type"] == "diff"
+    assert result["summary"]["headline"] == "Diff analysis was unavailable; static code-review signals were generated."
+    assert result["summary"]["analysis_mode"] == "static"
+    assert result["summary"]["reason"] == "backend unavailable"
+    assert result["summary"]["concern_total"] == 1
+    assert result["summary"]["scoped_concern_total"] == 1
+    assert result["summary"]["global_context_concern_total"] == 0
+    assert result["artifacts"]["code_review_analysis_mode"] == "static"
+    assert result["artifacts"]["code_review_static_reason"] == "backend unavailable"
+    assert [item["kind"] for item in result["concerns"]] == ["duplication"]
+    signal = next(item for item in result["signals"] if item["kind"] == "near_duplicate")
+    assert signal["metrics"]["scoped_to_changed_files"] is True
+
+
+def test_run_code_review_static_since_bad_ref_returns_degraded_range_result(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+
+    def raise_bad_ref(*args, **kwargs):
+        raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
+
+    monkeypatch.setattr(code_review, "git_changed_files", raise_bad_ref)
+
+    result = code_review.run_code_review_static_since(
+        tmp_path,
+        ref="missing",
+        reason="backend unavailable",
+    )
+
+    assert result["review_type"] == "since"
+    assert result["summary"]["headline"] == "Unable to analyze the requested since range."
+    assert result["summary"]["concern_total"] == 0
+    assert result["signals"] == []
+    assert result["concerns"] == []
+
+
 def test_code_review_concerns_artifact_write_os_error_is_fail_open(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
 

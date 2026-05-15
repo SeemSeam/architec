@@ -120,6 +120,7 @@ Done:
 - risk-reinforced discovery promotion v1 已落地：`--risk-context` 对 thin-wrapper discovery candidates 提供强化事实时，可提升为低级 primary `duplication` observation；paired API variants 继续只保留 discovery；见 [decisions/063-risk-reinforced-discovery-promotion.md](decisions/063-risk-reinforced-discovery-promotion.md)。
 - semantic archive/retire display reinforcement v1 已落地：full review 的 cleanup/archive concerns 如果被 semantic judge 明确判定为 `archive_first` 或 `retire_now`，会记录 semantic evidence 并提高展示 confidence floor；见 [decisions/064-semantic-archive-retire-display-reinforcement.md](decisions/064-semantic-archive-retire-display-reinforcement.md)。
 - incremental cleanup/archive display de-dupe 已落地：diff/since selected-scope 中 cleanup/archive 同路径同 category observations 只占一个 displayed top concern slot，完整 generated concerns artifact 仍保留两者；见 [decisions/065-incremental-cleanup-archive-display-dedupe.md](decisions/065-incremental-cleanup-archive-display-dedupe.md)。
+- incremental static degradation 已落地：diff/since 在 backend LLM 不可用时返回明确标记的 selected-scope static CodeReviewResult，bad-ref 和 bundle validation 边界保持不变；见 [decisions/066-incremental-static-degradation.md](decisions/066-incremental-static-degradation.md)。
 
 In Progress:
 

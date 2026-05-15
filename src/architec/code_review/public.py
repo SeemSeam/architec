@@ -20,6 +20,7 @@ from architec.code_review.shadow_implementation import (
     shadow_implementation_scan,
 )
 from architec.events.public import append_review_event
+from architec.scoring.component_scoring_git import changed_files as git_changed_files
 from architec.support.io_utils import ProgressFn, clamp, write_json
 
 
@@ -1349,11 +1350,15 @@ def _is_since_range_error(exc: Exception) -> bool:
     return any(marker in text for marker in markers)
 
 
-def _static_full_report(reason: str = "") -> dict[str, Any]:
+def _static_artifacts(reason: str = "") -> dict[str, Any]:
     artifacts: dict[str, Any] = {"code_review_analysis_mode": "static"}
     reason_text = str(reason or "").strip()
     if reason_text:
         artifacts["code_review_static_reason"] = reason_text
+    return artifacts
+
+
+def _static_full_report(reason: str = "") -> dict[str, Any]:
     return {
         "scores": {},
         "summary": {},
@@ -1362,14 +1367,54 @@ def _static_full_report(reason: str = "") -> dict[str, Any]:
         "semantic_judge": {},
         "hotspots": [],
         "topology": {},
-        "artifacts": artifacts,
+        "artifacts": _static_artifacts(reason),
     }
 
 
-def _mark_static_full_result(result: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
+def _static_incremental_report(
+    project_root: str | Path,
+    *,
+    base: str = "",
+    head: str = "",
+    reason: str = "",
+) -> dict[str, Any]:
+    changed = git_changed_files(Path(project_root), base=base or None, head=head or None)
+    changed_files = [
+        str(item.get("path", "") or "").strip().lstrip("./")
+        for item in changed
+        if isinstance(item, dict) and str(item.get("path", "") or "").strip()
+    ]
+    return {
+        "scores": {},
+        "summary": {},
+        "cleanup": {},
+        "archive_candidates": {},
+        "semantic_judge": {},
+        "hotspots": [],
+        "topology": {},
+        "change_analysis": {
+            "changed_file_total": len(changed_files),
+            "changed_files": changed_files,
+            "components": [],
+        },
+        "artifacts": _static_artifacts(reason),
+    }
+
+
+def _mark_static_result(
+    result: dict[str, Any],
+    *,
+    reason: str = "",
+    review_type: str = "full",
+) -> dict[str, Any]:
     summary = _dict(result.get("summary"))
     result["summary"] = summary
-    summary["headline"] = "Full analysis was unavailable; static code-review signals were generated."
+    if review_type == "diff":
+        summary["headline"] = "Diff analysis was unavailable; static code-review signals were generated."
+    elif review_type == "since":
+        summary["headline"] = "Since analysis was unavailable; static code-review signals were generated."
+    else:
+        summary["headline"] = "Full analysis was unavailable; static code-review signals were generated."
     summary["analysis_mode"] = "static"
     reason_text = str(reason or "").strip()
     if reason_text:
@@ -1380,6 +1425,10 @@ def _mark_static_full_result(result: dict[str, Any], *, reason: str = "") -> dic
     if reason_text:
         artifacts["code_review_static_reason"] = reason_text
     return result
+
+
+def _mark_static_full_result(result: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
+    return _mark_static_result(result, reason=reason, review_type="full")
 
 
 def _changed_files_from_report(report: dict[str, Any]) -> list[str]:
@@ -1671,6 +1720,31 @@ def run_code_review_static_full(
     return _with_review_event(project_root, _finalize_payload(result))
 
 
+def run_code_review_static_diff(
+    project_root: str | Path,
+    *,
+    base: str = "",
+    head: str = "",
+    reason: str = "",
+    plan_review_path: str | Path | None = None,
+    risk_context_path: str | Path | None = None,
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
+    if progress is not None:
+        progress("code-review static [1/1] generating deterministic diff signals")
+    plan_review = load_plan_review(plan_review_path) if plan_review_path else None
+    risk_context = load_risk_context(risk_context_path) if risk_context_path else None
+    result = _result_from_report(
+        _static_incremental_report(project_root, base=base, head=head, reason=reason),
+        review_type="diff",
+        project_root=project_root,
+        plan_review=plan_review,
+        risk_context=risk_context,
+    )
+    result = _mark_static_result(result, reason=reason, review_type="diff")
+    return _with_review_event(project_root, _finalize_payload(result))
+
+
 def run_code_review_diff(
     project_root: str | Path,
     *,
@@ -1698,6 +1772,43 @@ def run_code_review_diff(
         risk_context=risk_context,
     )
     return _with_review_event(project_root, result)
+
+
+def run_code_review_static_since(
+    project_root: str | Path,
+    *,
+    ref: str,
+    reason: str = "",
+    plan_review_path: str | Path | None = None,
+    risk_context_path: str | Path | None = None,
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
+    since_ref = str(ref or "").strip()
+    if progress is not None:
+        progress("code-review static [1/1] generating deterministic since signals")
+    try:
+        report = _static_incremental_report(
+            project_root,
+            base=since_ref,
+            head="HEAD",
+            reason=reason,
+        )
+    except RuntimeError as exc:
+        if not _is_since_range_error(exc):
+            raise
+        return _empty_since_range_result(since_ref)
+    plan_review = load_plan_review(plan_review_path) if plan_review_path else None
+    risk_context = load_risk_context(risk_context_path) if risk_context_path else None
+    result = _result_from_report(
+        report,
+        review_type="since",
+        since_ref=since_ref,
+        project_root=project_root,
+        plan_review=plan_review,
+        risk_context=risk_context,
+    )
+    result = _mark_static_result(result, reason=reason, review_type="since")
+    return _with_review_event(project_root, _finalize_payload(result))
 
 
 def run_code_review_since(
@@ -1738,6 +1849,8 @@ def run_code_review_since(
 __all__ = [
     "run_code_review_diff",
     "run_code_review_full",
+    "run_code_review_static_diff",
     "run_code_review_static_full",
+    "run_code_review_static_since",
     "run_code_review_since",
 ]

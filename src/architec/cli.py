@@ -12,7 +12,9 @@ from .code_review.public import (
     run_code_review_diff,
     run_code_review_full,
     run_code_review_since,
+    run_code_review_static_diff,
     run_code_review_static_full,
+    run_code_review_static_since,
 )
 from .fix_advice.public import run_fix_advice
 from .integration.bundle_loader import inspect_bundle
@@ -550,6 +552,44 @@ def _static_full_code_review_result(args: argparse.Namespace, reason: str) -> di
     return run_code_review_static_full(args.path, **kwargs)
 
 
+def _static_incremental_code_review_result(args: argparse.Namespace, reason: str) -> dict[str, Any]:
+    since_ref = str(getattr(args, "since", "") or "").strip()
+    if since_ref:
+        emit_progress("archi code-review [3/3] running static since code review")
+        kwargs: dict[str, Any] = {
+            "ref": since_ref,
+            "reason": reason,
+            "progress": emit_progress,
+        }
+        plan_review_path = str(getattr(args, "plan_review", "") or "").strip()
+        if plan_review_path:
+            kwargs["plan_review_path"] = plan_review_path
+        risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
+        if risk_context_path:
+            kwargs["risk_context_path"] = risk_context_path
+        return run_code_review_static_since(args.path, **kwargs)
+    emit_progress("archi code-review [3/3] running static diff code review")
+    kwargs = {
+        "base": str(getattr(args, "base", "") or "").strip(),
+        "head": str(getattr(args, "head", "") or "").strip(),
+        "reason": reason,
+        "progress": emit_progress,
+    }
+    plan_review_path = str(getattr(args, "plan_review", "") or "").strip()
+    if plan_review_path:
+        kwargs["plan_review_path"] = plan_review_path
+    risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
+    if risk_context_path:
+        kwargs["risk_context_path"] = risk_context_path
+    return run_code_review_static_diff(args.path, **kwargs)
+
+
+def _static_code_review_result(args: argparse.Namespace, reason: str) -> dict[str, Any]:
+    if _is_full_code_review_args(args):
+        return _static_full_code_review_result(args, reason)
+    return _static_incremental_code_review_result(args, reason)
+
+
 def _availability_reason(prefix: str, exc: Exception) -> str:
     detail = str(exc).strip()
     for source, replacement in (
@@ -745,9 +785,9 @@ def main() -> int:
             try:
                 preflight_backend_llm(args.path, checks=checks)
             except ArchitectLLMUnavailableError as exc:
-                if not _is_full_code_review_args(args):
+                if bool(getattr(args, "check", False)):
                     raise
-                result = _static_full_code_review_result(
+                result = _static_code_review_result(
                     args,
                     _availability_reason("Backend LLM unavailable", exc),
                 )
@@ -761,9 +801,9 @@ def main() -> int:
             try:
                 result = _code_review_result(args)
             except ArchitectLLMUnavailableError as exc:
-                if not _is_full_code_review_args(args):
+                if bool(getattr(args, "check", False)):
                     raise
-                result = _static_full_code_review_result(
+                result = _static_code_review_result(
                     args,
                     _availability_reason("Backend LLM unavailable", exc),
                 )
@@ -809,9 +849,9 @@ def main() -> int:
         try:
             preflight_backend_llm(args.path, checks=checks)
         except ArchitectLLMUnavailableError as exc:
-            if not _is_full_code_review_args(args):
+            if bool(getattr(args, "check", False)):
                 raise
-            result = _static_full_code_review_result(
+            result = _static_code_review_result(
                 args,
                 _availability_reason("Backend LLM unavailable", exc),
             )
@@ -830,9 +870,9 @@ def main() -> int:
         try:
             result = _run_command(args, checks)
         except ArchitectLLMUnavailableError as exc:
-            if not _is_full_code_review_args(args):
+            if bool(getattr(args, "check", False)):
                 raise
-            result = _static_full_code_review_result(
+            result = _static_code_review_result(
                 args,
                 _availability_reason("Backend LLM unavailable", exc),
             )
