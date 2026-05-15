@@ -128,6 +128,7 @@ In Progress:
 
 Next:
 
+- 让 human-readable `.architec/architec-summary.md` Recommendations 与 `code-review` display calibration 对齐，避免小型成熟库中已降级的低压力 topology context 又以高优先级建议出现；见 [topics/final-suggestion-quality-dogfood-2026-05-15.md](topics/final-suggestion-quality-dogfood-2026-05-15.md)。
 - 基于 discovery lane v1 继续做 dogfood 校准：评估 recurrence、architecture contracts 或 saved plan-review 是否也应作为 discovery promotion reinforcement；见 [topics/advisory-recall-calibration.md](topics/advisory-recall-calibration.md)。
 - 评估 plan/diff consistency 后续是否需要更丰富的 explicit structured intent sources；不做 prose/LLM requirement inference。
 

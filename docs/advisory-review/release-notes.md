@@ -275,6 +275,13 @@ changed files from git, the CLI returns a marked static CodeReviewResult with
 deterministic selected-scope signals. Since bad-ref and bundle validation
 boundaries remain unchanged.
 
+Final suggestion-quality dogfood against `itsdangerous`, `humanize`, and
+`python-dotenv` confirmed that the JSON `CodeReviewResult.concerns[]` display is
+now conservative for small mature libraries: paired API variants stay in
+discovery, active changelog observations remain raw context, and hotspot
+pressure is the primary visible advice. The remaining polish item is to align
+human-readable summary recommendations with the same display calibration policy.
+
 A follow-up Hippocampus dogfood run after Decisions 041-047 confirmed that diff/since scope hygiene is working: unrelated global cleanup/hotspot/topology context remains in signals/artifacts but does not fill selected-diff top concerns. The same run led to Decisions 048, 050, and 051: grouping intentional near-duplicate variant families, splitting broad mapper roles in `shadow_implementation`, and improving `fix-advice` wording for legacy/compat duplication concerns.
 
 Decision 048 records the planned `near_duplicate` variant-family grouping v1. Exact normalized AST fingerprinting remains the base signal, but same-file phase/cache/prompt-builder families should be grouped into one advisory observation or display-limited so they do not flood top concerns. Cross-file duplicates and substantive non-family duplicates remain reportable.

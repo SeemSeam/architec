@@ -98,6 +98,7 @@
 | [topics/hippocampus-dogfood-audit-2026-05-14.md](topics/hippocampus-dogfood-audit-2026-05-14.md) | Hippocampus dogfood 审查记录和下一步产品信号 |
 | [topics/python-dotenv-dogfood-audit-2026-05-14.md](topics/python-dotenv-dogfood-audit-2026-05-14.md) | 小型成熟 Python 库 dogfood 审查记录和 full-review calibration 信号 |
 | [topics/multi-repo-dogfood-audit-2026-05-14.md](topics/multi-repo-dogfood-audit-2026-05-14.md) | 多个外部 Python 库 dogfood 审查记录和 scanner/CLI calibration 信号 |
+| [topics/final-suggestion-quality-dogfood-2026-05-15.md](topics/final-suggestion-quality-dogfood-2026-05-15.md) | 收尾阶段多仓建议质量验证和后续 polish 信号 |
 | [topics/advisory-recall-calibration.md](topics/advisory-recall-calibration.md) | 高精度 primary concerns 与较宽松 discovery lane 的后续校准方案 |
 | [topics/ai-signals.md](topics/ai-signals.md) | AI/vibe coding 特有坏味信号 |
 | [topics/external-signals.md](topics/external-signals.md) | 历史、测试、依赖、运行时信号取舍 |
