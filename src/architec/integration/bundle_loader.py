@@ -84,8 +84,13 @@ def _parse_iso_datetime(raw: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _current_architecture_source_mtimes(project_root: Path) -> dict[str, int]:
+def _current_architecture_source_mtimes(
+    project_root: Path,
+    *,
+    manifest_source_paths: set[str] | None = None,
+) -> dict[str, int]:
     rules = load_architecture_rules(project_root, tool_name="hippo")
+    manifest_source_paths = manifest_source_paths or set()
     out: dict[str, int] = {}
     for path in project_root.rglob("*"):
         if not path.is_file():
@@ -95,7 +100,7 @@ def _current_architecture_source_mtimes(project_root: Path) -> dict[str, int]:
             continue
         if path_is_ignored(rel, rules):
             continue
-        if path_kind(rel, probe_root=project_root) != "source":
+        if path_kind(rel, probe_root=project_root) != "source" and rel not in manifest_source_paths:
             continue
         try:
             out[rel] = int(path.stat().st_mtime_ns)
@@ -106,7 +111,10 @@ def _current_architecture_source_mtimes(project_root: Path) -> dict[str, int]:
 
 def _source_tree_stale_reasons(project_root: Path, *, reference_generated_at: str) -> list[str]:
     manifest_present, manifest_paths = _manifest_architecture_paths(project_root)
-    current_mtimes = _current_architecture_source_mtimes(project_root)
+    current_mtimes = _current_architecture_source_mtimes(
+        project_root,
+        manifest_source_paths=manifest_paths,
+    )
     current_paths = set(current_mtimes)
     reasons: list[str] = []
     if manifest_present and manifest_paths != current_paths:

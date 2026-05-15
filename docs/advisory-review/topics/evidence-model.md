@@ -63,7 +63,13 @@
 
 `near_duplicate` variant-family grouping v1 不要求新的 ReviewConcern schema。若同一文件内 phase/cache/prompt-builder exact duplicates 被分组或展示限流，已输出的 concern 仍使用 `kind: "duplication"`、`location.symbol_kind: "function"` 和 `references[].role: "reference"`。可选 family evidence 或 signal metrics 只能解释 grouping/display behavior，不能引入 gate、verdict 或 fix-advice schema 语义。
 
-`shadow_implementation` 不为清晰的 renderer versus assembler/support/budget/context split-role pairs 输出 concern。该 role taxonomy filtering 发生在 concern 构建之前；已输出的 `shadow-implementation` concern 仍使用同一 schema、`references[].role: "existing_implementation"`、函数/类 `location.symbol_kind` 和事实型 `concern_id`。parser-helper pairs 和 same-role candidates 仍可报告；file/module-level shadow public signal 仍 deferred。
+Mature-library calibration v1 不要求新的 ReviewConcern schema。Benchmark path exclusion 和同文件 explicit paired API variant suppression 都发生在 concern 构建之前；已输出的 `near_duplicate` concern 仍使用既有 `kind: "duplication"`、`location.symbol_kind: "function"`、`references[].role: "reference"` 和事实型 `concern_id`。
+
+Member variant-family grouping v1 不要求新的 ReviewConcern schema。同文件 class/member API families 使用既有 `duplication` concern，并通过 `near_duplicate.variant_family` 与 `near_duplicate.variant_member_total` facts 说明 grouping；prefixed paired API variants 进入 discovery lane，不计入 `summary.concern_total`。
+
+duplication `fix-advice` 会读取 duplicate/reference location 和 evidence 中的明确 legacy/compat/shim/migration/deprecation tokens，用于增加 compatibility-intent advisory option。该行为不改变 `duplication` concern schema，不改变 `references[].role: "reference"`，也不让 duplication 消费 `existing_implementation` references。
+
+`shadow_implementation` 不为清晰的 renderer versus assembler/support/budget/context split-role pairs 输出 concern。Mapper taxonomy 还会抑制清晰的 visualization color/palette/style/tier/role mapper versus rename/move/old/new/diff migration mapper pairs。Parser taxonomy 还会抑制清晰的 runtime/platform parser、local-version parser 与 version-grammar parser 跨域 pairs。该 role taxonomy filtering 发生在 concern 构建之前；已输出的 `shadow-implementation` concern 仍使用同一 schema、`references[].role: "existing_implementation"`、函数/类 `location.symbol_kind` 和事实型 `concern_id`。parser-helper pairs、same-domain mapper/parser pairs 和 same-role candidates 仍可报告；file/module-level shadow public signal 仍 deferred。
 
 在 diff/since scoped review 中，`shadow-implementation` 和 `near_duplicate` 的 `location.path` 必须位于 changed files；`references[]` 可以指向未变更文件。对应 signal metrics 使用 `scoped_to_changed_files`、`changed_file_total` 和 `candidate_total_before_scope` 标识它不是全仓总量。`near_duplicate` 的 scope 条件只看 primary `location.path`，不因为 reference path changed 而报告历史旧账。
 
@@ -71,9 +77,13 @@
 
 `fix-advice` 会为 `architecture-contract` concern 消费这些 factual evidence，并把 `next_steps_hint` 作为可选 review context。它不把 rule note 当作 evidence，也不判断 contract 或 changed import 哪一方正确。
 
-`plan-diff-consistency` concern 的 `location` 指向计划外 changed file、计划中未触达的路径、缺失计划 import expectation 的相关 changed file/source scope、缺失 dependency alternative group 的 source scope、缺失 expected-test touchpoint 的计划 source/test scope，或缺失 public API migration touchpoint 的计划 path。`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path、`planned_import` facts、dependency alternative facts、expected-test facts 或 public API migration facts。Dependency alternatives、expected-test observations 和 public API migration observations 都只使用显式 structured plan-review entries；任意 prose/string dependency、test 或 migration note 不生成 requirement。它只表达 saved plan-review JSON 与 selected diff 的不一致，不表达 correctness、test adequacy、API correctness 或 merge readiness。
+`plan-diff-consistency` concern 的 `location` 指向计划外 changed file、计划中未触达的路径、缺失计划 import expectation 的相关 changed file/source scope、缺失 dependency alternative group 的 source scope、缺失 expected-test touchpoint 的计划 source/test scope、缺失 public API migration touchpoint 的计划 path，或 semantic intent check 的 source/path scope。`evidence` 至少包含 `plan_diff_consistency.observation` 和对应的 changed/planned path、`planned_import` facts、dependency alternative facts、expected-test facts、public API migration facts 或 semantic intent term facts。Dependency alternatives、expected-test observations、public API migration observations 和 semantic intent observations 都只使用显式 structured plan-review entries；任意 prose/string dependency、test、migration 或 intent note 不生成 requirement。Semantic intent v1 使用 deterministic text-term matching；它不读取 `understood_plan.intent` 或 `changes[].intent` 自然语言来推断需求。它只表达 saved plan-review JSON 与 selected diff 的不一致，不表达 correctness、test adequacy、API correctness、requirement satisfaction 或 merge readiness。
 
 `risk_context` facts 是外部报告提供的 companion evidence。它们可以附加到既有 concern 的 `evidence[]`，例如 `risk_context.coverage=0.42`、`risk_context.churn=13`、`risk_context.related_test_total=0`、`risk_context.complexity=18`、`risk_context.public_api=true` 或 `risk_context.recurrence=3`。这些 facts 不参与 `concern_id` 生成，不改变 concern ranking，也不表示行为正确性。Risk context 不创建新 concern；未匹配到既有 concern 的外部文件事实只进入 input counts。
+
+Risk context external report formats v1 不新增 schema。`--risk-context` 仍读取单个 JSON object，并把 coverage.py-style `files[*].summary.percent_covered`、radon-like complexity maps 和 simple churn aliases 保守归一化为上述既有 facts。`coverage_by_file`、`complexity_by_file`、`churn_by_file` 等 first-class 字段优先于 derived report values。Unsupported report shapes 被忽略，不生成 concern、score、ranking 变化、`concern_id` 输入或 `fix-advice` 字段。
+
+Advisory discovery lane 不是 ReviewConcern schema。按 [Decision 055](../decisions/055-advisory-recall-discovery-lane.md) 和 [Decision 056](../decisions/056-advisory-discovery-lane-v1.md)，lower-confidence candidates 可以进入 artifacts 或 labelled signal metrics，但只有被提升为 primary concern 后才进入 `concerns[]`、派生 `evidence[]`、`summary.concern_total` 和 `fix-advice` 输入。Discovery candidates 不应复用 gate、verdict、pass、fail、block、must-fix、patch 或 apply 语义。
 
 最低验收：
 
@@ -129,16 +139,29 @@
 - `signal_kinds`：本次输出中出现的 signal kind 列表。
 - `payload_bytes`：不含 `artifacts` 的主 JSON compact encoding 估算字节数，用于观察输出体量。
 
+When full code-review degrades to deterministic static review, `summary` also
+uses `analysis_mode: "static"` and `reason` to identify that Hippo/LLM-backed
+full analysis was unavailable. Matching `artifacts.code_review_analysis_mode`
+and `artifacts.code_review_static_reason` fields carry the same context for
+consumers that inspect artifacts.
+
 `concerns[]` 是默认展示 portfolio，不是完整 concern truth。排序先保留 severity level 优先级，再在同一 level 内尽量展示不同 kind；需要完整集合的消费者应结合 artifacts 或扩展输出，而不是只读取 top-N。
 
 For `review_type: "full"`, the displayed `concerns[]` portfolio applies context
 calibration before ranking. Active changelog/release-note stale-doc observations
 are suppressed or demoted from top-level concerns; cleanup and archive
 observations for the same path do not both occupy displayed concern slots;
+semantic judge `keep_active` decisions demote matching stale-doc cleanup/archive
+observations from display;
+semantic judge `review` decisions add `semantic_judge.decision=review` evidence
+and a modest display confidence floor to matching cleanup/archive observations;
+semantic judge `archive_first` and `retire_now` decisions add matching
+`semantic_judge.decision=...` evidence and a stronger display confidence floor
+to cleanup/archive observations;
 low-pressure topology observations stay signal context when
 `needs_folder_management=false` and flat file count is small. This is display
 calibration only: raw signals and generated artifacts remain available, and no
-schema-breaking change or gate semantics are introduced.
+schema-breaking, artifact-contract, or gate semantics are introduced.
 
 For `review_type: "diff"` and `review_type: "since"`, the displayed
 `concerns[]` portfolio should be selected-scope first. A selected-scope concern
@@ -148,6 +171,12 @@ outside that range may remain available as labelled context, `signals[]`, or
 artifacts, but should not be indistinguishable from selected-scope top concerns.
 The complete generated concern artifact remains the place for all generated
 observations.
+
+Incremental cleanup/archive display de-dupe follows [Decision
+065](../decisions/065-incremental-cleanup-archive-display-dedupe.md). It does
+not change generated concerns, `summary.concern_total`, or
+`summary.scoped_concern_total`; it only changes which selected-scope
+cleanup/archive observation is displayed before portfolio ranking.
 
 Incremental summaries expose scope hygiene counts:
 
@@ -168,9 +197,11 @@ Incremental summaries expose scope hygiene counts:
 }
 ```
 
-`risk_context` signal 的 `metrics` 使用 input counts 和 `by_factor` counts 表示外部事实覆盖面和实际 enrichment。字段可包含 `input_file_total`、`coverage_file_total`、`churn_file_total`、`test_map_file_total`、`changed_test_total`、`complexity_file_total`、`public_api_file_total`、`recurrence_file_total`、`enriched_concern_total` 和 `by_factor`。`by_factor` 可包含 `low_coverage`、`high_churn`、`missing_related_tests`、`high_complexity`、`public_api` 和 `recurring_history`。这些 metrics 只解释 risk facts 的附加情况，不是健康分。
+`risk_context` signal 的 `metrics` 使用 input counts 和 `by_factor` counts 表示外部事实覆盖面和实际 enrichment。字段可包含 `input_file_total`、`coverage_file_total`、`churn_file_total`、`test_map_file_total`、`changed_test_total`、`complexity_file_total`、`public_api_file_total`、`recurrence_file_total`、`enriched_concern_total` 和 `by_factor`。Derived report shapes 归一化后复用这些现有 counts，不新增 per-format metric contract。`by_factor` 可包含 `low_coverage`、`high_churn`、`missing_related_tests`、`high_complexity`、`public_api` 和 `recurring_history`。这些 metrics 只解释 risk facts 的附加情况，不是健康分。
 
-`plan_diff_consistency` signal 的 `metrics` 可包含 `planned_path_total`、`planned_import_total`、`planned_import_alternative_total`、`observed_planned_import_total`、`missing_planned_import_total`、`expected_test_total`、`observed_expected_test_total`、`missing_expected_test_total`、`public_api_migration_total`、`observed_public_api_migration_total`、`missing_public_api_migration_total`、`changed_file_total`、`concern_total` 和 `concern_total_before_limit`。这些 metrics 解释 saved plan-review JSON 与 selected diff/since range 的对齐观察，不是测试充分性评分、dependency allow-list coverage 或 public API migration correctness score。
+`plan_diff_consistency` signal 的 `metrics` 可包含 `planned_path_total`、`planned_import_total`、`planned_import_alternative_total`、`observed_planned_import_total`、`missing_planned_import_total`、`expected_test_total`、`observed_expected_test_total`、`missing_expected_test_total`、`public_api_migration_total`、`observed_public_api_migration_total`、`missing_public_api_migration_total`、`semantic_intent_total`、`observed_semantic_intent_total`、`missing_semantic_intent_total`、`conflicting_semantic_intent_total`、`changed_file_total`、`concern_total` 和 `concern_total_before_limit`。这些 metrics 解释 saved plan-review JSON 与 selected diff/since range 的对齐观察，不是测试充分性评分、dependency allow-list coverage、public API migration correctness score 或 semantic requirement coverage。
+
+`advisory_discovery` signal 的 `metrics` 可包含 `candidate_total`、`reported_total`、`by_source` 和 `by_reason`。这些 metrics 只说明 discovery lane 中有多少未提升候选，不代表 primary concern 数量，也不是 ranking、score 或 fix-advice 输入。
 
 `evidence[]` 统一结构：
 
@@ -190,6 +221,8 @@ Incremental summaries expose scope hygiene counts:
 为控制主 JSON 体量，展示层会限制每条 concern 的 `evidence`、`references` 和 `blast_radius` 条数，并限制过长的一层 signal metric map。发生截断时，`artifacts.payload_truncation` 记录原始条数和保留条数。该截断不改变 `concern_id`，也不改变 `summary.concern_total`。
 
 成功 code-review 会把 payload guard 前的完整 generated concerns 写到 `.architec/code-review-concerns.json`，top-level `artifacts.code_review_concerns_json` 记录路径。写入失败对 `OSError` fail-open，并记录 `artifacts.code_review_concerns_error`。
+
+Discovery artifact 与 generated concerns artifact 分离：v1 使用 `.architec/code-review-discovery.json` 和 `artifacts.code_review_discovery_json`，避免消费者把 discovery candidates 当作已经提升的 `ReviewConcern`。
 
 ## FixAdviceResult
 

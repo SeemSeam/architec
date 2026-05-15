@@ -1,8 +1,22 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+
+LEGACY_COMPAT_TOKENS = {
+    "backcompat",
+    "compat",
+    "compatibility",
+    "deprecated",
+    "deprecation",
+    "legacy",
+    "migrate",
+    "migration",
+    "shim",
+}
 
 
 class FixAdviceInputError(RuntimeError):
@@ -166,6 +180,29 @@ def _format_location(location: dict[str, Any]) -> str:
     return rendered
 
 
+def _tokens(text: str) -> set[str]:
+    return {
+        token.lower()
+        for token in re.split(r"[^A-Za-z0-9]+", text)
+        if token
+    }
+
+
+def _has_legacy_compat_intent(concern: dict[str, Any], reference: dict[str, Any], evidence: list[str]) -> bool:
+    location = _dict(concern.get("location"))
+    fields = [
+        str(location.get("path", "") or ""),
+        str(location.get("symbol", "") or ""),
+        str(reference.get("path", "") or ""),
+        str(reference.get("symbol", "") or ""),
+        *evidence,
+    ]
+    tokens: set[str] = set()
+    for field in fields:
+        tokens.update(_tokens(field))
+    return bool(tokens & LEGACY_COMPAT_TOKENS)
+
+
 def _duplication_suggestion(
     concern: dict[str, Any],
     *,
@@ -189,14 +226,19 @@ def _duplication_suggestion(
         }
 
     reference_text = _format_location(reference)
+    options = [
+        f"Compare duplicate {duplicate} with reference {reference_text}.",
+        f"Consider routing the duplicate through the reference implementation at {reference_text} if behavior is intentionally shared.",
+        "If the two implementations should diverge, document the difference near the duplicate or in its caller-facing contract.",
+    ]
+    if _has_legacy_compat_intent(concern, reference, evidence):
+        options.append(
+            "If the duplicate is a legacy or compatibility path, document that intent and keep the compatibility wrapper separate from the canonical implementation."
+        )
     return {
         "target": path,
         "concern": concern_id,
-        "options": [
-            f"Compare duplicate {duplicate} with reference {reference_text}.",
-            f"Consider routing the duplicate through the reference implementation at {reference_text} if behavior is intentionally shared.",
-            "If the two implementations should diverge, document the difference near the duplicate or in its caller-facing contract.",
-        ],
+        "options": options,
         "tradeoffs": [
             "Reusing the reference can reduce drift but may couple callers to one implementation boundary.",
             "Keeping both implementations can preserve local clarity when their behavior is expected to diverge.",

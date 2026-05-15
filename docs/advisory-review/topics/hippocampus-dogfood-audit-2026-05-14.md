@@ -113,6 +113,10 @@ Weak observations that should drive Architec roadmap refinement:
   looks like a role-taxonomy miss. Both are "mapper" functions, but one maps
   module roles/tiers to visualization colors while the other maps old module
   ids to new module ids. The current mapper role is too broad for this case.
+  This is now captured by [decision 050](../decisions/050-shadow-mapper-taxonomy.md):
+  visualization color/palette/style/tier/role mappers should be distinguished
+  from rename/move/old/new/diff migration mappers while same-domain mapper pairs
+  remain eligible.
 - `near_duplicate`: phase-specific prompt builders and cache helpers
   (`build_phase_*_messages`, `save_phase*_cache`, `load_phase*_cache`) produce
   many exact normalized AST matches. These are often intentional variant
@@ -124,16 +128,19 @@ Weak observations that should drive Architec roadmap refinement:
   reportable.
 - `duplication`: `legacy_project_prompts_dir` versus `project_prompts_dir`
   highlights a compatibility-path variant. The advice should recognize legacy
-  or compatibility intent instead of only suggesting direct reuse.
+  or compatibility intent instead of only suggesting direct reuse. This is now
+  captured by [decision 051](../decisions/051-duplication-fix-advice-compat-intent.md):
+  duplication fix-advice treats explicit legacy/compat evidence as a first-class
+  option to document compatibility intent.
 
 Follow-up plan adjustments:
 
 1. Implement the [decision 048](../decisions/048-near-duplicate-variant-family-grouping.md)
    near-duplicate variant-family grouping/display-limit behavior for same-file
    phase/cache/prompt-builder families.
-2. Refine `shadow_implementation` taxonomy beyond coarse role tokens. Mapper
-   pairs need domain/output-shape separation so color mapping and rename mapping
-   do not look like the same implementation role.
-3. Improve `fix-advice` wording for duplication concerns with legacy/compat
-   tokens, so advice offers "document compatibility intent" as a first-class
-   option rather than implying reuse is the main path.
+2. Re-run dogfood after the [decision 050](../decisions/050-shadow-mapper-taxonomy.md)
+   mapper taxonomy split lands, confirming color/palette/style/tier/role mapping
+   and rename/move/old/new/diff migration mapping no longer look like the same
+   implementation role.
+3. The duplication compatibility wording follow-up is covered by
+   [decision 051](../decisions/051-duplication-fix-advice-compat-intent.md).

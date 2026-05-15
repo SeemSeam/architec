@@ -250,6 +250,112 @@ def _try_parse_json(payload, strict=False):
     )
 
 
+def _write_parser_subdomain_split(tmp_path) -> None:
+    source = tmp_path / "src" / "versions"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "glibc_parser.py").write_text(
+        """
+def parse_glibc_version(text, strict=False):
+    normalized = text.strip().replace("-", ".")
+    parts = []
+    for item in normalized.split("."):
+        if item == "":
+            continue
+        try:
+            parts.append(int(item))
+        except ValueError:
+            if strict:
+                raise
+            parts.append(0)
+    if len(parts) == 0:
+        if strict:
+            raise ValueError("empty")
+        return ()
+    if len(parts) == 1:
+        parts.append(0)
+    return tuple(parts)
+""",
+        encoding="utf-8",
+    )
+    (source / "local_parser.py").write_text(
+        """
+def parse_local_version(text, strict=False):
+    normalized = text.replace("_", ".").strip()
+    parts = []
+    for item in normalized.split("."):
+        if item == "":
+            continue
+        try:
+            parts.append(int(item))
+        except ValueError:
+            if strict:
+                raise
+            parts.append(0)
+    if len(parts) == 0:
+        if strict:
+            raise ValueError("empty")
+        return ()
+    if len(parts) == 1:
+        parts.append(0)
+    return tuple(parts)
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_same_domain_local_parsers(tmp_path) -> None:
+    source = tmp_path / "src" / "versions"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "local_version.py").write_text(
+        """
+def parse_local_version(text, strict=False):
+    normalized = text.replace("_", ".").strip()
+    parts = []
+    for item in normalized.split("."):
+        if item == "":
+            continue
+        try:
+            parts.append(int(item))
+        except ValueError:
+            if strict:
+                raise
+            parts.append(0)
+    if len(parts) == 0:
+        if strict:
+            raise ValueError("empty")
+        return ()
+    if len(parts) == 1:
+        parts.append(0)
+    return tuple(parts)
+""",
+        encoding="utf-8",
+    )
+    (source / "local_tag.py").write_text(
+        """
+def parse_local_tag(text, strict=False):
+    normalized = text.strip().replace("_", ".")
+    parts = []
+    for item in normalized.split("."):
+        if item == "":
+            continue
+        try:
+            parts.append(int(item))
+        except ValueError:
+            if strict:
+                raise
+            parts.append(0)
+    if len(parts) == 0:
+        if strict:
+            raise ValueError("empty")
+        return ()
+    if len(parts) == 1:
+        parts.append(0)
+    return tuple(parts)
+""",
+        encoding="utf-8",
+    )
+
+
 def _write_same_role_renderers(tmp_path) -> None:
     source = tmp_path / "src" / "maps"
     source.mkdir(parents=True, exist_ok=True)
@@ -292,6 +398,119 @@ def render_module_map(items, settings, budget):
     if settings.get("footer") is True:
         output.append("rendered")
     return "\\n\\n".join(output)
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_color_rename_mappers(tmp_path) -> None:
+    source = tmp_path / "src" / "maps"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "visual_map.py").write_text(
+        """
+def _module_color_map(modules, palette, tiers):
+    mapped = {}
+    for module in modules:
+        tier = tiers.get(module, "default")
+        if tier in palette:
+            mapped[module] = palette[tier]
+        else:
+            mapped[module] = palette.get("default", "gray")
+        if module.startswith("test"):
+            mapped[module] = palette.get("test", mapped[module])
+    return mapped
+""",
+        encoding="utf-8",
+    )
+    (source / "rename_map.py").write_text(
+        """
+def module_rename_map(modules, rename_rules, moves):
+    mapped = {}
+    for module in modules:
+        target = moves.get(module, module)
+        if module in rename_rules:
+            mapped[module] = rename_rules[module]
+        else:
+            mapped[module] = target
+        if module.startswith("legacy"):
+            mapped[module] = f"new.{mapped[module]}"
+    return mapped
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_color_mapper_pair(tmp_path) -> None:
+    source = tmp_path / "src" / "maps"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "module_colors.py").write_text(
+        """
+def _module_color_map(modules, palette, tiers):
+    mapped = {}
+    for module in modules:
+        tier = tiers.get(module, "default")
+        if tier in palette:
+            mapped[module] = palette[tier]
+        else:
+            mapped[module] = palette.get("default", "gray")
+        if module.startswith("test"):
+            mapped[module] = palette.get("test", mapped[module])
+    return mapped
+""",
+        encoding="utf-8",
+    )
+    (source / "component_colors.py").write_text(
+        """
+def _component_color_map(components, palette, roles):
+    mapped = {}
+    for component in components:
+        role = roles.get(component, "default")
+        if role not in palette:
+            mapped[component] = palette.get("default", "gray")
+        else:
+            mapped[component] = palette[role]
+        if component.startswith("internal"):
+            mapped[component] = palette.get("internal", mapped[component])
+    return mapped
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_rename_mapper_pair(tmp_path) -> None:
+    source = tmp_path / "src" / "maps"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "module_renames.py").write_text(
+        """
+def module_rename_map(modules, rename_rules, moves):
+    mapped = {}
+    for module in modules:
+        target = moves.get(module, module)
+        if module in rename_rules:
+            mapped[module] = rename_rules[module]
+        else:
+            mapped[module] = target
+        if module.startswith("legacy"):
+            mapped[module] = f"new.{mapped[module]}"
+    return mapped
+""",
+        encoding="utf-8",
+    )
+    (source / "package_renames.py").write_text(
+        """
+def package_rename_map(packages, rename_rules, moves):
+    mapped = {}
+    for package in packages:
+        target = moves.get(package, package)
+        if package in rename_rules and target != package:
+            mapped[package] = rename_rules[package]
+        elif package in rename_rules:
+            mapped[package] = rename_rules[package]
+        else:
+            mapped[package] = target
+        if package.startswith("deprecated"):
+            mapped[package] = f"new.{mapped[package]}"
+    return mapped
 """,
         encoding="utf-8",
     )
@@ -517,8 +736,54 @@ def test_shadow_implementation_keeps_parser_helper_pair(tmp_path) -> None:
     assert "shadow_implementation.role=parser" in concern["evidence"]
 
 
+def test_shadow_implementation_suppresses_runtime_local_parser_subdomain_split(tmp_path) -> None:
+    _write_parser_subdomain_split(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns == []
+
+
+def test_shadow_implementation_keeps_same_domain_local_parser_pair(tmp_path) -> None:
+    _write_same_domain_local_parsers(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns
+    assert concerns[0]["kind"] == "shadow-implementation"
+    assert "shadow_implementation.role=parser" in concerns[0]["evidence"]
+
+
 def test_shadow_implementation_keeps_same_role_renderer_pair(tmp_path) -> None:
     _write_same_role_renderers(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns
+    assert concerns[0]["kind"] == "shadow-implementation"
+    assert "shadow_implementation.role=mapper" in concerns[0]["evidence"]
+
+
+def test_shadow_implementation_suppresses_color_mapper_rename_mapper_split(tmp_path) -> None:
+    _write_color_rename_mappers(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns == []
+
+
+def test_shadow_implementation_keeps_same_domain_color_mapper_pair(tmp_path) -> None:
+    _write_color_mapper_pair(tmp_path)
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns
+    assert concerns[0]["kind"] == "shadow-implementation"
+    assert "shadow_implementation.role=mapper" in concerns[0]["evidence"]
+
+
+def test_shadow_implementation_keeps_same_domain_rename_mapper_pair(tmp_path) -> None:
+    _write_rename_mapper_pair(tmp_path)
 
     concerns = shadow_implementation_concerns(tmp_path)
 
@@ -533,6 +798,28 @@ def test_shadow_implementation_scoped_suppresses_changed_renderer_assembler_spli
     concerns = shadow_implementation_concerns(
         tmp_path,
         changed_files=["src/maps/assembler.py"],
+    )
+
+    assert concerns == []
+
+
+def test_shadow_implementation_scoped_suppresses_changed_color_rename_mapper_split(tmp_path) -> None:
+    _write_color_rename_mappers(tmp_path)
+
+    concerns = shadow_implementation_concerns(
+        tmp_path,
+        changed_files=["src/maps/rename_map.py"],
+    )
+
+    assert concerns == []
+
+
+def test_shadow_implementation_scoped_suppresses_changed_parser_subdomain_split(tmp_path) -> None:
+    _write_parser_subdomain_split(tmp_path)
+
+    concerns = shadow_implementation_concerns(
+        tmp_path,
+        changed_files=["src/versions/local_parser.py"],
     )
 
     assert concerns == []
@@ -596,6 +883,40 @@ def test_shadow_implementation_file_dry_run_ignores_small_modules(tmp_path) -> N
 def test_shadow_implementation_file_dry_run_ignores_ccb_state_modules(tmp_path) -> None:
     source = tmp_path / ".ccb" / "agents" / "agent1" / "provider-state"
     source.mkdir(parents=True)
+    (source / "policy_existing.py").write_text(_module_text(), encoding="utf-8")
+    (source / "policy_candidate.py").write_text(_module_text(), encoding="utf-8")
+
+    result = shadow_implementation_file_dry_run(tmp_path)
+
+    assert result["candidate_total"] == 0
+    assert result["pair_total"] == 0
+    assert result["reported_total"] == 0
+    assert result["candidates"] == []
+
+
+def test_shadow_implementation_concerns_ignore_benchmark_dirs_but_keep_src_candidates(tmp_path) -> None:
+    _write_shadow_policy_project_with_paths(
+        tmp_path,
+        existing_path="benchmarks/base_policy.py",
+        candidate_path="benchmarks/generated_policy.py",
+    )
+    _write_shadow_policy_project_with_paths(
+        tmp_path,
+        existing_path="src/policy/base_policy.py",
+        candidate_path="src/policy/generated_policy.py",
+    )
+
+    concerns = shadow_implementation_concerns(tmp_path)
+
+    assert concerns
+    assert all("benchmarks/" not in concern["location"]["path"] for concern in concerns)
+    assert all("benchmarks/" not in concern["references"][0]["path"] for concern in concerns)
+    assert concerns[0]["location"]["path"].startswith("src/policy/")
+
+
+def test_shadow_implementation_file_dry_run_ignores_benchmark_dirs(tmp_path) -> None:
+    source = tmp_path / "benchmarks"
+    source.mkdir()
     (source / "policy_existing.py").write_text(_module_text(), encoding="utf-8")
     (source / "policy_candidate.py").write_text(_module_text(), encoding="utf-8")
 

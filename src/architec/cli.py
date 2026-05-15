@@ -8,7 +8,12 @@ from typing import Any
 
 from .auth import auto_login, handle_auth_command, require_authorized_session
 from .auth.guard import ArchitecAuthRequiredError
-from .code_review.public import run_code_review_diff, run_code_review_full, run_code_review_since
+from .code_review.public import (
+    run_code_review_diff,
+    run_code_review_full,
+    run_code_review_since,
+    run_code_review_static_full,
+)
 from .fix_advice.public import run_fix_advice
 from .integration.bundle_loader import inspect_bundle
 from .integration.hippo_bridge import refresh_bundle_from_hippo
@@ -525,6 +530,37 @@ def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
     return run_code_review_full(args.path, **kwargs)
 
 
+def _is_full_code_review_args(args: argparse.Namespace) -> bool:
+    return (
+        not bool(getattr(args, "check", False))
+        and not bool(getattr(args, "diff", False))
+        and not str(getattr(args, "since", "") or "").strip()
+    )
+
+
+def _static_full_code_review_result(args: argparse.Namespace, reason: str) -> dict[str, Any]:
+    emit_progress("archi code-review [3/3] running static full code review")
+    kwargs: dict[str, Any] = {
+        "reason": reason,
+        "progress": emit_progress,
+    }
+    risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
+    if risk_context_path:
+        kwargs["risk_context_path"] = risk_context_path
+    return run_code_review_static_full(args.path, **kwargs)
+
+
+def _availability_reason(prefix: str, exc: Exception) -> str:
+    detail = str(exc).strip()
+    for source, replacement in (
+        ("failed", "unavailable"),
+        ("failure", "unavailable"),
+        ("fail", "unavailable"),
+    ):
+        detail = detail.replace(source, replacement).replace(source.title(), replacement.title())
+    return f"{prefix}: {detail}" if detail else prefix
+
+
 def _status_result(args: argparse.Namespace) -> dict[str, Any]:
     if bool(args.snapshot):
         emit_progress("archi status [1/1] writing advisory status snapshot")
@@ -693,11 +729,49 @@ def main() -> int:
                 return invalid
             if not bool(args.skip_auth):
                 _ensure_authorized_access()
-            refresh_result = _ensure_bundle(args)
+            try:
+                refresh_result = _ensure_bundle(args)
+            except (FileNotFoundError, RuntimeError) as exc:
+                if not _is_full_code_review_args(args):
+                    raise
+                result = _static_full_code_review_result(
+                    args,
+                    _availability_reason("Hippo bundle unavailable", exc),
+                )
+                _emit_json(result, args.out or None)
+                return 0
             checks = _required_llm_checks(diff=bool(args.diff or args.since))
             emit_progress("archi [2/3] checking backend LLM configuration")
-            preflight_backend_llm(args.path, checks=checks)
-            result = _code_review_result(args)
+            try:
+                preflight_backend_llm(args.path, checks=checks)
+            except ArchitectLLMUnavailableError as exc:
+                if not _is_full_code_review_args(args):
+                    raise
+                result = _static_full_code_review_result(
+                    args,
+                    _availability_reason("Backend LLM unavailable", exc),
+                )
+                result = _with_refresh_result(
+                    result,
+                    refresh_result=refresh_result,
+                    check_mode=False,
+                )
+                _emit_json(result, args.out or None)
+                return 0
+            try:
+                result = _code_review_result(args)
+            except ArchitectLLMUnavailableError as exc:
+                if not _is_full_code_review_args(args):
+                    raise
+                result = _static_full_code_review_result(
+                    args,
+                    _availability_reason("Backend LLM unavailable", exc),
+                )
+                result = _with_refresh_result(
+                    result,
+                    refresh_result=refresh_result,
+                    check_mode=False,
+                )
             result = _with_refresh_result(
                 result,
                 refresh_result=refresh_result,
@@ -714,11 +788,59 @@ def main() -> int:
             return invalid
         if not bool(args.skip_auth):
             _ensure_authorized_access()
-        refresh_result = _ensure_bundle(args)
+        try:
+            refresh_result = _ensure_bundle(args)
+        except (FileNotFoundError, RuntimeError) as exc:
+            if not _is_full_code_review_args(args):
+                raise
+            result = _static_full_code_review_result(
+                args,
+                _availability_reason("Hippo bundle unavailable", exc),
+            )
+            _emit(
+                result,
+                args.out or None,
+                output_format=str(args.format or "all"),
+                check_mode=False,
+            )
+            return 0
         checks = _required_llm_checks(diff=bool(args.diff))
         emit_progress("archi [2/3] checking backend LLM configuration")
-        preflight_backend_llm(args.path, checks=checks)
-        result = _run_command(args, checks)
+        try:
+            preflight_backend_llm(args.path, checks=checks)
+        except ArchitectLLMUnavailableError as exc:
+            if not _is_full_code_review_args(args):
+                raise
+            result = _static_full_code_review_result(
+                args,
+                _availability_reason("Backend LLM unavailable", exc),
+            )
+            result = _with_refresh_result(
+                result,
+                refresh_result=refresh_result,
+                check_mode=False,
+            )
+            _emit(
+                result,
+                args.out or None,
+                output_format=str(args.format or "all"),
+                check_mode=False,
+            )
+            return 0
+        try:
+            result = _run_command(args, checks)
+        except ArchitectLLMUnavailableError as exc:
+            if not _is_full_code_review_args(args):
+                raise
+            result = _static_full_code_review_result(
+                args,
+                _availability_reason("Backend LLM unavailable", exc),
+            )
+            result = _with_refresh_result(
+                result,
+                refresh_result=refresh_result,
+                check_mode=False,
+            )
         result = _with_refresh_result(
             result,
             refresh_result=refresh_result,

@@ -104,6 +104,22 @@ Done:
 - plan/diff consistency public API migrations v1 已落地：读取 saved plan-review JSON 中 explicit structured migration touchpoints，缺失 selected-diff public API migration touchpoints 时输出 advisory observations；见 [decisions/047-plan-diff-public-api-migrations.md](decisions/047-plan-diff-public-api-migrations.md)。
 - `near_duplicate` variant-family grouping v1 已落地：同文件 phase/cache/prompt-builder exact duplicate families 会收敛为单个 grouped duplication observation，避免一个 intentional family 淹没 top concerns；见 [decisions/048-near-duplicate-variant-family-grouping.md](decisions/048-near-duplicate-variant-family-grouping.md)。
 - full-review context calibration v1 已落地：active changelog/release notes stale-doc observations 不再进入默认 top concerns，cleanup/archive same-path retention observations 不重复占位，`needs_folder_management=false` 且 flat file count 较小时 topology boundary observations 保留为 signal/artifact context；见 [decisions/049-full-review-context-calibration.md](decisions/049-full-review-context-calibration.md)。
+- `shadow_implementation` mapper taxonomy split v1 已落地：visualization color/palette/style/tier/role mapping 与 rename/move/old/new/diff migration mapping 的明显跨域 mapper pairs 被抑制，same-domain mapper、parser-helper 和 same-role candidates 仍可报告；见 [decisions/050-shadow-mapper-taxonomy.md](decisions/050-shadow-mapper-taxonomy.md)。
+- duplication `fix-advice` legacy/compat wording 已落地：对含明确兼容意图的 duplication concern 增加 document compatibility intent 的一等 advisory option；见 [decisions/051-duplication-fix-advice-compat-intent.md](decisions/051-duplication-fix-advice-compat-intent.md)。
+- risk context external report formats v1 已落地：`--risk-context` 继续是单个 JSON 输入，并保守归一化 coverage.py、radon-like complexity 和 churn alias 形状；见 [decisions/052-risk-context-external-report-formats.md](decisions/052-risk-context-external-report-formats.md)。
+- plan/diff consistency semantic intent matching v1 已落地：`code-review --diff/--since --plan-review` 读取 explicit structured intent checks，用 deterministic text-term matching 输出 advisory observations；见 [decisions/053-plan-diff-semantic-intent-matching.md](decisions/053-plan-diff-semantic-intent-matching.md)。
+- AI drift mature-library scanner calibration v1 已落地：默认排除 `benchmark` / `benchmarks` 路径段，并抑制同文件 explicit paired API variant exact duplicates；见 [decisions/054-ai-drift-mature-library-calibration.md](decisions/054-ai-drift-mature-library-calibration.md) 和 [topics/multi-repo-dogfood-audit-2026-05-14.md](topics/multi-repo-dogfood-audit-2026-05-14.md)。
+- advisory recall / discovery lane 方案已收敛：默认 `concerns[]` 继续高精度，较宽松的 plausible candidates 先进入 artifact/signal discovery lane 做校准，见 [decisions/055-advisory-recall-discovery-lane.md](decisions/055-advisory-recall-discovery-lane.md) 和 [topics/advisory-recall-calibration.md](topics/advisory-recall-calibration.md)。
+- advisory discovery lane v1 已落地：suppressed `near_duplicate` candidates 和 module-level shadow dry-run candidates 写入 `.architec/code-review-discovery.json`，并输出 `advisory_discovery` signal metrics；见 [decisions/056-advisory-discovery-lane-v1.md](decisions/056-advisory-discovery-lane-v1.md)。
+- `shadow_implementation` parser subdomain taxonomy v1 已落地：runtime/platform parser、local-version parser 和 version grammar parser 的明显跨域 pairs 被抑制，same-domain parser 和 parser-helper candidates 仍可报告；见 [decisions/057-shadow-parser-subdomain-taxonomy.md](decisions/057-shadow-parser-subdomain-taxonomy.md)。
+- full code-review static degradation v1 已落地：full review 在 Hippo bundle 或 backend LLM 不可用时输出 `summary.analysis_mode=static` 的 deterministic review；见 [decisions/058-full-code-review-static-degradation.md](decisions/058-full-code-review-static-degradation.md)。
+- `near_duplicate` member variant-family grouping v1 已落地：同文件 class/member API families 会收敛为 grouped duplication observations，prefixed paired API variants 进入 discovery lane；见 [decisions/059-near-duplicate-member-variant-families.md](decisions/059-near-duplicate-member-variant-families.md)。
+- Hippo manifest source-scope alignment 已落地：bundle validation 会尊重 manifest-declared source paths，避免 fresh Hippo bundle 因 `docs/conf.py` / `docs/Makefile` 被本地 path policy 归为 docs 而降级为 static review；见 [decisions/060-hippo-manifest-source-scope-alignment.md](decisions/060-hippo-manifest-source-scope-alignment.md)。
+- semantic keep-active display calibration 已落地：full review 的 stale-doc cleanup/archive concerns 如果被 semantic judge 明确判定为 `keep_active`，不再进入默认 top concerns；见 [decisions/061-semantic-keep-active-display-calibration.md](decisions/061-semantic-keep-active-display-calibration.md)。
+- semantic review display reinforcement 已落地：full review 的 cleanup/archive concerns 如果被 semantic judge 明确判定为 `review`，会记录 semantic evidence 并温和提升展示排序强度；见 [decisions/062-semantic-review-display-reinforcement.md](decisions/062-semantic-review-display-reinforcement.md)。
+- risk-reinforced discovery promotion v1 已落地：`--risk-context` 对 thin-wrapper discovery candidates 提供强化事实时，可提升为低级 primary `duplication` observation；paired API variants 继续只保留 discovery；见 [decisions/063-risk-reinforced-discovery-promotion.md](decisions/063-risk-reinforced-discovery-promotion.md)。
+- semantic archive/retire display reinforcement v1 已落地：full review 的 cleanup/archive concerns 如果被 semantic judge 明确判定为 `archive_first` 或 `retire_now`，会记录 semantic evidence 并提高展示 confidence floor；见 [decisions/064-semantic-archive-retire-display-reinforcement.md](decisions/064-semantic-archive-retire-display-reinforcement.md)。
+- incremental cleanup/archive display de-dupe 已落地：diff/since selected-scope 中 cleanup/archive 同路径同 category observations 只占一个 displayed top concern slot，完整 generated concerns artifact 仍保留两者；见 [decisions/065-incremental-cleanup-archive-display-dedupe.md](decisions/065-incremental-cleanup-archive-display-dedupe.md)。
 
 In Progress:
 
@@ -111,13 +127,8 @@ In Progress:
 
 Next:
 
-- Refine `shadow_implementation` mapper taxonomy so broad mapper role matches
-  do not conflate color mapping, rename mapping, and other unrelated mapping
-  responsibilities.
-- Improve `fix-advice` wording for duplication concerns with legacy/compat
-  evidence so compatibility intent is treated as a first-class advisory option.
-- 继续深化 test/churn risk fusion 的 richer external report formats。
-- 评估 plan/diff consistency 的下一层语义：更细的 semantic intent matching。
+- 基于 discovery lane v1 继续做 dogfood 校准：评估 recurrence、architecture contracts 或 saved plan-review 是否也应作为 discovery promotion reinforcement；见 [topics/advisory-recall-calibration.md](topics/advisory-recall-calibration.md)。
+- 评估 plan/diff consistency 后续是否需要更丰富的 explicit structured intent sources；不做 prose/LLM requirement inference。
 
 Deferred:
 

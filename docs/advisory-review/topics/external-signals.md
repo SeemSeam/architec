@@ -31,6 +31,8 @@ V1 见 [Decision 039](../decisions/039-risk-context-fusion-v1.md)：`code-review
 
 Enrichment 见 [Decision 044](../decisions/044-risk-context-enrichment.md)：同一个 JSON 还接受 optional `complexity_by_file`、`public_api_files` 和 `historical_recurrence_by_file`。这些 facts 仍然只附加到已有 concerns，不生成 coverage、complexity 或 recurrence 数据，也不创建新的 concern kind。
 
+External report formats v1 见 [Decision 052](../decisions/052-risk-context-external-report-formats.md)：`--risk-context` 仍是单个 JSON 输入，但可以保守读取常见 report shape，例如 coverage.py 的 `files[*].summary.percent_covered`、radon-like complexity maps，以及 simple churn aliases。显式 first-class 字段（例如 `coverage_by_file`、`complexity_by_file`、`churn_by_file`）优先于 derived report values；无法识别的 report shape 会被忽略，而不是推断。
+
 ## 依赖信号
 
 依赖信号只做架构视角：

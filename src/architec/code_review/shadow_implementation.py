@@ -25,6 +25,8 @@ SKIP_DIRS = {
     ".tox",
     ".venv",
     "__pycache__",
+    "benchmark",
+    "benchmarks",
     "build",
     "coverage",
     "dist",
@@ -119,6 +121,87 @@ MODULE_SPLIT_TOKENS = {
 }
 RENDER_ROLE_TOKENS = {"render", "renderer", "rendering"}
 ASSEMBLY_ROLE_TOKENS = {"append", "assemble", "assembler", "assembly", "budget", "context", "support"}
+VISUAL_MAPPER_TOKENS = {
+    "badge",
+    "color",
+    "colors",
+    "colour",
+    "colours",
+    "display",
+    "displays",
+    "hue",
+    "legend",
+    "palette",
+    "render",
+    "rendering",
+    "role",
+    "roles",
+    "shade",
+    "style",
+    "styles",
+    "theme",
+    "tier",
+    "tiers",
+    "visual",
+    "visualization",
+}
+MIGRATION_MAPPER_TOKENS = {
+    "alias",
+    "aliases",
+    "compat",
+    "compatibility",
+    "compatible",
+    "diff",
+    "from",
+    "legacy",
+    "migrate",
+    "migrated",
+    "migrates",
+    "migration",
+    "migrations",
+    "move",
+    "moves",
+    "moved",
+    "new",
+    "old",
+    "rename",
+    "renamed",
+    "renames",
+    "source",
+    "sources",
+    "target",
+    "targets",
+    "to",
+}
+RUNTIME_PARSER_TOKENS = {
+    "glibc",
+    "libc",
+    "manylinux",
+    "musl",
+    "musllinux",
+    "platform",
+    "runtime",
+}
+LOCAL_VERSION_PARSER_TOKENS = {
+    "local",
+    "locals",
+}
+VERSION_GRAMMAR_PARSER_TOKENS = {
+    "grammar",
+    "many",
+    "marker",
+    "markers",
+    "requirement",
+    "requirements",
+    "specifier",
+    "specifiers",
+    "token",
+    "tokens",
+}
+VERSION_PARSER_TOKENS = {
+    "version",
+    "versions",
+}
 
 MIN_NODE_COUNT = 45
 MIN_CLASS_NODE_COUNT = 90
@@ -256,6 +339,52 @@ def _has_intentional_split_role_pair(left: _FunctionCandidate, right: _FunctionC
     left_assembly = _has_pure_role(left.all_tokens, ASSEMBLY_ROLE_TOKENS, RENDER_ROLE_TOKENS)
     right_assembly = _has_pure_role(right.all_tokens, ASSEMBLY_ROLE_TOKENS, RENDER_ROLE_TOKENS)
     return (left_render and right_assembly) or (right_render and left_assembly)
+
+
+def _raw_candidate_tokens(candidate: _FunctionCandidate) -> frozenset[str]:
+    return frozenset([*_tokens(candidate.symbol), *_tokens(candidate.path)])
+
+
+def _mapper_subdomain(candidate: _FunctionCandidate) -> str:
+    if "mapper" not in candidate.role_tokens:
+        return ""
+    tokens = _raw_candidate_tokens(candidate)
+    visual = bool(tokens & VISUAL_MAPPER_TOKENS)
+    migration = bool(tokens & MIGRATION_MAPPER_TOKENS)
+    if visual and not migration:
+        return "visual"
+    if migration and not visual:
+        return "migration"
+    return ""
+
+
+def _has_mapper_subdomain_split(left: _FunctionCandidate, right: _FunctionCandidate) -> bool:
+    left_subdomain = _mapper_subdomain(left)
+    right_subdomain = _mapper_subdomain(right)
+    return {left_subdomain, right_subdomain} == {"visual", "migration"}
+
+
+def _parser_subdomain(candidate: _FunctionCandidate) -> str:
+    if "parser" not in candidate.role_tokens:
+        return ""
+    tokens = _raw_candidate_tokens(candidate)
+    runtime = bool(tokens & RUNTIME_PARSER_TOKENS)
+    local = bool(tokens & LOCAL_VERSION_PARSER_TOKENS)
+    grammar = bool(tokens & VERSION_GRAMMAR_PARSER_TOKENS)
+    version = bool(tokens & VERSION_PARSER_TOKENS)
+    if runtime and not local and not grammar:
+        return "runtime"
+    if local and not runtime and not grammar:
+        return "local_version"
+    if (grammar or version) and not runtime and not local:
+        return "version_grammar"
+    return ""
+
+
+def _has_parser_subdomain_split(left: _FunctionCandidate, right: _FunctionCandidate) -> bool:
+    left_subdomain = _parser_subdomain(left)
+    right_subdomain = _parser_subdomain(right)
+    return bool(left_subdomain and right_subdomain and left_subdomain != right_subdomain)
 
 
 def _iter_python_files(root: Path) -> list[Path]:
@@ -855,6 +984,10 @@ def _shadow_match(left: _FunctionCandidate, right: _FunctionCandidate) -> _Shado
     if not common_roles:
         return None
     if _has_intentional_split_role_pair(left, right):
+        return None
+    if _has_mapper_subdomain_split(left, right):
+        return None
+    if _has_parser_subdomain_split(left, right):
         return None
     name_overlap = _jaccard(left.name_tokens, right.name_tokens)
     if name_overlap < MIN_NAME_OVERLAP:

@@ -13,6 +13,7 @@ Current advisory-review coverage is strong for early structural warning:
 - `fix-advice --review <review.json>` gives advisory options for duplication and shadow-implementation concerns.
 - `status --trend` reads review events so repeated weakening can be observed over time.
 - Full generated concerns are written to `.architec/code-review-concerns.json`, while top-level JSON remains bounded.
+- Recall calibration separates high-precision primary concerns from lower-confidence discovery candidates, so Architec can surface "worth checking" signals without flooding top concerns. V1 writes a separate discovery artifact for suppressed `near_duplicate` and module-level shadow dry-run candidates.
 
 This is enough to catch many vibe-coding drift patterns: repeated functions, reimplemented classes, hotspots gaining more responsibility, cleanup/archive debt, and package-boundary observations.
 
@@ -23,9 +24,9 @@ This is enough to catch many vibe-coding drift patterns: repeated functions, rei
 | Prevent obvious duplicate code | `near_duplicate` reports exact normalized Python function repeats in full and changed-file-scoped diff/since reviews. | Strong for exact Python function repeats; weak for fuzzy or cross-language repeats. |
 | Detect repeated wheel-building | `shadow_implementation` reports Python function/class implementations that resemble an existing implementation without a reuse edge. | Strong for high-confidence symbol-level Python cases; module-level remains dry-run only. |
 | Keep incremental reviews focused | `code-review --diff` and `--since` only report changed-file primary `near_duplicate` and `shadow_implementation` concerns. | Strong for avoiding historical-debt noise in incremental feedback. |
-| Track architecture drift over time | review events plus `status --trend` can show recurring weakening components and score source history; optional risk context can attach coverage/churn/test-map facts to concerns. | Useful, but still depends on external report quality. |
+| Track architecture drift over time | review events plus `status --trend` can show recurring weakening components and score source history; optional risk context can attach coverage/churn/test-map facts to concerns and can normalize a conservative subset of common report shapes. | Useful, but still depends on external report quality. |
 | Preserve boundary intent | `.architecture-rules.toml` can encode changed-file-scoped restricted imports; topology and hotspot concerns expose structural pressure. | Partial. Ownership, facade expectations, and richer contracts remain future work. |
-| Align implementation with a reviewed plan | Saved `plan-review` JSON can be supplied to `code-review --diff/--since` for path-level plan/diff consistency observations. | Partial. Stronger import-edge and semantic intent matching remain future work. |
+| Align implementation with a reviewed plan | Saved `plan-review` JSON can be supplied to `code-review --diff/--since` for path, structured expectation, and explicit semantic intent observations. | Partial. Only explicit structured intent checks are used; prose intent and LLM/NLP inference remain out of scope. |
 | Protect mainline behavior | `architec` does not execute tests, prove behavior, or inspect runtime errors. | Out of scope unless external test/churn reports are supplied. |
 
 ## Guarantee Model
@@ -49,9 +50,10 @@ The current system does not guarantee mainline quality:
 - It does not prove behavior correctness or replace tests.
 - It does not enforce merge decisions or block CI.
 - It encodes first-step project-specific architecture contracts for changed-file import restrictions, but broader ownership and facade expectations remain future work.
-- It only compares saved plan-review paths against selected changed files; deeper semantic intent and import-edge expectations remain future work.
+- It compares saved plan-review paths and explicit structured expectations against selected changed files; prose intent and LLM/NLP requirement inference remain out of scope.
 - It only combines coverage, churn, and source-to-test facts when an external risk context JSON is supplied; it does not execute tests or collect those reports itself.
 - File/module-level shadow implementation remains dry-run only because current evidence is not precise enough for a public signal.
+- Lower-confidence discovery candidates are a planned calibration lane, not a proof that code is wrong and not a replacement for primary concern evidence.
 - TypeScript/Go and other languages are still outside the current AI-signal scope.
 
 ## Next Capability Order
@@ -95,7 +97,7 @@ The next architecture-stability work should prioritize contract and drift contro
    - surface `plan-diff-consistency` concerns for unexpected changed areas, missing expected areas, and boundary changes not named in the plan;
    - keep plan/diff mismatch as an observation, not a claim that the implementation is wrong.
 
-   V1 is recorded in [Decision 037](../decisions/037-plan-diff-consistency-v1.md). It compares saved `plan-review` paths with changed files. Structured import-edge expectations are recorded in [Decision 040](../decisions/040-plan-diff-import-edge-expectations.md). Explicit expected-test entries are recorded in [Decision 045](../decisions/045-plan-diff-expected-tests.md); prose test notes remain context. Dependency alternatives are recorded in [Decision 046](../decisions/046-plan-diff-dependency-alternatives.md); any listed acceptable module can satisfy the planned dependency group. Public API migration touchpoints are recorded in [Decision 047](../decisions/047-plan-diff-public-api-migrations.md); prose migration notes remain context.
+   V1 is recorded in [Decision 037](../decisions/037-plan-diff-consistency-v1.md). It compares saved `plan-review` paths with changed files. Structured import-edge expectations are recorded in [Decision 040](../decisions/040-plan-diff-import-edge-expectations.md). Explicit expected-test entries are recorded in [Decision 045](../decisions/045-plan-diff-expected-tests.md); prose test notes remain context. Dependency alternatives are recorded in [Decision 046](../decisions/046-plan-diff-dependency-alternatives.md); any listed acceptable module can satisfy the planned dependency group. Public API migration touchpoints are recorded in [Decision 047](../decisions/047-plan-diff-public-api-migrations.md); prose migration notes remain context. Semantic intent matching v1 is recorded in [Decision 053](../decisions/053-plan-diff-semantic-intent-matching.md); it uses deterministic text-term matching over explicit structured intent checks and does not infer requirements from prose.
 
 3. **Test/Churn Risk Fusion**
 
@@ -115,7 +117,7 @@ The next architecture-stability work should prioritize contract and drift contro
    - enrich existing concerns with companion risk facts rather than inventing a separate health score;
    - never execute the test runner as part of `code-review`.
 
-   V1 is recorded in [Decision 039](../decisions/039-risk-context-fusion-v1.md). It reads an optional `--risk-context` JSON and adds companion evidence plus a `risk_context` signal. Complexity, public API, and historical recurrence enrichment are recorded in [Decision 044](../decisions/044-risk-context-enrichment.md); these facts still attach only to existing concerns.
+   V1 is recorded in [Decision 039](../decisions/039-risk-context-fusion-v1.md). It reads an optional `--risk-context` JSON and adds companion evidence plus a `risk_context` signal. Complexity, public API, and historical recurrence enrichment are recorded in [Decision 044](../decisions/044-risk-context-enrichment.md); these facts still attach only to existing concerns. Richer external report formats v1 is recorded in [Decision 052](../decisions/052-risk-context-external-report-formats.md): the same JSON input may normalize common coverage.py, radon-like complexity, and churn alias shapes into existing risk context facts, without running those tools.
 
 4. **Module-Level Shadow Re-evaluation**
 
@@ -146,8 +148,15 @@ The intended effect is not a guarantee that the code is correct. It is a feedbac
 
 The next major gap is not another generic smell detector. It is the absence of repository-specific rules. Without contracts, `architec` can say that code is getting more complex or duplicative, but it cannot know that `src/api` must not import `src/storage` directly, or that a feature package must only expose a facade.
 
-The second gap is intent tracking. Vibe-coding drift often starts when implementation wanders away from a reviewed plan. Path-level plan/diff consistency is now available when a saved `plan-review` JSON is provided, but deeper semantic intent and import-edge expectations remain future work.
+The second gap is intent tracking. Vibe-coding drift often starts when implementation wanders away from a reviewed plan. Path-level plan/diff consistency is available when a saved `plan-review` JSON is provided, and explicit structured semantic intent checks now have a deterministic v1. Broader prose or LLM/NLP intent inference remains out of scope.
 
-The third gap is risk fusion. Architecture concerns matter more when they appear in high-churn, under-tested, public API code. V1 can combine externally supplied coverage/churn/test-map facts with concerns, and Decision 044 extends that input model to optional complexity, public API, and historical recurrence facts. Richer external report formats and cross-event historical explanation remain future work.
+The third gap is risk fusion. Architecture concerns matter more when they appear in high-churn, under-tested, public API code. V1 can combine externally supplied coverage/churn/test-map facts with concerns, Decision 044 extends that input model to optional complexity, public API, and historical recurrence facts, and Decision 052 defines a conservative normalization path for common external report shapes. Cross-event historical explanation remains future work.
 
-These three gaps define the implementation sequence: contracts first, path-level plan/diff consistency second, test/churn fusion third.
+The fourth gap is recall calibration. Because Architec is advisory, it should not
+discard every plausible lower-confidence observation; instead it should keep
+primary concerns precise and put weaker candidates in a discovery lane until
+dogfood or reinforcing evidence justifies promotion. This direction is recorded
+in [Decision 055](../decisions/055-advisory-recall-discovery-lane.md), and v1 is
+recorded in [Decision 056](../decisions/056-advisory-discovery-lane-v1.md).
+
+These gaps define the implementation sequence: contracts first, path-level plan/diff consistency second, test/churn fusion third, then discovery-lane recall calibration where it can improve early drift detection without flooding primary concerns.

@@ -11,6 +11,9 @@ from architec.support.io_utils import normalize_relpath
 
 
 ALTERNATIVE_IMPORT_KEYS = ("any_of", "alternatives", "alternative_imports")
+SEMANTIC_ALL_TERM_KEYS = ("required_terms", "requires_terms", "all_of", "must_include")
+SEMANTIC_ANY_TERM_KEYS = ("any_of_terms", "requires_any", "any_of")
+SEMANTIC_FORBIDDEN_TERM_KEYS = ("forbidden_terms", "must_not_include", "disallowed_terms")
 
 
 def _normal_path(path: object) -> str:
@@ -131,6 +134,36 @@ def _context_value(item: dict[str, Any], key: str) -> str:
     return str(item.get(key, "") or "").strip()
 
 
+def _structured_string(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _semantic_source(item: dict[str, Any]) -> str:
+    for key in ("source_glob", "source", "path", "path_glob", "for_path", "from_path"):
+        text = _normal_path(item.get(key, ""))
+        if text:
+            return text
+    return ""
+
+
+def _semantic_terms(item: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
+    values: list[str] = []
+    for key in keys:
+        raw = item.get(key)
+        if isinstance(raw, str):
+            values.append(raw)
+        elif isinstance(raw, list):
+            values.extend(entry for entry in raw if isinstance(entry, str))
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in sorted(text.strip() for text in values if text.strip()):
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
 def _planned_import_expectations(plan_review: dict[str, Any]) -> list[dict[str, Any]]:
     understood = plan_review.get("understood_plan")
     if not isinstance(understood, dict):
@@ -226,6 +259,54 @@ def _planned_test_expectations(plan_review: dict[str, Any]) -> list[dict[str, An
                 continue
             seen.add(key)
             expectations.append({"source": source, "test_path": test_path})
+    return expectations
+
+
+def _planned_semantic_intents(plan_review: dict[str, Any]) -> list[dict[str, Any]]:
+    understood = plan_review.get("understood_plan")
+    if not isinstance(understood, dict):
+        return []
+    expectations: list[dict[str, Any]] = []
+    seen: set[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...], str, str, str]] = set()
+    for field in ("intent_checks", "semantic_intents"):
+        raw_entries = understood.get(field)
+        if not isinstance(raw_entries, list):
+            continue
+        for item in raw_entries:
+            if not isinstance(item, dict):
+                continue
+            all_terms = _semantic_terms(item, SEMANTIC_ALL_TERM_KEYS)
+            any_terms = _semantic_terms(item, SEMANTIC_ANY_TERM_KEYS)
+            forbidden_terms = _semantic_terms(item, SEMANTIC_FORBIDDEN_TERM_KEYS)
+            if not all_terms and not any_terms and not forbidden_terms:
+                continue
+            source = _semantic_source(item)
+            label = _structured_string(item.get("label"))
+            intent = _structured_string(item.get("intent"))
+            reason = _structured_string(item.get("reason"))
+            key = (
+                source,
+                tuple(all_terms),
+                tuple(any_terms),
+                tuple(forbidden_terms),
+                label,
+                intent,
+                reason,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            expectations.append(
+                {
+                    "source": source,
+                    "all_terms": all_terms,
+                    "any_terms": any_terms,
+                    "forbidden_terms": forbidden_terms,
+                    "label": label,
+                    "intent": intent,
+                    "reason": reason,
+                }
+            )
     return expectations
 
 
@@ -329,6 +410,31 @@ def _stable_public_api_migration_concern_id(
         "symbol": symbol,
         "old_symbol": old_symbol,
         "new_symbol": new_symbol,
+        "plan_path": plan_path,
+        "plan_fingerprint": plan_fingerprint,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+    return f"code-review:plan-diff-consistency:{digest}"
+
+
+def _stable_semantic_intent_concern_id(
+    *,
+    observation: str,
+    expectation: dict[str, Any],
+    plan_path: str,
+    plan_fingerprint: str,
+) -> str:
+    payload = {
+        "kind": "plan-diff-consistency",
+        "observation": observation,
+        "source": str(expectation.get("source", "") or ""),
+        "all_terms": list(_string_list(expectation.get("all_terms"))),
+        "any_terms": list(_string_list(expectation.get("any_terms"))),
+        "forbidden_terms": list(_string_list(expectation.get("forbidden_terms"))),
+        "label": str(expectation.get("label", "") or ""),
+        "intent": str(expectation.get("intent", "") or ""),
+        "reason": str(expectation.get("reason", "") or ""),
         "plan_path": plan_path,
         "plan_fingerprint": plan_fingerprint,
     }
@@ -605,6 +711,87 @@ def _missing_public_api_migration_concern(
     }
 
 
+def _semantic_context_value(expectation: dict[str, Any]) -> str:
+    for key in ("label", "intent", "reason"):
+        text = str(expectation.get(key, "") or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _term_summary(terms: list[str]) -> str:
+    return ",".join(terms)
+
+
+def _semantic_intent_concern(
+    *,
+    observation: str,
+    expectation: dict[str, Any],
+    scoped_changed_files: list[str],
+    changed_files: list[str],
+    missing_all_terms: list[str],
+    missing_any_terms: list[str],
+    observed_forbidden_terms: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+) -> dict[str, Any]:
+    source = _normal_path(expectation.get("source", ""))
+    all_terms = _string_list(expectation.get("all_terms"))
+    any_terms = _string_list(expectation.get("any_terms"))
+    forbidden_terms = _string_list(expectation.get("forbidden_terms"))
+    evidence = [
+        f"plan_diff_consistency.observation={observation}",
+        f"plan_diff_consistency.changed_file_total={len(changed_files)}",
+        f"plan_diff_consistency.scoped_changed_file_total={len(scoped_changed_files)}",
+    ]
+    label = _semantic_context_value(expectation)
+    if label:
+        evidence.append(f"plan_diff_consistency.intent_label={label}")
+    if source:
+        evidence.append(f"plan_diff_consistency.intent_source={source}")
+    if all_terms:
+        evidence.append(f"plan_diff_consistency.required_term_total={len(all_terms)}")
+        evidence.append(f"plan_diff_consistency.required_terms={_term_summary(all_terms)}")
+    if any_terms:
+        evidence.append(f"plan_diff_consistency.any_term_total={len(any_terms)}")
+        evidence.append(f"plan_diff_consistency.any_terms={_term_summary(any_terms)}")
+    if forbidden_terms:
+        evidence.append(f"plan_diff_consistency.forbidden_term_total={len(forbidden_terms)}")
+        evidence.append(f"plan_diff_consistency.forbidden_terms={_term_summary(forbidden_terms)}")
+    if missing_all_terms:
+        evidence.append(f"plan_diff_consistency.missing_required_terms={_term_summary(missing_all_terms)}")
+    if missing_any_terms:
+        evidence.append(f"plan_diff_consistency.missing_any_terms={_term_summary(missing_any_terms)}")
+    if observed_forbidden_terms:
+        evidence.append(f"plan_diff_consistency.observed_forbidden_terms={_term_summary(observed_forbidden_terms)}")
+    if plan_fingerprint:
+        evidence.append(f"plan_diff_consistency.plan_fingerprint={plan_fingerprint}")
+    if plan_path:
+        evidence.append(f"plan_diff_consistency.plan_path={plan_path}")
+    location_path = scoped_changed_files[0]
+    return {
+        "concern_id": _stable_semantic_intent_concern_id(
+            observation=observation,
+            expectation=expectation,
+            plan_path=plan_path,
+            plan_fingerprint=plan_fingerprint,
+        ),
+        "kind": "plan-diff-consistency",
+        "level": "info",
+        "confidence": 0.7,
+        "location": {
+            "path": location_path,
+            "line": 0,
+            "symbol": "",
+            "symbol_kind": "module",
+        },
+        "root_cause": "Saved plan-review semantic intent terms were not matched in the selected diff.",
+        "evidence": evidence,
+        "blast_radius": scoped_changed_files,
+        "next_steps_hint": "Review whether the saved semantic intent remains applicable or whether the plan-review artifact should be updated.",
+    }
+
+
 def load_plan_review(path: str | Path) -> dict[str, Any]:
     review_path = Path(path)
     try:
@@ -641,6 +828,21 @@ def _imports_by_changed_file(project_root: Path | None, changed_files: list[str]
             modules.append(record.module)
         imports_by_file[path] = modules
     return imports_by_file
+
+
+def _text_by_changed_file(project_root: Path | None, changed_files: list[str]) -> dict[str, str]:
+    if project_root is None:
+        return {}
+    text_by_file: dict[str, str] = {}
+    for path in changed_files:
+        target = project_root / path
+        if not target.exists() or not target.is_file():
+            continue
+        try:
+            text_by_file[path] = target.read_text(encoding="utf-8").lower()
+        except (OSError, UnicodeDecodeError):
+            continue
+    return text_by_file
 
 
 def _scoped_changed_files(changed_files: list[str], source: str) -> list[str]:
@@ -773,6 +975,79 @@ def _public_api_migration_concerns(
     return concerns
 
 
+def _semantic_intent_scan(
+    *,
+    expectations: list[dict[str, Any]],
+    changed_files: list[str],
+    plan_fingerprint: str,
+    plan_path: str,
+    project_root: Path | None,
+) -> dict[str, Any]:
+    if not expectations or project_root is None:
+        return {
+            "concerns": [],
+            "observed_semantic_intent_total": 0,
+            "missing_semantic_intent_total": 0,
+            "conflicting_semantic_intent_total": 0,
+        }
+    text_by_file = _text_by_changed_file(project_root, changed_files)
+    readable_changed_files = list(text_by_file)
+    concerns: list[dict[str, Any]] = []
+    observed_total = 0
+    missing_total = 0
+    conflicting_total = 0
+    for expectation in expectations:
+        source = _normal_path(expectation.get("source", ""))
+        scoped_files = _scoped_changed_files(readable_changed_files, source)
+        if not scoped_files:
+            continue
+        content = "\n".join(text_by_file[path] for path in scoped_files)
+        all_terms = _string_list(expectation.get("all_terms"))
+        any_terms = _string_list(expectation.get("any_terms"))
+        forbidden_terms = _string_list(expectation.get("forbidden_terms"))
+        missing_all_terms = [term for term in all_terms if term.lower() not in content]
+        missing_any_terms = any_terms if any_terms and not any(term.lower() in content for term in any_terms) else []
+        observed_forbidden_terms = [term for term in forbidden_terms if term.lower() in content]
+        if missing_all_terms or missing_any_terms:
+            missing_total += 1
+            concerns.append(
+                _semantic_intent_concern(
+                    observation="planned_intent_terms_not_observed",
+                    expectation=expectation,
+                    scoped_changed_files=scoped_files,
+                    changed_files=changed_files,
+                    missing_all_terms=missing_all_terms,
+                    missing_any_terms=missing_any_terms,
+                    observed_forbidden_terms=[],
+                    plan_fingerprint=plan_fingerprint,
+                    plan_path=plan_path,
+                )
+            )
+        if observed_forbidden_terms:
+            conflicting_total += 1
+            concerns.append(
+                _semantic_intent_concern(
+                    observation="planned_intent_conflict_observed",
+                    expectation=expectation,
+                    scoped_changed_files=scoped_files,
+                    changed_files=changed_files,
+                    missing_all_terms=[],
+                    missing_any_terms=[],
+                    observed_forbidden_terms=observed_forbidden_terms,
+                    plan_fingerprint=plan_fingerprint,
+                    plan_path=plan_path,
+                )
+            )
+        if not missing_all_terms and not missing_any_terms and not observed_forbidden_terms:
+            observed_total += 1
+    return {
+        "concerns": concerns,
+        "observed_semantic_intent_total": observed_total,
+        "missing_semantic_intent_total": missing_total,
+        "conflicting_semantic_intent_total": conflicting_total,
+    }
+
+
 def _matches_expected_test(path: str, test_expectations: list[dict[str, Any]]) -> bool:
     return any(
         _path_matches(path, _normal_path(expectation.get("test_path", "")))
@@ -805,8 +1080,9 @@ def plan_diff_consistency_scan(
     import_expectations = _planned_import_expectations(plan_review)
     test_expectations = _planned_test_expectations(plan_review)
     public_api_migrations = _planned_public_api_migrations(plan_review)
+    semantic_intents = _planned_semantic_intents(plan_review)
     root = Path(project_root).resolve() if project_root is not None else None
-    if not planned and not import_expectations and not test_expectations and not public_api_migrations:
+    if not planned and not import_expectations and not test_expectations and not public_api_migrations and not semantic_intents:
         return {
             "concerns": [],
             "changed_file_total": len(changed),
@@ -821,6 +1097,10 @@ def plan_diff_consistency_scan(
             "public_api_migration_total": 0,
             "observed_public_api_migration_total": 0,
             "missing_public_api_migration_total": 0,
+            "semantic_intent_total": 0,
+            "observed_semantic_intent_total": 0,
+            "missing_semantic_intent_total": 0,
+            "conflicting_semantic_intent_total": 0,
             "scoped_to_changed_files": True,
         }
 
@@ -875,6 +1155,16 @@ def plan_diff_consistency_scan(
         plan_path=plan_path,
     )
     concerns.extend(public_api_migration_concerns)
+    semantic_scan = _semantic_intent_scan(
+        expectations=semantic_intents,
+        changed_files=changed,
+        plan_fingerprint=plan_fingerprint,
+        plan_path=plan_path,
+        project_root=root,
+    )
+    semantic_concerns = semantic_scan.get("concerns")
+    if isinstance(semantic_concerns, list):
+        concerns.extend(semantic_concerns)
     concerns.sort(
         key=lambda item: (
             str(item.get("level", "") or ""),
@@ -896,6 +1186,10 @@ def plan_diff_consistency_scan(
         "public_api_migration_total": len(public_api_migrations),
         "observed_public_api_migration_total": len(public_api_migrations) - len(public_api_migration_concerns),
         "missing_public_api_migration_total": len(public_api_migration_concerns),
+        "semantic_intent_total": len(semantic_intents),
+        "observed_semantic_intent_total": int(semantic_scan.get("observed_semantic_intent_total", 0) or 0),
+        "missing_semantic_intent_total": int(semantic_scan.get("missing_semantic_intent_total", 0) or 0),
+        "conflicting_semantic_intent_total": int(semantic_scan.get("conflicting_semantic_intent_total", 0) or 0),
         "concern_total_before_limit": len(concerns),
         "scoped_to_changed_files": True,
     }

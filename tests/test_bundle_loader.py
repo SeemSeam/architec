@@ -141,6 +141,44 @@ def test_inspect_bundle_counts_extensionless_code_but_ignores_extensionless_docs
     assert "file-manifest.json does not match current source tree (added=1, removed=0)" in status.stale_reasons
 
 
+def test_inspect_bundle_respects_manifest_source_scope_for_docs_paths(tmp_path):
+    _touch(tmp_path / "src" / "app.py", "print('ok')\n")
+    _touch(tmp_path / "docs" / "conf.py", "project = 'demo'\n")
+    _touch(tmp_path / "docs" / "Makefile", "html:\n\t@echo html\n")
+    hippo = tmp_path / ".hippocampus"
+    _touch(hippo / "hippocampus-index.json", '{"files": {"src/app.py": {}}}\n')
+    _touch(hippo / "code-signatures.json", '{"files": {"src/app.py": {"signatures": []}}}\n')
+    _touch(
+        hippo / "file-manifest.json",
+        json.dumps(
+            {
+                "files": {
+                    "src/app.py": {"kind": "source"},
+                    "docs/conf.py": {"kind": "source"},
+                    "docs/Makefile": {"kind": "source"},
+                }
+            }
+        )
+        + "\n",
+    )
+    _touch(hippo / "structure-prompt.md", "# prompt\n")
+    fingerprint = compute_bundle_fingerprint(tmp_path)
+    generated_at = datetime.now(timezone.utc).isoformat()
+    _touch(
+        hippo / "bundle-state.json",
+        json.dumps({"bundle_fingerprint": fingerprint, "generated_at": generated_at}) + "\n",
+    )
+    _touch(
+        hippo / "architect-metrics.json",
+        json.dumps({"bundle_fingerprint": fingerprint, "generated_at": generated_at}) + "\n",
+    )
+
+    status = inspect_bundle(tmp_path)
+
+    assert status.ok is True
+    assert status.stale_reasons == []
+
+
 def test_inspect_bundle_respects_hippo_ignore_rules_when_comparing_source_tree(tmp_path):
     _write_valid_bundle(tmp_path)
     _touch(tmp_path / "experimental" / "draft.py", "print('draft')\n")

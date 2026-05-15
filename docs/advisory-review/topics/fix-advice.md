@@ -58,6 +58,15 @@ archi fix-advice --review <review.json>
 - 如果行为应共享，可考虑让 duplicate 复用或路由到 reference implementation。
 - 如果行为应分化，可在 duplicate 附近或调用者契约中说明差异。
 
+如果 duplicate、reference 或 evidence 中有明确 legacy / compat / shim /
+migration / deprecation intent，`fix-advice` 会额外给出 compatibility intent
+选项：记录兼容路径意图，并把兼容 wrapper 或路径与 canonical
+implementation 的关系说清楚。该选项不判断兼容路径应合并还是保留。
+
+该 compatibility intent 仍只使用 duplication 的 reference 语义。
+`references[].role: "existing_implementation"` 属于 shadow-implementation
+建议分支，不作为 duplication reference 或 compatibility 证据消费。
+
 如果旧 review 只有 `near_duplicate.reference=...` 这类 evidence string，`fix-advice` 可以作为兼容路径解析它。没有结构化 reference 且 evidence 不足时，输出 generic duplication advice，并说明 evidence insufficient。
 
 该分支不判断哪个实现正确，不输出 patch，不承诺合并方向。

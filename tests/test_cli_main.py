@@ -1104,6 +1104,103 @@ def test_main_code_review_full_passes_risk_context_path(monkeypatch, tmp_path, c
     assert calls[3] == ("review", str(tmp_path), str(risk_context), True)
 
 
+def test_main_code_review_full_llm_unavailable_uses_static_review(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    calls: list[object] = []
+    result = _code_review_result("full")
+    result["summary"]["headline"] = "Full analysis was unavailable; static code-review signals were generated."
+    result["summary"]["analysis_mode"] = "static"
+    result["artifacts"] = {"code_review_analysis_mode": "static"}
+
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: calls.append("auth"))
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: calls.append(("bundle", args.path)) or None)
+    monkeypatch.setattr(
+        cli,
+        "preflight_backend_llm",
+        lambda path, *, checks: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+    )
+    monkeypatch.setattr(cli, "run_code_review_full", lambda *args, **kwargs: pytest.fail("full should not run"))
+    monkeypatch.setattr(
+        cli,
+        "run_code_review_static_full",
+        lambda path, *, reason="", progress=None: calls.append(
+            ("static", path, reason, progress is cli.emit_progress)
+        )
+        or result,
+    )
+
+    assert cli.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"]["analysis_mode"] == "static"
+    assert calls[0] == "auth"
+    assert calls[1] == ("bundle", str(tmp_path))
+    assert calls[2][0] == "static"
+    assert "provider 403" in calls[2][2]
+
+
+def test_main_code_review_full_bundle_error_uses_static_review(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    calls: list[object] = []
+    result = _code_review_result("full")
+    result["summary"]["headline"] = "Full analysis was unavailable; static code-review signals were generated."
+    result["summary"]["analysis_mode"] = "static"
+    result["artifacts"] = {"code_review_analysis_mode": "static"}
+
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: calls.append("auth"))
+    monkeypatch.setattr(
+        cli,
+        "_ensure_bundle",
+        lambda args: (_ for _ in ()).throw(RuntimeError("refresh-from-hippo failed: file-manifest source mismatch")),
+    )
+    monkeypatch.setattr(cli, "preflight_backend_llm", lambda *args, **kwargs: pytest.fail("llm should not run"))
+    monkeypatch.setattr(cli, "run_code_review_full", lambda *args, **kwargs: pytest.fail("full should not run"))
+    monkeypatch.setattr(
+        cli,
+        "run_code_review_static_full",
+        lambda path, *, reason="", progress=None: calls.append(
+            ("static", path, reason, progress is cli.emit_progress)
+        )
+        or result,
+    )
+
+    assert cli.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"]["analysis_mode"] == "static"
+    assert calls[0] == "auth"
+    assert calls[1][0] == "static"
+    assert "file-manifest source mismatch" in calls[1][2]
+    assert "fail" not in calls[1][2].lower()
+
+
+def test_main_code_review_diff_llm_unavailable_remains_input_error(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--diff", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: None)
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
+    monkeypatch.setattr(
+        cli,
+        "preflight_backend_llm",
+        lambda path, *, checks: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+    )
+    monkeypatch.setattr(cli, "run_code_review_static_full", lambda *args, **kwargs: pytest.fail("static should not run"))
+
+    assert cli.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "provider 403" in captured.err
+
+
 def test_main_code_review_since_outputs_json_contract(monkeypatch, tmp_path, capsys):
     calls: list[object] = []
     result = {

@@ -179,6 +179,10 @@ Diff and since code-review now use the same lightweight base LLM preflight as fu
 
 `shadow_implementation` now applies role-taxonomy precision filtering for clear renderer versus assembler/support/budget/context split roles. Function/class shadow remains role, AST, signature, API, name-overlap, and reuse-edge based; same-role candidates and parser-helper pairs remain eligible.
 
+`shadow_implementation` mapper taxonomy now suppresses clear visualization color/palette/style/tier/role mappers against rename/move/old/new/diff migration mappers. Function/class `shadow_implementation` keeps the same schema and thresholds; same-domain mapper pairs, parser-helper pairs, and same-role candidates remain eligible.
+
+Duplication `fix-advice` now recognizes explicit legacy/compatibility intent in duplication concerns. When a normal duplication reference is available, advice adds an option to document the compatibility path or wrapper relationship instead of framing direct reuse as the only likely direction.
+
 `fix-advice` now has a dedicated advisory branch for `shadow-implementation` concerns. It consumes `references[].role: "existing_implementation"` to compare the suspected shadow implementation with the existing function or class, while keeping the output non-executable and neutral about which implementation is correct.
 
 `code-review --diff` and `code-review --since <ref>` now also run exact `near_duplicate` detection in changed-file-scoped mode. They report duplication only when the primary `location.path` is changed; `references[]` may point at unchanged existing code.
@@ -201,6 +205,8 @@ Risk context fusion v1 lets `code-review` read optional external coverage/churn/
 
 Risk context enrichment accepts additional optional external facts for `complexity_by_file`, `public_api_files`, and `historical_recurrence_by_file`. These facts attach only to existing concerns and update `risk_context` input and `by_factor` counts; they do not create a new health score, concern kind, concern id scheme, or fix-advice schema.
 
+Risk context external report formats v1 keeps `--risk-context` as one JSON file while accepting common derived report shapes such as coverage.py `files[*].summary.percent_covered`, radon-like complexity maps, and simple churn aliases. First-class fields such as `coverage_by_file`, `complexity_by_file`, and `churn_by_file` remain authoritative when both forms are present.
+
 Plan/diff consistency now also reads structured dependency import expectations from saved plan-review JSON. If selected changed Python files do not show an expected import edge, `code-review` emits a neutral `planned_import_not_observed` observation.
 
 Plan/diff consistency expected tests v1 accepts explicit structured expected-test entries from saved plan-review JSON in diff/since review. Missing expected test touchpoints in the selected changed files emit advisory `plan-diff-consistency` observations. Free-form prose test notes remain context, not requirements; full review and since bad-ref degraded results do not run the check.
@@ -209,7 +215,61 @@ Plan/diff consistency dependency alternatives v1 lets explicit structured depend
 
 Plan/diff consistency public API migrations v1 accepts explicit structured public API migration entries from saved plan-review JSON. Missing selected-diff migration touchpoints emit advisory `plan-diff-consistency` observations. String or prose migration notes remain context, not requirements, and there is no dedicated fix-advice behavior.
 
-A follow-up Hippocampus dogfood run after Decisions 041-047 confirmed that diff/since scope hygiene is working: unrelated global cleanup/hotspot/topology context remains in signals/artifacts but does not fill selected-diff top concerns. The same run identified the next Architec product refinements: grouping intentional near-duplicate variant families, splitting broad mapper roles in `shadow_implementation`, and improving `fix-advice` wording for legacy/compat duplication concerns.
+Decision 053 records plan/diff consistency semantic intent matching v1. Incremental `code-review --diff/--since --plan-review` may consume explicit structured `understood_plan.intent_checks[]` and `understood_plan.semantic_intents[]` object entries, then use deterministic text-term matching for required and forbidden terms. Prose intent notes and natural-language `understood_plan.intent` remain context, not requirements.
+
+A multi-repo dogfood run against `pypa/packaging`, `pallets/itsdangerous`, and `python-humanize/humanize` recorded follow-up product signals rather than user-code findings. The run found that full review needs a more reliable deterministic/static path when Hippo bundle source-scope validation or backend LLM access is unavailable, and it exposed AI drift scanner calibration cases for `benchmarks/`, paired API variants, and parser subdomains. See `topics/multi-repo-dogfood-audit-2026-05-14.md`.
+
+Mature-library AI drift scanner calibration v1 now excludes `benchmark` / `benchmarks` path segments by default, and `near_duplicate` suppresses narrow same-file exact-fingerprint paired API variants such as `__and__` / `__or__`, `post` / `dev`, and `thousands_separator` / `decimal_separator`. Full-review dogfood reliability and shadow parser subdomain taxonomy remain separate follow-ups.
+
+Decision 055 records the next calibration direction: because Architec is advisory and final code changes are still reviewed before landing, future code-review work should keep default `concerns[]` high-precision while retaining lower-confidence "worth checking" candidates in a labelled discovery lane for artifacts, metrics, and dogfood calibration.
+
+Advisory discovery lane v1 now writes `.architec/code-review-discovery.json` when discovery candidates exist and exposes aggregate `advisory_discovery` signal metrics. V1 includes suppressed `near_duplicate` candidates and module-level `shadow_implementation` dry-run candidates; it does not change `concerns[]`, derived `evidence[]`, `summary.concern_total`, or `fix-advice` inputs.
+
+`shadow_implementation` parser subdomain taxonomy v1 now suppresses clear runtime/platform parser versus local-version or version-grammar parser pairs. Same-domain parser pairs and parser-helper signals remain eligible, and the concern schema, thresholds, scope behavior, and fix-advice behavior are unchanged.
+
+Full code-review static degradation v1 now returns a structured static result when a full review cannot use the Hippo bundle or backend LLM path. The result is marked with `summary.analysis_mode=static` and preserves deterministic duplicate/shadow/discovery signals; diff/since review remains on the strict selected-change path.
+
+A follow-up multi-repo dogfood run after Decisions 054/056/057/058 confirmed that static full review now returns structured output for `packaging` and `itsdangerous`, while `humanize` can complete the normal full path. The same run identified the next calibration target: same-file mature-library class/member variant families in `near_duplicate`.
+
+`near_duplicate` member variant-family grouping v1 now groups same-file class/member API families such as release segment accessors, distribution class variants, and class-family methods into one duplication observation per exact fingerprint family. Prefixed paired API variants such as `_validate_dev` / `_validate_post` move to the advisory discovery lane.
+
+Hippo manifest source-scope alignment now lets bundle validation honor source
+paths declared by `file-manifest.json`, even when Architec's local path policy
+would classify paths such as `docs/conf.py` or `docs/Makefile` as docs. This
+keeps fresh Hippo bundles from degrading to static review solely because the
+bundle producer and validator disagreed about source scope.
+
+Semantic keep-active display calibration now demotes full-review stale-doc
+cleanup/archive concerns from default top concerns when the semantic cleanup
+judge explicitly marks the same path `keep_active`. The raw cleanup/archive
+signals and complete generated-concerns artifact remain available.
+
+Semantic review display reinforcement now adds `semantic_judge.decision=review`
+evidence to matching cleanup/archive concerns and raises their display confidence
+floor to `0.76`. This keeps semantic review reinforcement visible without
+creating new concerns or changing fix-advice behavior.
+
+Semantic archive/retire display reinforcement now adds
+`semantic_judge.decision=archive_first` or
+`semantic_judge.decision=retire_now` evidence to matching cleanup/archive
+concerns and raises their display confidence floor. This only reinforces
+existing full-review cleanup/archive observations; it does not create new
+concerns or change concern identity, artifact schema, or fix-advice behavior.
+
+A follow-up dogfood run after the semantic display calibration work confirmed
+normal LLM-backed full review for `itsdangerous`, `humanize`, and
+`python-dotenv`. It also identified a remaining incremental display calibration
+question: diff/since selected-scope cleanup and archive observations for the
+same path can still occupy separate top concern slots, while full review already
+dedupes those display entries.
+
+Incremental cleanup/archive display de-dupe now applies the same same-path and
+same-category display rule to diff/since selected-scope concerns. The displayed
+portfolio keeps one representative cleanup/archive observation, while
+`summary.scoped_concern_total` and the complete generated concerns artifact
+still preserve the raw generated count and both observations.
+
+A follow-up Hippocampus dogfood run after Decisions 041-047 confirmed that diff/since scope hygiene is working: unrelated global cleanup/hotspot/topology context remains in signals/artifacts but does not fill selected-diff top concerns. The same run led to Decisions 048, 050, and 051: grouping intentional near-duplicate variant families, splitting broad mapper roles in `shadow_implementation`, and improving `fix-advice` wording for legacy/compat duplication concerns.
 
 Decision 048 records the planned `near_duplicate` variant-family grouping v1. Exact normalized AST fingerprinting remains the base signal, but same-file phase/cache/prompt-builder families should be grouped into one advisory observation or display-limited so they do not flood top concerns. Cross-file duplicates and substantive non-family duplicates remain reportable.
 

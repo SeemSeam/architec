@@ -139,6 +139,131 @@ def test_build_fix_advice_duplication_keeps_reference_role_semantics() -> None:
     assert "src/shadow_existing.py" not in rendered
 
 
+def test_build_fix_advice_duplication_uses_compatibility_option_for_legacy_location() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:near-duplicate:legacy",
+                "kind": "duplication",
+                "location": {
+                    "path": "src/prompts/legacy_project_prompts_dir.py",
+                    "line": 12,
+                    "symbol": "legacy_project_prompts_dir",
+                    "symbol_kind": "function",
+                },
+                "evidence": ["near_duplicate.fingerprint=abc"],
+                "references": [
+                    {
+                        "role": "reference",
+                        "path": "src/prompts/project.py",
+                        "line": 4,
+                        "symbol": "project_prompts_dir",
+                        "symbol_kind": "function",
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    suggestion = result["suggestions"][0]
+    rendered = json.dumps(suggestion).lower()
+    assert "compare duplicate" in rendered
+    assert "compatibility path" in rendered
+    assert "compatibility wrapper" in rendered
+    assert "legacy_project_prompts_dir" in rendered
+    assert "project_prompts_dir" in rendered
+
+
+def test_build_fix_advice_duplication_without_compatibility_signal_keeps_generic_options() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:near-duplicate:ordinary",
+                "kind": "duplication",
+                "location": {"path": "src/current.py", "line": 8, "symbol": "build_messages"},
+                "evidence": ["near_duplicate.fingerprint=abc"],
+                "references": [
+                    {
+                        "role": "reference",
+                        "path": "src/shared.py",
+                        "line": 2,
+                        "symbol": "make_messages",
+                        "symbol_kind": "function",
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    suggestion = result["suggestions"][0]
+    rendered = json.dumps(suggestion).lower()
+    assert "routing the duplicate through the reference implementation" in rendered
+    assert "compatibility path" not in rendered
+    assert "compatibility wrapper" not in rendered
+
+
+def test_build_fix_advice_duplication_uses_compatibility_option_from_evidence_only() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:near-duplicate:evidence-compat",
+                "kind": "duplication",
+                "location": {"path": "src/current.py", "line": 8, "symbol": "build_messages"},
+                "evidence": ["near_duplicate.fingerprint=abc", "near_duplicate.category=compat"],
+                "references": [
+                    {
+                        "role": "reference",
+                        "path": "src/shared.py",
+                        "line": 2,
+                        "symbol": "make_messages",
+                        "symbol_kind": "function",
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    rendered = json.dumps(result["suggestions"][0]).lower()
+    assert "compatibility path" in rendered
+    assert "compatibility wrapper" in rendered
+
+
+def test_build_fix_advice_duplication_ignores_existing_implementation_reference_for_compatibility() -> None:
+    review = {
+        "concerns": [
+            {
+                "concern_id": "code-review:near-duplicate:shadow-role-only",
+                "kind": "duplication",
+                "location": {"path": "src/legacy_current.py", "line": 8, "symbol": "legacy_current"},
+                "evidence": ["near_duplicate.fingerprint=abc"],
+                "references": [
+                    {
+                        "role": "existing_implementation",
+                        "path": "src/shared.py",
+                        "line": 2,
+                        "symbol": "make_messages",
+                        "symbol_kind": "function",
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_fix_advice(review)
+
+    suggestion = result["suggestions"][0]
+    rendered = json.dumps(suggestion).lower()
+    assert "identify the matching implementation" in rendered
+    assert "src/shared.py" not in rendered
+    assert "compatibility path" not in rendered
+
+
 def test_build_fix_advice_duplication_without_reference_stays_advisory() -> None:
     review = {
         "concerns": [

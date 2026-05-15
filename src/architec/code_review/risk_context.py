@@ -38,7 +38,7 @@ def _number(value: object) -> float | None:
 def _coverage_value(value: object) -> float | None:
     raw = value
     if isinstance(value, dict):
-        for key in ("line_rate", "coverage", "percent", "rate"):
+        for key in ("percent_covered", "line_rate", "coverage", "percent", "rate"):
             if key in value:
                 raw = value.get(key)
                 break
@@ -68,7 +68,7 @@ def _churn_value(value: object) -> int | None:
 def _complexity_value(value: object) -> float | None:
     raw = value
     if isinstance(value, dict):
-        for key in ("complexity", "cyclomatic", "score"):
+        for key in ("complexity", "cyclomatic", "average_complexity", "max_complexity", "score"):
             if key in value:
                 raw = value.get(key)
                 break
@@ -98,7 +98,7 @@ def _format_number(value: float) -> str:
 
 
 def _coverage_by_file(context: dict[str, Any]) -> dict[str, float]:
-    out: dict[str, float] = {}
+    out = _coverage_from_reports(context)
     raw = _dict(context.get("coverage_by_file"))
     for path, value in raw.items():
         normalized = _normal_path(path)
@@ -108,19 +108,67 @@ def _coverage_by_file(context: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+def _coverage_from_report(report: object) -> dict[str, float]:
+    out: dict[str, float] = {}
+    files = _dict(_dict(report).get("files"))
+    for path, value in files.items():
+        if not isinstance(value, dict):
+            continue
+        summary = _dict(value.get("summary"))
+        coverage = _coverage_value(summary)
+        normalized = _normal_path(path)
+        if normalized and coverage is not None:
+            out[normalized] = round(coverage, 4)
+    return out
+
+
+def _coverage_from_reports(context: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for report in (context, _dict(context.get("coverage_py")), _dict(context.get("coverage_report"))):
+        out.update(_coverage_from_report(report))
+    return out
+
+
 def _churn_by_file(context: dict[str, Any]) -> dict[str, int]:
     out: dict[str, int] = {}
-    raw = _dict(context.get("churn_by_file"))
+    for key in ("git_churn_by_file", "churn_report", "churn_by_file"):
+        raw = _dict(context.get(key))
+        for path, value in raw.items():
+            normalized = _normal_path(path)
+            churn = _churn_value(value)
+            if normalized and churn is not None:
+                out[normalized] = churn
+    return out
+
+
+def _complexity_from_report_value(value: object) -> float | None:
+    if isinstance(value, list):
+        complexities = [
+            complexity
+            for item in value
+            if (complexity := _complexity_value(item)) is not None
+        ]
+        if not complexities:
+            return None
+        return max(complexities)
+    return _complexity_value(value)
+
+
+def _complexity_from_report(report: object) -> dict[str, float]:
+    out: dict[str, float] = {}
+    raw = _dict(report)
     for path, value in raw.items():
         normalized = _normal_path(path)
-        churn = _churn_value(value)
-        if normalized and churn is not None:
-            out[normalized] = churn
+        complexity = _complexity_from_report_value(value)
+        if normalized and complexity is not None:
+            out[normalized] = round(complexity, 4)
     return out
 
 
 def _complexity_by_file(context: dict[str, Any]) -> dict[str, float]:
     out: dict[str, float] = {}
+    for key in ("radon_cc", "complexity_report", "radon"):
+        out.update(_complexity_from_report(context.get(key)))
     raw = _dict(context.get("complexity_by_file"))
     for path, value in raw.items():
         normalized = _normal_path(path)
@@ -182,6 +230,34 @@ def _changed_tests(context: dict[str, Any]) -> list[str]:
         seen.add(path)
         out.append(path)
     return out
+
+
+def risk_context_reinforcement_factors(context: dict[str, Any] | None, path: object) -> list[str]:
+    if context is None:
+        return []
+    normalized = _normal_path(path)
+    if not normalized:
+        return []
+    factors: list[str] = []
+    coverage = _coverage_by_file(context)
+    churn = _churn_by_file(context)
+    complexity = _complexity_by_file(context)
+    public_api = _public_api_files(context)
+    recurrence = _historical_recurrence_by_file(context)
+    tests_by_source = _test_map(context)
+    if normalized in coverage and coverage[normalized] < LOW_COVERAGE_THRESHOLD:
+        factors.append("low_coverage")
+    if normalized in churn and churn[normalized] >= HIGH_CHURN_THRESHOLD:
+        factors.append("high_churn")
+    if normalized in complexity and complexity[normalized] >= HIGH_COMPLEXITY_THRESHOLD:
+        factors.append("high_complexity")
+    if normalized in public_api:
+        factors.append("public_api")
+    if normalized in recurrence and recurrence[normalized] >= RECURRING_HISTORY_THRESHOLD:
+        factors.append("recurring_history")
+    if normalized in tests_by_source and not tests_by_source[normalized]:
+        factors.append("missing_related_tests")
+    return factors
 
 
 def load_risk_context(path: str | Path) -> dict[str, Any]:

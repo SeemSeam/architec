@@ -676,6 +676,397 @@ def test_run_code_review_full_dedupes_cleanup_archive_same_path_category_display
     assert len(artifact["concerns"]) == 2
 
 
+def test_code_review_diff_dedupes_scoped_cleanup_archive_same_path_category_display(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["docs/legacy.md"],
+            "components": [],
+        },
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.70,
+                }
+            ],
+        },
+        "archive_candidates": {
+            "candidate_total": 1,
+            "ready_total": 1,
+            "review_total": 0,
+            "top_candidates": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.95,
+                    "archive_tier": "ready",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path)
+
+    assert result["summary"]["concern_total"] == 2
+    assert result["summary"]["scoped_concern_total"] == 2
+    assert result["summary"]["global_context_concern_total"] == 0
+    assert result["summary"]["displayed_scoped_concern_total"] == 1
+    assert result["summary"]["displayed_global_context_concern_total"] == 0
+    assert result["summary"]["top_concern_total"] == 1
+    assert [item["location"]["path"] for item in result["concerns"]] == ["docs/legacy.md"]
+    assert "archive.category=stale_doc" in result["concerns"][0]["evidence"]
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert artifact["concern_total"] == 2
+    assert len(artifact["concerns"]) == 2
+
+
+def test_run_code_review_full_demotes_semantic_keep_active_stale_doc_from_display(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "docs/Makefile",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.73,
+                    "evidence": ["content:deprecated"],
+                }
+            ],
+        },
+        "archive_candidates": {
+            "candidate_total": 1,
+            "ready_total": 1,
+            "review_total": 0,
+            "top_candidates": [
+                {
+                    "path": "docs/Makefile",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.91,
+                    "review_required": True,
+                    "archive_tier": "ready",
+                }
+            ],
+        },
+        "semantic_judge": {
+            "status": "ok",
+            "candidate_pool_total": 1,
+            "reviewed_total": 1,
+            "by_decision": {"keep_active": 1},
+            "top_judgments": [
+                {
+                    "path": "docs/Makefile",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "decision": "keep_active",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 2
+    assert result["summary"]["top_concern_total"] == 0
+    assert result["concerns"] == []
+    assert {"cleanup", "archive", "semantic_judge"}.issubset(set(result["summary"]["signal_kinds"]))
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert artifact["concern_total"] == 2
+    assert [item["location"]["path"] for item in artifact["concerns"]] == [
+        "docs/Makefile",
+        "docs/Makefile",
+    ]
+
+
+def test_run_code_review_full_keeps_stale_doc_when_semantic_judge_requests_review(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.73,
+                }
+            ],
+        },
+        "semantic_judge": {
+            "status": "ok",
+            "candidate_pool_total": 1,
+            "reviewed_total": 1,
+            "by_decision": {"review": 1},
+            "judgments": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "decision": "review",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 1
+    assert result["summary"]["top_concern_total"] == 1
+    assert result["concerns"][0]["location"]["path"] == "docs/legacy.md"
+    assert result["concerns"][0]["confidence"] == 0.76
+    assert "semantic_judge.decision=review" in result["concerns"][0]["evidence"]
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert artifact["concerns"][0]["confidence"] == 0.76
+    assert "semantic_judge.decision=review" in artifact["concerns"][0]["evidence"]
+
+
+def test_run_code_review_full_reinforces_cleanup_archive_first_semantic_decision(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "src/legacy/old_service.py",
+                    "kind": "source",
+                    "category": "legacy_impl",
+                    "confidence": 0.52,
+                }
+            ],
+        },
+        "semantic_judge": {
+            "status": "ok",
+            "candidate_pool_total": 1,
+            "reviewed_total": 1,
+            "by_decision": {"archive_first": 1},
+            "top_judgments": [
+                {
+                    "path": "src/legacy/old_service.py",
+                    "kind": "source",
+                    "category": "legacy_impl",
+                    "decision": "archive_first",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    concern = result["concerns"][0]
+    assert concern["kind"] == "cleanup"
+    assert concern["confidence"] == 0.8
+    assert "cleanup.category=legacy_impl" in concern["evidence"]
+    assert "semantic_judge.decision=archive_first" in concern["evidence"]
+    artifact = json.loads(
+        (tmp_path / ".architec" / "code-review-concerns.json").read_text(encoding="utf-8")
+    )
+    assert "semantic_judge.decision=archive_first" in artifact["concerns"][0]["evidence"]
+
+
+def test_run_code_review_full_reinforces_archive_retire_now_semantic_decision(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "archive_candidates": {
+            "candidate_total": 1,
+            "ready_total": 1,
+            "review_total": 0,
+            "top_candidates": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "confidence": 0.58,
+                    "review_required": False,
+                    "archive_tier": "ready",
+                }
+            ],
+        },
+        "semantic_judge": {
+            "status": "ok",
+            "candidate_pool_total": 1,
+            "reviewed_total": 1,
+            "by_decision": {"retire_now": 1},
+            "judgments": [
+                {
+                    "path": "docs/legacy.md",
+                    "kind": "doc",
+                    "category": "stale_doc",
+                    "decision": "retire_now",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    concern = result["concerns"][0]
+    assert concern["kind"] == "cleanup"
+    assert concern["confidence"] >= 0.86
+    assert "archive.category=stale_doc" in concern["evidence"]
+    assert "semantic_judge.decision=retire_now" in concern["evidence"]
+
+
+def test_run_code_review_full_ignores_archive_retire_semantic_decision_when_status_not_ok(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "src/legacy/old_service.py",
+                    "kind": "source",
+                    "category": "legacy_impl",
+                    "confidence": 0.52,
+                }
+            ],
+        },
+        "semantic_judge": {
+            "status": "skipped",
+            "candidate_pool_total": 1,
+            "reviewed_total": 0,
+            "by_decision": {"archive_first": 1},
+            "top_judgments": [
+                {
+                    "path": "src/legacy/old_service.py",
+                    "decision": "archive_first",
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    concern = result["concerns"][0]
+    assert concern["confidence"] == 0.52
+    assert "semantic_judge.decision=archive_first" not in concern["evidence"]
+
+
+def test_run_code_review_full_does_not_boost_non_cleanup_semantic_archive_first(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "hotspots": [{"path": "src/core.py", "confidence": 0.4}],
+        "semantic_judge": {
+            "status": "ok",
+            "candidate_pool_total": 1,
+            "reviewed_total": 1,
+            "by_decision": {"archive_first": 1},
+            "judgments": [{"path": "src/core.py", "decision": "archive_first"}],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["concerns"][0]["kind"] == "hotspot"
+    assert result["concerns"][0]["confidence"] == 0.4
+    assert "semantic_judge.decision=archive_first" not in result["concerns"][0]["evidence"]
+
+
+def test_run_code_review_full_does_not_boost_non_cleanup_semantic_review(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "hotspots": [{"path": "src/core.py", "confidence": 0.4}],
+        "semantic_judge": {
+            "status": "ok",
+            "candidate_pool_total": 1,
+            "reviewed_total": 1,
+            "by_decision": {"review": 1},
+            "judgments": [{"path": "src/core.py", "decision": "review"}],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["concerns"][0]["kind"] == "hotspot"
+    assert result["concerns"][0]["confidence"] == 0.4
+    assert "semantic_judge.decision=review" not in result["concerns"][0]["evidence"]
+
+
+def test_run_code_review_full_semantic_archive_retire_output_avoids_forbidden_terms(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    report = {
+        **_empty_review_report(),
+        "cleanup": {
+            "candidate_total": 1,
+            "review_required_total": 1,
+            "top_candidates": [
+                {
+                    "path": "src/legacy/old_service.py",
+                    "kind": "source",
+                    "category": "legacy_impl",
+                    "confidence": 0.52,
+                }
+            ],
+        },
+        "semantic_judge": {
+            "status": "ok",
+            "candidate_pool_total": 1,
+            "reviewed_total": 1,
+            "by_decision": {"retire_now": 1},
+            "judgments": [{"path": "src/legacy/old_service.py", "decision": "retire_now"}],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_full(tmp_path)
+    payload = json.dumps(result, sort_keys=True)
+
+    forbidden = ("pass", "fail", "block", "verdict", "must-fix", "patch", "apply")
+    assert all(term not in payload.lower() for term in forbidden)
+
+
 def test_run_code_review_full_demotes_small_flat_topology_boundary_from_display(
     tmp_path,
     monkeypatch,
@@ -996,7 +1387,11 @@ def test_code_review_concerns_artifact_keeps_untruncated_generated_details(tmp_p
         "blast_radius": [f"src/blast{index}.py" for index in range(12)],
     }
     monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
-    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [long_concern])
+    monkeypatch.setattr(
+        code_review,
+        "near_duplicate_scan",
+        lambda *args, **kwargs: {"concerns": [long_concern], "candidate_total_before_scope": 1},
+    )
 
     result = code_review.run_code_review_full(tmp_path)
 
@@ -1009,6 +1404,302 @@ def test_code_review_concerns_artifact_keeps_untruncated_generated_details(tmp_p
     assert len(artifact_concern["evidence"]) == 20
     assert len(artifact_concern["references"]) == 5
     assert len(artifact_concern["blast_radius"]) == 12
+
+
+def test_code_review_full_writes_advisory_discovery_artifact_without_concerns(tmp_path, monkeypatch) -> None:
+    (tmp_path / "locales.py").write_text(
+        """
+def thousands_separator(locale):
+    value = locale.get("thousands")
+    if value is None:
+        return ","
+    if value == "":
+        return ","
+    return str(value)
+
+
+def decimal_separator(locale):
+    value = locale.get("decimal")
+    if value is None:
+        return "."
+    if value == "":
+        return "."
+    return str(value)
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 0
+    assert result["concerns"] == []
+    signal = next(item for item in result["signals"] if item["kind"] == "advisory_discovery")
+    assert signal["metrics"]["candidate_total"] == 1
+    assert signal["metrics"]["by_source"] == {"near_duplicate": 1}
+    assert signal["metrics"]["by_reason"] == {"paired_api_variant": 1}
+    artifact_path = Path(result["artifacts"]["code_review_discovery_json"])
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact["summary"]["candidate_total"] == 1
+    assert artifact["candidates"][0]["source"] == "near_duplicate"
+    assert artifact["candidates"][0]["reason"] == "paired_api_variant"
+    concerns_artifact = json.loads(
+        Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8")
+    )
+    assert concerns_artifact["concern_total"] == 0
+
+
+def test_code_review_full_advisory_discovery_includes_module_shadow_dry_run(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+    monkeypatch.setattr(code_review, "near_duplicate_scan", lambda *args, **kwargs: {"concerns": []})
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        code_review,
+        "shadow_implementation_file_dry_run",
+        lambda *args, **kwargs: {
+            "mode": "dry_run",
+            "candidate_total": 2,
+            "pair_total": 1,
+            "reported_total": 1,
+            "candidates": [
+                {
+                    "left": {"path": "src/new_policy.py"},
+                    "right": {"path": "src/existing_policy.py"},
+                    "metrics": {"ast_similarity": 0.91},
+                }
+            ],
+            "excluded_total": 0,
+            "by_exclusion": {},
+        },
+    )
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert result["summary"]["concern_total"] == 0
+    signal = next(item for item in result["signals"] if item["kind"] == "advisory_discovery")
+    assert signal["metrics"]["candidate_total"] == 1
+    assert signal["metrics"]["by_source"] == {"shadow_implementation_file_dry_run": 1}
+    assert signal["metrics"]["by_reason"] == {"module_shadow_candidate": 1}
+    artifact = json.loads(
+        Path(result["artifacts"]["code_review_discovery_json"]).read_text(encoding="utf-8")
+    )
+    assert artifact["candidates"][0]["source"] == "shadow_implementation_file_dry_run"
+    assert artifact["candidates"][0]["reason"] == "module_shadow_candidate"
+
+
+def test_code_review_full_reuses_near_duplicate_scan_for_discovery(tmp_path, monkeypatch) -> None:
+    calls = {"count": 0}
+
+    def fake_scan(*args, **kwargs):
+        calls["count"] += 1
+        return {
+            "concerns": [],
+            "candidate_total_before_scope": 1,
+            "discovery": {
+                "candidate_total": 1,
+                "reported_total": 1,
+                "by_reason": {"thin_wrapper_different_target": 1},
+                "candidates": [
+                    {
+                        "source": "near_duplicate",
+                        "reason": "thin_wrapper_different_target",
+                        "location": {"path": "src/api.py", "symbol": "build_tree"},
+                        "reference": {"path": "src/api.py", "symbol": "extract_signatures"},
+                        "facts": ["near_duplicate.fingerprint=abc"],
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+    monkeypatch.setattr(code_review, "near_duplicate_scan", fake_scan)
+    monkeypatch.setattr(
+        code_review,
+        "shadow_implementation_file_dry_run",
+        lambda *args, **kwargs: {"candidates": []},
+    )
+
+    result = code_review.run_code_review_full(tmp_path)
+
+    assert calls["count"] == 1
+    signal = next(item for item in result["signals"] if item["kind"] == "advisory_discovery")
+    assert signal["metrics"]["by_reason"] == {"thin_wrapper_different_target": 1}
+
+
+def test_code_review_full_promotes_risk_reinforced_thin_wrapper_discovery(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    risk_path = tmp_path / "risk.json"
+    risk_path.write_text(
+        json.dumps({"public_api_files": ["src/api.py"]}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+    monkeypatch.setattr(
+        code_review,
+        "near_duplicate_scan",
+        lambda *args, **kwargs: {
+            "concerns": [],
+            "candidate_total_before_scope": 1,
+            "discovery": {
+                "candidate_total": 1,
+                "reported_total": 1,
+                "by_reason": {"thin_wrapper_different_target": 1},
+                "candidates": [
+                    {
+                        "source": "near_duplicate",
+                        "reason": "thin_wrapper_different_target",
+                        "location": {
+                            "path": "src/api.py",
+                            "line": 4,
+                            "symbol": "build_tree",
+                            "symbol_kind": "function",
+                        },
+                        "reference": {
+                            "path": "src/api.py",
+                            "line": 12,
+                            "symbol": "extract_signatures",
+                            "symbol_kind": "function",
+                        },
+                        "facts": ["near_duplicate.fingerprint=abc"],
+                    }
+                ],
+            },
+        },
+    )
+    monkeypatch.setattr(
+        code_review,
+        "shadow_implementation_file_dry_run",
+        lambda *args, **kwargs: {"candidates": []},
+    )
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    assert result["summary"]["concern_total"] == 1
+    assert result["summary"]["top_concern_total"] == 1
+    concern = result["concerns"][0]
+    assert concern["kind"] == "duplication"
+    assert concern["level"] == "info"
+    assert concern["location"]["path"] == "src/api.py"
+    assert "advisory_discovery.reason=thin_wrapper_different_target" in concern["evidence"]
+    assert "advisory_discovery.promoted_by=risk_context" in concern["evidence"]
+    assert "advisory_discovery.reinforcement=public_api" in concern["evidence"]
+    assert "risk_context.public_api=true" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "advisory_discovery")
+    assert signal["metrics"]["candidate_total"] == 1
+    assert signal["metrics"]["promoted_total"] == 1
+    discovery_artifact = json.loads(
+        Path(result["artifacts"]["code_review_discovery_json"]).read_text(encoding="utf-8")
+    )
+    assert discovery_artifact["summary"]["promoted_total"] == 1
+    assert discovery_artifact["candidates"][0]["promoted"] is True
+    concerns_artifact = json.loads(
+        Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8")
+    )
+    assert concerns_artifact["concern_total"] == 1
+    assert "risk_context.public_api=true" in concerns_artifact["concerns"][0]["evidence"]
+
+
+def test_code_review_full_does_not_promote_paired_api_discovery_with_risk_context(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    risk_path = tmp_path / "risk.json"
+    risk_path.write_text(
+        json.dumps({"public_api_files": ["src/api.py"]}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+    monkeypatch.setattr(
+        code_review,
+        "near_duplicate_scan",
+        lambda *args, **kwargs: {
+            "concerns": [],
+            "candidate_total_before_scope": 1,
+            "discovery": {
+                "candidate_total": 1,
+                "reported_total": 1,
+                "by_reason": {"paired_api_variant": 1},
+                "candidates": [
+                    {
+                        "source": "near_duplicate",
+                        "reason": "paired_api_variant",
+                        "location": {"path": "src/api.py", "symbol": "post"},
+                        "reference": {"path": "src/api.py", "symbol": "dev"},
+                        "facts": ["near_duplicate.fingerprint=abc"],
+                    }
+                ],
+            },
+        },
+    )
+    monkeypatch.setattr(
+        code_review,
+        "shadow_implementation_file_dry_run",
+        lambda *args, **kwargs: {"candidates": []},
+    )
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    assert result["summary"]["concern_total"] == 0
+    assert result["concerns"] == []
+    signal = next(item for item in result["signals"] if item["kind"] == "advisory_discovery")
+    assert signal["metrics"]["candidate_total"] == 1
+    assert signal["metrics"]["promoted_total"] == 0
+    artifact = json.loads(
+        Path(result["artifacts"]["code_review_discovery_json"]).read_text(encoding="utf-8")
+    )
+    assert artifact["summary"]["promoted_total"] == 0
+    assert "promoted" not in artifact["candidates"][0]
+
+
+def test_run_code_review_static_full_uses_deterministic_signals_without_analysis(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "near_duplicate_scan",
+        lambda *args, **kwargs: {
+            "concerns": [],
+            "candidate_total_before_scope": 1,
+            "discovery": {
+                "candidate_total": 1,
+                "reported_total": 1,
+                "by_reason": {"paired_api_variant": 1},
+                "candidates": [
+                    {
+                        "source": "near_duplicate",
+                        "reason": "paired_api_variant",
+                        "location": {"path": "src/api.py", "symbol": "post"},
+                        "reference": {"path": "src/api.py", "symbol": "dev"},
+                        "facts": ["near_duplicate.fingerprint=abc"],
+                    }
+                ],
+            },
+        },
+    )
+    monkeypatch.setattr(code_review, "shadow_implementation_scan", lambda *args, **kwargs: {"concerns": []})
+    monkeypatch.setattr(
+        code_review,
+        "shadow_implementation_file_dry_run",
+        lambda *args, **kwargs: {"candidates": []},
+    )
+
+    result = code_review.run_code_review_static_full(tmp_path, reason="backend unavailable")
+
+    assert result["mode"] == "code_review"
+    assert result["review_type"] == "full"
+    assert result["summary"]["headline"] == "Full analysis was unavailable; static code-review signals were generated."
+    assert result["summary"]["analysis_mode"] == "static"
+    assert result["summary"]["reason"] == "backend unavailable"
+    assert result["summary"]["concern_total"] == 0
+    assert result["artifacts"]["code_review_analysis_mode"] == "static"
+    assert result["artifacts"]["code_review_static_reason"] == "backend unavailable"
+    signal = next(item for item in result["signals"] if item["kind"] == "advisory_discovery")
+    assert signal["metrics"]["by_reason"] == {"paired_api_variant": 1}
+    assert "code_review_discovery_json" in result["artifacts"]
 
 
 def test_code_review_concerns_artifact_write_os_error_is_fail_open(tmp_path, monkeypatch) -> None:
@@ -1190,34 +1881,37 @@ def test_code_review_full_adds_near_duplicate_signal_and_concern(tmp_path, monke
     monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
     monkeypatch.setattr(
         code_review,
-        "near_duplicate_concerns",
-        lambda root: [
-            {
-                "concern_id": "code-review:near-duplicate:1",
-                "kind": "duplication",
-                "level": "caution",
-                "confidence": 0.9,
-                "location": {
-                    "path": "src/b.py",
-                    "line": 2,
-                    "symbol": "second",
-                    "symbol_kind": "function",
-                },
-                "root_cause": "Function has the same normalized AST fingerprint as another function.",
-                "evidence": ["near_duplicate.fingerprint=abc", "near_duplicate.reference=src/a.py:2:first"],
-                "references": [
-                    {
-                        "role": "reference",
-                        "path": "src/a.py",
+        "near_duplicate_scan",
+        lambda *args, **kwargs: {
+            "concerns": [
+                {
+                    "concern_id": "code-review:near-duplicate:1",
+                    "kind": "duplication",
+                    "level": "caution",
+                    "confidence": 0.9,
+                    "location": {
+                        "path": "src/b.py",
                         "line": 2,
-                        "symbol": "first",
+                        "symbol": "second",
                         "symbol_kind": "function",
-                    }
-                ],
-                "blast_radius": ["src/b.py", "src/a.py"],
-                "next_steps_hint": "Review whether one implementation can reuse or call the other.",
-            }
-        ],
+                    },
+                    "root_cause": "Function has the same normalized AST fingerprint as another function.",
+                    "evidence": ["near_duplicate.fingerprint=abc", "near_duplicate.reference=src/a.py:2:first"],
+                    "references": [
+                        {
+                            "role": "reference",
+                            "path": "src/a.py",
+                            "line": 2,
+                            "symbol": "first",
+                            "symbol_kind": "function",
+                        }
+                    ],
+                    "blast_radius": ["src/b.py", "src/a.py"],
+                    "next_steps_hint": "Review whether one implementation can reuse or call the other.",
+                }
+            ],
+            "candidate_total_before_scope": 1,
+        },
     )
 
     result = code_review.run_code_review_full(tmp_path)
@@ -1473,6 +2167,10 @@ def test_code_review_diff_adds_plan_diff_consistency_concerns(tmp_path, monkeypa
         "public_api_migration_total": 0,
         "observed_public_api_migration_total": 0,
         "missing_public_api_migration_total": 0,
+        "semantic_intent_total": 0,
+        "observed_semantic_intent_total": 0,
+        "missing_semantic_intent_total": 0,
+        "conflicting_semantic_intent_total": 0,
         "changed_file_total": 2,
         "concern_total": 2,
         "concern_total_before_limit": 2,
@@ -1525,6 +2223,10 @@ def test_code_review_diff_with_plan_and_empty_diff_reports_missing_planned_path(
         "public_api_migration_total": 0,
         "observed_public_api_migration_total": 0,
         "missing_public_api_migration_total": 0,
+        "semantic_intent_total": 0,
+        "observed_semantic_intent_total": 0,
+        "missing_semantic_intent_total": 0,
+        "conflicting_semantic_intent_total": 0,
         "changed_file_total": 0,
         "concern_total": 1,
         "concern_total_before_limit": 1,
@@ -2157,6 +2859,272 @@ def test_code_review_diff_ignores_string_public_api_migrations(tmp_path, monkeyp
     assert result["signals"] == []
 
 
+def test_code_review_diff_adds_missing_semantic_intent_terms_concern(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "src" / "api"
+    source.mkdir(parents=True)
+    (source / "handler.py").write_text(
+        "def handle(request):\n    return {'status': 'accepted'}\n",
+        encoding="utf-8",
+    )
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py"}],
+                    "intent_checks": [
+                        {
+                            "label": "auth boundary",
+                            "source_glob": "src/api/**",
+                            "required_terms": ["authorize", "audit"],
+                        }
+                    ],
+                },
+                "plan_fingerprint": "semantic-missing",
+                "artifacts": {"plan_path": "plans/auth.md"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(
+        item
+        for item in result["concerns"]
+        if "plan_diff_consistency.observation=planned_intent_terms_not_observed" in item["evidence"]
+    )
+    assert concern["kind"] == "plan-diff-consistency"
+    assert concern["location"]["path"] == "src/api/handler.py"
+    assert "plan_diff_consistency.intent_label=auth boundary" in concern["evidence"]
+    assert "plan_diff_consistency.intent_source=src/api/**" in concern["evidence"]
+    assert "plan_diff_consistency.required_term_total=2" in concern["evidence"]
+    assert "plan_diff_consistency.required_terms=audit,authorize" in concern["evidence"]
+    assert "plan_diff_consistency.missing_required_terms=audit,authorize" in concern["evidence"]
+    assert "plan_diff_consistency.scoped_changed_file_total=1" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["semantic_intent_total"] == 1
+    assert signal["metrics"]["observed_semantic_intent_total"] == 0
+    assert signal["metrics"]["missing_semantic_intent_total"] == 1
+    assert signal["metrics"]["conflicting_semantic_intent_total"] == 0
+
+
+def test_code_review_diff_observes_semantic_intent_any_of_terms(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "src" / "service"
+    source.mkdir(parents=True)
+    (source / "model.py").write_text(
+        "def update_model(record):\n    return {'migration_status': 'ready'}\n",
+        encoding="utf-8",
+    )
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/service/model.py"}],
+                    "semantic_intents": [
+                        {
+                            "source": "src/service/**",
+                            "any_of_terms": ["migration_status", "migration state"],
+                        }
+                    ],
+                },
+                "plan_fingerprint": "semantic-observed",
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/service/model.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    encoded = json.dumps(result, sort_keys=True)
+    assert "planned_intent_terms_not_observed" not in encoded
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["semantic_intent_total"] == 1
+    assert signal["metrics"]["observed_semantic_intent_total"] == 1
+    assert signal["metrics"]["missing_semantic_intent_total"] == 0
+    assert signal["metrics"]["conflicting_semantic_intent_total"] == 0
+
+
+def test_code_review_diff_adds_semantic_intent_conflict_concern(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "src" / "api"
+    source.mkdir(parents=True)
+    (source / "handler.py").write_text(
+        "def handle(request):\n    return {'deprecated_mode': True}\n",
+        encoding="utf-8",
+    )
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py"}],
+                    "intent_checks": [
+                        {
+                            "source": "src/api/**",
+                            "must_not_include": ["deprecated_mode"],
+                            "reason": "new handler should avoid deprecated mode",
+                        }
+                    ],
+                },
+                "plan_fingerprint": "semantic-conflict",
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    concern = next(
+        item
+        for item in result["concerns"]
+        if "plan_diff_consistency.observation=planned_intent_conflict_observed" in item["evidence"]
+    )
+    assert concern["location"]["path"] == "src/api/handler.py"
+    assert "plan_diff_consistency.intent_label=new handler should avoid deprecated mode" in concern["evidence"]
+    assert "plan_diff_consistency.forbidden_term_total=1" in concern["evidence"]
+    assert "plan_diff_consistency.forbidden_terms=deprecated_mode" in concern["evidence"]
+    assert "plan_diff_consistency.observed_forbidden_terms=deprecated_mode" in concern["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["semantic_intent_total"] == 1
+    assert signal["metrics"]["conflicting_semantic_intent_total"] == 1
+
+
+def test_code_review_diff_ignores_string_semantic_intent_entries(tmp_path, monkeypatch) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "intent_checks": ["must include authorization"],
+                    "semantic_intents": ["avoid deprecated mode"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    assert result["signals"] == []
+    assert result["concerns"] == []
+
+
+def test_code_review_diff_semantic_intent_without_readable_scoped_file_has_metrics_only(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/missing.py"}],
+                    "intent_checks": [
+                        {
+                            "for_path": "src/api/**",
+                            "must_include": ["authorize"],
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/missing.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    result = code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review)
+
+    assert result["concerns"] == []
+    signal = next(item for item in result["signals"] if item["kind"] == "plan_diff_consistency")
+    assert signal["metrics"]["semantic_intent_total"] == 1
+    assert signal["metrics"]["observed_semantic_intent_total"] == 0
+    assert signal["metrics"]["missing_semantic_intent_total"] == 0
+    assert signal["metrics"]["conflicting_semantic_intent_total"] == 0
+
+
+def test_code_review_diff_semantic_intent_output_avoids_execution_and_gate_terms(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "src" / "api"
+    source.mkdir(parents=True)
+    (source / "handler.py").write_text("def handle():\n    return 'current'\n", encoding="utf-8")
+    plan_review = tmp_path / "plan-review.json"
+    plan_review.write_text(
+        json.dumps(
+            {
+                "mode": "plan_review",
+                "understood_plan": {
+                    "changes": [{"path": "src/api/handler.py"}],
+                    "intent_checks": [{"source": "src/api/**", "all_of": ["authorize"]}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        **_empty_review_report(),
+        "change_analysis": {
+            "changed_file_total": 1,
+            "changed_files": ["src/api/handler.py"],
+            "components": [],
+        },
+    }
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: report)
+
+    payload = json.dumps(code_review.run_code_review_diff(tmp_path, plan_review_path=plan_review), sort_keys=True).lower()
+
+    for term in ("pass", "fail", "block", "verdict", "must-fix", "patch", "apply"):
+        assert term not in payload
+
+
 def test_code_review_since_plan_review_bad_ref_does_not_read_plan(tmp_path, monkeypatch) -> None:
     def raise_bad_ref(*args, **kwargs):
         raise RuntimeError("git range error while running `git diff --numstat missing...HEAD`: fatal: bad revision")
@@ -2331,6 +3299,207 @@ def test_code_review_risk_context_public_api_files_list_form(tmp_path, monkeypat
     assert signal["metrics"]["input_file_total"] == 2
     assert signal["metrics"]["public_api_file_total"] == 2
     assert signal["metrics"]["by_factor"] == {"public_api": 1}
+
+
+def test_code_review_risk_context_accepts_coverage_py_top_level_files(tmp_path, monkeypatch) -> None:
+    risk_path = tmp_path / "coverage.json"
+    risk_path.write_text(
+        json.dumps(
+            {
+                "files": {
+                    "src/legacy/old_service.py": {
+                        "summary": {"percent_covered": 42.5},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    artifact = json.loads(Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8"))
+    enriched = [
+        concern
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] == "src/legacy/old_service.py"
+        and "risk_context.coverage=0.42" in concern["evidence"]
+    ]
+    assert enriched
+    assert all("risk_context.coverage_level=low" in concern["evidence"] for concern in enriched)
+    signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
+    assert signal["metrics"]["coverage_file_total"] == 1
+    assert signal["metrics"]["by_factor"]["low_coverage"] == 2
+
+
+def test_code_review_risk_context_nested_coverage_py_explicit_coverage_overrides(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    risk_path = tmp_path / "coverage.json"
+    risk_path.write_text(
+        json.dumps(
+            {
+                "coverage_py": {
+                    "files": {
+                        "src/legacy/old_service.py": {
+                            "summary": {"percent_covered": 20},
+                        }
+                    }
+                },
+                "coverage_by_file": {"src/legacy/old_service.py": {"coverage": 0.85}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    artifact = json.loads(Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8"))
+    enriched = [
+        concern
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] == "src/legacy/old_service.py"
+    ]
+    assert enriched
+    assert all("risk_context.coverage=0.85" in concern["evidence"] for concern in enriched)
+    assert all("risk_context.coverage=0.20" not in concern["evidence"] for concern in enriched)
+    assert all("risk_context.coverage_level=low" not in concern["evidence"] for concern in enriched)
+
+
+def test_code_review_risk_context_radon_list_complexity_uses_max_block(tmp_path, monkeypatch) -> None:
+    risk_path = tmp_path / "radon.json"
+    risk_path.write_text(
+        json.dumps(
+            {
+                "radon_cc": {
+                    "src/legacy/old_service.py": [
+                        {"name": "small", "complexity": 5},
+                        {"name": "large", "complexity": 19},
+                    ],
+                    "docs/legacy.md": {"average_complexity": 4},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    artifact = json.loads(Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8"))
+    service = next(
+        concern
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] == "src/legacy/old_service.py"
+    )
+    doc = next(concern for concern in artifact["concerns"] if concern["location"]["path"] == "docs/legacy.md")
+    assert "risk_context.complexity=19" in service["evidence"]
+    assert "risk_context.complexity_level=high" in service["evidence"]
+    assert "risk_context.complexity=4" in doc["evidence"]
+    assert "risk_context.complexity_level=high" not in doc["evidence"]
+    signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
+    assert signal["metrics"]["complexity_file_total"] == 2
+    assert signal["metrics"]["by_factor"]["high_complexity"] == 2
+
+
+def test_code_review_risk_context_churn_aliases_and_explicit_churn_override(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    risk_path = tmp_path / "churn.json"
+    risk_path.write_text(
+        json.dumps(
+            {
+                "git_churn_by_file": {"src/legacy/old_service.py": {"count": 4}},
+                "churn_report": {"src/legacy/old_service.py": {"changes": 7}},
+                "churn_by_file": {"src/legacy/old_service.py": {"churn": 12}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    artifact = json.loads(Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8"))
+    enriched = [
+        concern
+        for concern in artifact["concerns"]
+        if concern["location"]["path"] == "src/legacy/old_service.py"
+    ]
+    assert enriched
+    assert all("risk_context.churn=12" in concern["evidence"] for concern in enriched)
+    assert all("risk_context.churn=7" not in concern["evidence"] for concern in enriched)
+    assert all("risk_context.churn_level=high" in concern["evidence"] for concern in enriched)
+    signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
+    assert signal["metrics"]["churn_file_total"] == 1
+    assert signal["metrics"]["by_factor"]["high_churn"] == 2
+
+
+def test_code_review_risk_context_ignores_unsupported_report_shapes(tmp_path, monkeypatch) -> None:
+    risk_path = tmp_path / "risk.json"
+    risk_path.write_text(
+        json.dumps(
+            {
+                "coverage_report": {"files": {"src/legacy/old_service.py": {"summary": {"ignored": "x"}}}},
+                "radon_cc": {"src/legacy/old_service.py": [{"rank": "A"}]},
+                "churn_report": ["src/legacy/old_service.py"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _analysis_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    artifact = json.loads(Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8"))
+    assert all(
+        "risk_context." not in fact
+        for concern in artifact["concerns"]
+        for fact in concern["evidence"]
+    )
+    signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
+    assert signal["metrics"]["input_file_total"] == 0
+    assert signal["metrics"]["enriched_concern_total"] == 0
+    assert signal["metrics"]["by_factor"] == {}
+
+
+def test_code_review_risk_context_does_not_create_concerns_by_itself(tmp_path, monkeypatch) -> None:
+    risk_path = tmp_path / "risk.json"
+    risk_path.write_text(
+        json.dumps(
+            {
+                "files": {
+                    "src/only_in_risk.py": {
+                        "summary": {"percent_covered": 10},
+                    }
+                },
+                "radon_cc": {"src/only_in_risk.py": [{"complexity": 30}]},
+                "git_churn_by_file": {"src/only_in_risk.py": 99},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: _empty_review_report())
+    monkeypatch.setattr(code_review, "near_duplicate_concerns", lambda root: [])
+
+    result = code_review.run_code_review_full(tmp_path, risk_context_path=risk_path)
+
+    assert result["summary"]["concern_total"] == 0
+    assert result["concerns"] == []
+    artifact = json.loads(Path(result["artifacts"]["code_review_concerns_json"]).read_text(encoding="utf-8"))
+    assert artifact["concerns"] == []
+    signal = next(item for item in result["signals"] if item["kind"] == "risk_context")
+    assert signal["metrics"]["input_file_total"] == 1
+    assert signal["metrics"]["enriched_concern_total"] == 0
 
 
 def test_code_review_without_risk_context_has_no_risk_signal(tmp_path, monkeypatch) -> None:

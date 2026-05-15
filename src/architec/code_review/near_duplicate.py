@@ -21,6 +21,8 @@ SKIP_DIRS = {
     ".tox",
     ".venv",
     "__pycache__",
+    "benchmark",
+    "benchmarks",
     "build",
     "coverage",
     "dist",
@@ -43,6 +45,27 @@ SKIP_DIRS = {
     "venv",
     "vendor",
 }
+
+PAIRED_API_VARIANT_NAMES = {
+    frozenset({"__and__", "__or__"}),
+    frozenset({"dev", "post"}),
+    frozenset({"decimal_separator", "thousands_separator"}),
+}
+PAIRED_API_VARIANT_TOKEN_NAMES = {
+    frozenset({"decimal", "thousands"}),
+    frozenset({"dev", "post"}),
+}
+MEMBER_VARIANT_TOKENS = {
+    "base",
+    "binary",
+    "lower",
+    "sdist",
+    "set",
+    "source",
+    "upper",
+    "wheel",
+}
+VERSION_SEGMENT_MEMBER_NAMES = {"major", "minor", "micro"}
 
 
 @dataclass(frozen=True)
@@ -212,14 +235,45 @@ def _candidate_key(item: _FunctionFingerprint) -> tuple[str, int, str]:
     return (item.path, item.line, item.symbol)
 
 
-def _symbol_tokens(symbol: str) -> list[str]:
-    leaf = symbol.rsplit(".", 1)[-1]
-    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", leaf)
+def _name_tokens(name: str) -> list[str]:
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)
     spaced = re.sub(r"[^A-Za-z0-9]+", " ", spaced)
     return [token.lower() for token in spaced.split() if token]
 
 
+def _symbol_tokens(symbol: str) -> list[str]:
+    return _name_tokens(symbol.rsplit(".", 1)[-1])
+
+
+def _symbol_parent(symbol: str) -> str:
+    return symbol.rsplit(".", 1)[0] if "." in symbol else ""
+
+
+def _symbol_leaf(symbol: str) -> str:
+    return symbol.rsplit(".", 1)[-1]
+
+
+def _member_variant_family_key(symbol: str) -> str:
+    parent = _symbol_parent(symbol)
+    if not parent:
+        return ""
+    parent_tokens = _name_tokens(_symbol_leaf(parent))
+    leaf_tokens = _symbol_tokens(symbol)
+    if not parent_tokens or not leaf_tokens:
+        return ""
+    parent_family = [token for token in parent_tokens if token not in MEMBER_VARIANT_TOKENS]
+    if not parent_family:
+        return ""
+    leaf = _symbol_leaf(symbol)
+    if leaf in VERSION_SEGMENT_MEMBER_NAMES:
+        return " ".join([*parent_family, "version", "segment"])
+    return " ".join([*parent_family, *leaf_tokens])
+
+
 def _variant_family_key(symbol: str) -> str:
+    member_key = _member_variant_family_key(symbol)
+    if member_key:
+        return member_key
     tokens = _symbol_tokens(symbol)
     if len(tokens) < 2:
         return ""
@@ -364,6 +418,35 @@ def _build_variant_family_concern(
     }
 
 
+def _discovery_candidate(
+    *,
+    reason: str,
+    duplicate: _FunctionFingerprint,
+    reference: _FunctionFingerprint,
+    fingerprint: str,
+) -> dict[str, Any]:
+    return {
+        "source": "near_duplicate",
+        "reason": reason,
+        "location": {
+            "path": duplicate.path,
+            "line": duplicate.line,
+            "symbol": duplicate.symbol,
+            "symbol_kind": "function",
+        },
+        "reference": {
+            "path": reference.path,
+            "line": reference.line,
+            "symbol": reference.symbol,
+            "symbol_kind": "function",
+        },
+        "facts": [
+            f"near_duplicate.fingerprint={fingerprint}",
+            f"near_duplicate.node_count={duplicate.node_count}",
+        ],
+    }
+
+
 def _normalized_changed_files(changed_files: Iterable[str] | None) -> frozenset[str] | None:
     if changed_files is None:
         return None
@@ -394,6 +477,31 @@ def _is_thin_wrapper_pair(
         and reference.thin_wrapper_call
         and duplicate.thin_wrapper_call != reference.thin_wrapper_call
     )
+
+
+def _is_paired_api_variant_pair(
+    duplicate: _FunctionFingerprint,
+    reference: _FunctionFingerprint,
+) -> bool:
+    if duplicate.path != reference.path:
+        return False
+    if _symbol_parent(duplicate.symbol) != _symbol_parent(reference.symbol):
+        return False
+    left_leaf = _symbol_leaf(duplicate.symbol)
+    right_leaf = _symbol_leaf(reference.symbol)
+    pair = frozenset({left_leaf, right_leaf})
+    if pair in PAIRED_API_VARIANT_NAMES:
+        return True
+    left_tokens = _symbol_tokens(left_leaf)
+    right_tokens = _symbol_tokens(right_leaf)
+    if len(left_tokens) != len(right_tokens) or len(left_tokens) < 2:
+        return False
+    changed = [
+        frozenset({left, right})
+        for left, right in zip(left_tokens, right_tokens)
+        if left != right
+    ]
+    return len(changed) == 1 and changed[0] in PAIRED_API_VARIANT_TOKEN_NAMES
 
 
 def _variant_family_representative_pair(
@@ -444,6 +552,7 @@ def near_duplicate_scan(
     project_root: str | Path,
     *,
     limit: int = 20,
+    discovery_limit: int = 20,
     changed_files: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root)
@@ -454,7 +563,34 @@ def near_duplicate_scan(
             by_fingerprint.setdefault(item.fingerprint, []).append(item)
 
     concerns: list[dict[str, Any]] = []
+    discovery_candidates: list[dict[str, Any]] = []
+    discovery_by_reason: dict[str, int] = {}
+    discovery_seen: set[tuple[str, tuple[str, int, str], tuple[str, int, str]]] = set()
     candidate_total_before_scope = 0
+
+    def add_discovery(
+        reason: str,
+        duplicate: _FunctionFingerprint,
+        reference: _FunctionFingerprint,
+        fingerprint: str,
+    ) -> None:
+        pair_key = tuple(sorted([_candidate_key(duplicate), _candidate_key(reference)]))
+        seen_key = (reason, pair_key[0], pair_key[1])
+        if seen_key in discovery_seen:
+            return
+        discovery_seen.add(seen_key)
+        discovery_by_reason[reason] = discovery_by_reason.get(reason, 0) + 1
+        if len(discovery_candidates) >= discovery_limit:
+            return
+        discovery_candidates.append(
+            _discovery_candidate(
+                reason=reason,
+                duplicate=duplicate,
+                reference=reference,
+                fingerprint=fingerprint,
+            )
+        )
+
     for fingerprint, items in sorted(by_fingerprint.items()):
         if len(items) < 2:
             continue
@@ -468,6 +604,8 @@ def near_duplicate_scan(
                 continue
             concern = _build_variant_family_concern(members, fingerprint, family_key)
             if not concern:
+                reference = _reference_for_scoped_candidate(members[0], members)
+                add_discovery("variant_family_thin_wrapper_different_target", members[0], reference, fingerprint)
                 continue
             concerns.append(concern)
             grouped_member_keys.update(_candidate_keys(members))
@@ -486,13 +624,24 @@ def near_duplicate_scan(
                 continue
             if _candidate_key(duplicate) in grouped_member_keys:
                 continue
+            if _is_paired_api_variant_pair(duplicate, reference):
+                add_discovery("paired_api_variant", duplicate, reference, fingerprint)
+                continue
             if _is_thin_wrapper_pair(duplicate, reference):
+                add_discovery("thin_wrapper_different_target", duplicate, reference, fingerprint)
                 continue
             concerns.append(_build_concern(duplicate, reference, fingerprint))
     result: dict[str, Any] = {
         "concerns": concerns[:limit],
         "candidate_total_before_scope": candidate_total_before_scope,
     }
+    if discovery_by_reason:
+        result["discovery"] = {
+            "candidate_total": sum(discovery_by_reason.values()),
+            "reported_total": len(discovery_candidates),
+            "by_reason": dict(sorted(discovery_by_reason.items())),
+            "candidates": discovery_candidates,
+        }
     if changed_scope is not None:
         result["scoped_to_changed_files"] = True
         result["changed_file_total"] = len(changed_scope)

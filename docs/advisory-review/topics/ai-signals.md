@@ -4,14 +4,16 @@
 
 当前审查能力短板见 [review-shortcomings.md](review-shortcomings.md)。历史、测试、依赖和运行时信号见 [external-signals.md](external-signals.md)。
 
+[Decision 055](../decisions/055-advisory-recall-discovery-lane.md) 补充了 recall 校准原则：默认 top-level AI drift concerns 继续高精度；较低置信但值得人工复核的候选可以进入 artifact 或 signal discovery lane，用于 dogfood 和校准，而不是直接挤入 `concerns[]`。V1 见 [Decision 056](../decisions/056-advisory-discovery-lane-v1.md)，当前覆盖 suppressed `near_duplicate` candidates 和 module-level shadow dry-run candidates。
+
 ## 第一批信号
 
 - `near_duplicate`：AST 或 token 指纹命中的近重复函数、类或文件。
 - `shadow_implementation`：新增代码与已有能力高度相似，但没有复用既有入口。
 
-`near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：检测 Python 函数/方法的规范化 AST 重复，优先低误报。diff/since changed-file scope 见 [decisions/026-near-duplicate-diff-since-scope.md](../decisions/026-near-duplicate-diff-since-scope.md)。thin wrapper/facade boilerplate 抑制见 [decisions/042-near-duplicate-thin-wrapper-suppression.md](../decisions/042-near-duplicate-thin-wrapper-suppression.md)：委托目标不同的薄 wrapper 不作为高价值重复实现输出。variant-family grouping 见 [decisions/048-near-duplicate-variant-family-grouping.md](../decisions/048-near-duplicate-variant-family-grouping.md)：same-file phase/cache/prompt-builder exact duplicates 可以分组或展示限流，避免 intentional variant family 淹没 top concerns；cross-file duplicates 和实质重复逻辑仍可报告。
+`near_duplicate` v1 的范围见 [decisions/012-near-duplicate-v1-scope.md](../decisions/012-near-duplicate-v1-scope.md)：检测 Python 函数/方法的规范化 AST 重复，优先低误报。diff/since changed-file scope 见 [decisions/026-near-duplicate-diff-since-scope.md](../decisions/026-near-duplicate-diff-since-scope.md)。thin wrapper/facade boilerplate 抑制见 [decisions/042-near-duplicate-thin-wrapper-suppression.md](../decisions/042-near-duplicate-thin-wrapper-suppression.md)：委托目标不同的薄 wrapper 不作为高价值重复实现输出。variant-family grouping 见 [decisions/048-near-duplicate-variant-family-grouping.md](../decisions/048-near-duplicate-variant-family-grouping.md)：same-file phase/cache/prompt-builder exact duplicates 可以分组或展示限流，避免 intentional variant family 淹没 top concerns；cross-file duplicates 和实质重复逻辑仍可报告。Mature-library calibration 见 [decisions/054-ai-drift-mature-library-calibration.md](../decisions/054-ai-drift-mature-library-calibration.md)：同文件 explicit paired API variants（`__and__` / `__or__`、`post` / `dev`、`thousands_separator` / `decimal_separator`）的 exact fingerprint 重复会被保守抑制。Member variant-family grouping 见 [decisions/059-near-duplicate-member-variant-families.md](../decisions/059-near-duplicate-member-variant-families.md)：同文件 class/member API families 会收敛为 grouped duplication observations，prefixed paired API variants 进入 discovery lane。
 
-`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。role taxonomy precision 见 [decisions/043-shadow-implementation-role-taxonomy.md](../decisions/043-shadow-implementation-role-taxonomy.md)。file-level dry-run calibration 见 [decisions/031-shadow-implementation-file-dry-run.md](../decisions/031-shadow-implementation-file-dry-run.md)。当前公开检测 Python 函数和类级跨文件相似实现，优先高精度。
+`shadow_implementation` v1 的函数级范围见 [decisions/022-shadow-implementation-v1-scope.md](../decisions/022-shadow-implementation-v1-scope.md)。class-level v1 见 [decisions/023-shadow-implementation-class-v1.md](../decisions/023-shadow-implementation-class-v1.md)。diff/since 范围控制见 [decisions/024-shadow-implementation-diff-since-scope.md](../decisions/024-shadow-implementation-diff-since-scope.md)。fix-advice 专用建议见 [decisions/025-shadow-implementation-fix-advice.md](../decisions/025-shadow-implementation-fix-advice.md)。role taxonomy precision 见 [decisions/043-shadow-implementation-role-taxonomy.md](../decisions/043-shadow-implementation-role-taxonomy.md)、[decisions/050-shadow-mapper-taxonomy.md](../decisions/050-shadow-mapper-taxonomy.md) 和 [decisions/057-shadow-parser-subdomain-taxonomy.md](../decisions/057-shadow-parser-subdomain-taxonomy.md)：renderer/assembler split-role pairs 会被抑制，mapper role 会保守区分 visualization mapping 与 migration mapping，parser role 会保守区分 runtime/platform、local-version 和 version-grammar subdomains。file-level dry-run calibration 见 [decisions/031-shadow-implementation-file-dry-run.md](../decisions/031-shadow-implementation-file-dry-run.md)。当前公开检测 Python 函数和类级跨文件相似实现，优先高精度。
 
 `shadow_implementation` v1 不是：
 
@@ -23,13 +25,13 @@
 
 误报控制：
 
-- 只扫描 Python 源文件，跳过 tests、fixtures、generated、vendor、build、dist、虚拟环境和本地生成目录。
+- 只扫描 Python 源文件，跳过 tests、fixtures、generated、vendor、build、dist、benchmark/benchmarks、虚拟环境和本地生成目录。
 - AI signal scanners 还默认排除 `.ccb` provider-state、本地 release/install test artifacts、cache 目录和 dependency copies；见 [decisions/033-ai-signal-source-scope-exclusions.md](../decisions/033-ai-signal-source-scope-exclusions.md)。
 - 只报告跨文件函数，不报告同文件 nested helper。
 - 函数节点数至少 45。
 - 类节点数至少 90，且需要 API/member shape 相似。
 - 需要共享角色 token、名称 token overlap、签名相似度、AST feature cosine 和无直接复用边共同满足阈值。
-- 清晰的 renderer versus assembler/support/budget/context split-role pairs 会被抑制；same-role candidates 和 parser-helper pairs 仍可报告。
+- 清晰的 renderer versus assembler/support/budget/context split-role pairs 会被抑制；mapper 中 visualization color/palette/style/tier/role mapping 与 rename/move/old/new/diff migration mapping 的明显跨域 pairs 会被抑制；parser 中 runtime/platform、local-version 与 version-grammar 的明显跨域 pairs 会被抑制；same-domain mapper/parser、same-role candidates 和 parser-helper pairs 仍可报告。
 - 输出 top candidates，并在 concern 中保留 `existing_implementation` 结构化 reference。
 - 增量模式中 `references[]` 可以指向未变更文件，但 `location.path` 必须属于 changed files。
 

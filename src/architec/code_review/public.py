@@ -10,8 +10,15 @@ from architec.analysis.public import run_analysis
 from architec.code_review.architecture_contracts import architecture_contract_scan
 from architec.code_review.near_duplicate import near_duplicate_concerns, near_duplicate_scan
 from architec.code_review.plan_diff_consistency import load_plan_review, plan_diff_consistency_scan
-from architec.code_review.risk_context import apply_risk_context, load_risk_context
-from architec.code_review.shadow_implementation import shadow_implementation_scan
+from architec.code_review.risk_context import (
+    apply_risk_context,
+    load_risk_context,
+    risk_context_reinforcement_factors,
+)
+from architec.code_review.shadow_implementation import (
+    shadow_implementation_file_dry_run,
+    shadow_implementation_scan,
+)
 from architec.events.public import append_review_event
 from architec.support.io_utils import ProgressFn, clamp, write_json
 
@@ -23,8 +30,16 @@ CONCERN_BLAST_RADIUS_LIMIT = 8
 CONCERN_REFERENCES_LIMIT = 3
 SIGNAL_METRIC_DICT_LIMIT = 12
 CONCERNS_ARTIFACT_FILE = "code-review-concerns.json"
+DISCOVERY_ARTIFACT_FILE = "code-review-discovery.json"
 INCREMENTAL_SELECTED_SCOPE_KINDS = {"architecture-contract", "plan-diff-consistency"}
 SMALL_FLAT_TOPOLOGY_FILE_LIMIT = 10
+SEMANTIC_REVIEW_CONFIDENCE_FLOOR = 0.76
+SEMANTIC_ARCHIVE_FIRST_CONFIDENCE_FLOOR = 0.8
+SEMANTIC_RETIRE_NOW_CONFIDENCE_FLOOR = 0.86
+PROMOTABLE_DISCOVERY_REASONS = {
+    "thin_wrapper_different_target",
+    "variant_family_thin_wrapper_different_target",
+}
 
 
 def _list(value: object) -> list[Any]:
@@ -404,6 +419,126 @@ def _is_active_changelog_stale_doc_concern(
     )
 
 
+def _semantic_keep_active_paths(report: dict[str, Any]) -> set[str]:
+    semantic_judge = _dict(report.get("semantic_judge"))
+    if str(semantic_judge.get("status", "") or "").strip().lower() != "ok":
+        return set()
+    out: set[str] = set()
+    for collection_name in ("judgments", "top_judgments"):
+        for item in _list(semantic_judge.get(collection_name)):
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("decision", "") or "").strip().lower() != "keep_active":
+                continue
+            path = str(item.get("path", "") or "").strip().lstrip("./")
+            if path:
+                out.add(path)
+    return out
+
+
+def _semantic_review_paths(report: dict[str, Any]) -> set[str]:
+    semantic_judge = _dict(report.get("semantic_judge"))
+    if str(semantic_judge.get("status", "") or "").strip().lower() != "ok":
+        return set()
+    out: set[str] = set()
+    for collection_name in ("judgments", "top_judgments"):
+        for item in _list(semantic_judge.get(collection_name)):
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("decision", "") or "").strip().lower() != "review":
+                continue
+            path = str(item.get("path", "") or "").strip().lstrip("./")
+            if path:
+                out.add(path)
+    return out
+
+
+def _semantic_archive_retire_decisions(report: dict[str, Any]) -> dict[str, str]:
+    semantic_judge = _dict(report.get("semantic_judge"))
+    if str(semantic_judge.get("status", "") or "").strip().lower() != "ok":
+        return {}
+    decisions: dict[str, str] = {}
+    for collection_name in ("judgments", "top_judgments"):
+        for item in _list(semantic_judge.get(collection_name)):
+            if not isinstance(item, dict):
+                continue
+            decision = str(item.get("decision", "") or "").strip().lower()
+            if decision not in {"archive_first", "retire_now"}:
+                continue
+            path = str(item.get("path", "") or "").strip().lstrip("./")
+            if not path:
+                continue
+            if decisions.get(path) == "retire_now":
+                continue
+            decisions[path] = decision
+    return decisions
+
+
+def _semantic_archive_retire_confidence_floor(decision: str) -> float:
+    if decision == "retire_now":
+        return SEMANTIC_RETIRE_NOW_CONFIDENCE_FLOOR
+    return SEMANTIC_ARCHIVE_FIRST_CONFIDENCE_FLOOR
+
+
+def _apply_semantic_review_context(
+    concerns: list[dict[str, Any]],
+    report: dict[str, Any],
+) -> list[dict[str, Any]]:
+    review_paths = _semantic_review_paths(report)
+    archive_retire_decisions = _semantic_archive_retire_decisions(report)
+    if not review_paths and not archive_retire_decisions:
+        return concerns
+    enriched: list[dict[str, Any]] = []
+    for concern in concerns:
+        path = _concern_location_path(concern)
+        if (
+            path
+            and path in review_paths
+            and _is_cleanup_archive_display_concern(concern)
+        ):
+            item = dict(concern)
+            evidence = [str(part) for part in _list(item.get("evidence"))]
+            if "semantic_judge.decision=review" not in evidence:
+                evidence.append("semantic_judge.decision=review")
+            item["evidence"] = evidence
+            item["confidence"] = max(
+                _safe_confidence(item.get("confidence"), 0.0),
+                SEMANTIC_REVIEW_CONFIDENCE_FLOOR,
+            )
+            enriched.append(item)
+        elif (
+            path
+            and path in archive_retire_decisions
+            and _is_cleanup_archive_display_concern(concern)
+        ):
+            decision = archive_retire_decisions[path]
+            item = dict(concern)
+            evidence = [str(part) for part in _list(item.get("evidence"))]
+            fact = f"semantic_judge.decision={decision}"
+            if fact not in evidence:
+                evidence.append(fact)
+            item["evidence"] = evidence
+            item["confidence"] = max(
+                _safe_confidence(item.get("confidence"), 0.0),
+                _semantic_archive_retire_confidence_floor(decision),
+            )
+            enriched.append(item)
+        else:
+            enriched.append(concern)
+    return enriched
+
+
+def _is_semantic_keep_active_stale_doc_concern(
+    concern: dict[str, Any],
+    *,
+    keep_active_paths: set[str],
+) -> bool:
+    if _cleanup_archive_category(concern) != "stale_doc":
+        return False
+    path = _concern_location_path(concern)
+    return bool(path and path in keep_active_paths)
+
+
 def _is_small_flat_topology_concern(concern: dict[str, Any]) -> bool:
     if str(concern.get("kind", "") or "") != "boundary":
         return False
@@ -465,12 +600,18 @@ def _dedupe_cleanup_archive_display_concerns(
 def _calibrated_full_review_display_concerns(
     concerns: list[dict[str, Any]],
     *,
+    report: dict[str, Any],
     project_root: str | Path | None,
 ) -> list[dict[str, Any]]:
+    keep_active_paths = _semantic_keep_active_paths(report)
     calibrated = [
         concern
         for concern in concerns
         if not _is_active_changelog_stale_doc_concern(concern, project_root=project_root)
+        and not _is_semantic_keep_active_stale_doc_concern(
+            concern,
+            keep_active_paths=keep_active_paths,
+        )
         and not _is_small_flat_topology_concern(concern)
     ]
     return _dedupe_cleanup_archive_display_concerns(calibrated)
@@ -618,6 +759,188 @@ def _write_concerns_artifact(
         artifacts["code_review_concerns_json"] = str(path)
 
 
+def _discovery_from_near_duplicate(scan: dict[str, Any]) -> list[dict[str, Any]]:
+    discovery = _dict(scan.get("discovery"))
+    return [item for item in _list(discovery.get("candidates")) if isinstance(item, dict)]
+
+
+def _discovery_from_module_shadow(scan: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for item in _list(scan.get("candidates")):
+        if not isinstance(item, dict):
+            continue
+        candidate = dict(item)
+        candidate["source"] = "shadow_implementation_file_dry_run"
+        candidate["reason"] = "module_shadow_candidate"
+        candidates.append(candidate)
+    return candidates
+
+
+def _advisory_discovery_scan_for_review(
+    report: dict[str, Any],
+    *,
+    review_type: str,
+    project_root: str | Path | None,
+    near_duplicate_full_scan: dict[str, Any] | None = None,
+    near_duplicate_scope: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if project_root is None:
+        return {}
+
+    candidates: list[dict[str, Any]] = []
+    by_source: dict[str, int] = {}
+    by_reason: dict[str, int] = {}
+
+    def add_candidates(items: list[dict[str, Any]]) -> None:
+        for item in items:
+            source = str(item.get("source", "") or "unknown")
+            reason = str(item.get("reason", "") or "unknown")
+            by_source[source] = by_source.get(source, 0) + 1
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+            candidates.append(item)
+
+    if review_type in {"diff", "since"}:
+        add_candidates(_discovery_from_near_duplicate(_dict(near_duplicate_scope)))
+    elif review_type == "full":
+        near_scan = _dict(near_duplicate_full_scan)
+        if not near_scan:
+            near_scan = near_duplicate_scan(project_root, limit=0)
+        add_candidates(_discovery_from_near_duplicate(near_scan))
+        module_scan = shadow_implementation_file_dry_run(project_root, limit=20)
+        add_candidates(_discovery_from_module_shadow(module_scan))
+
+    if not candidates:
+        return {}
+    return {
+        "mode": "advisory_discovery",
+        "candidate_total": len(candidates),
+        "reported_total": len(candidates),
+        "by_source": dict(sorted(by_source.items())),
+        "by_reason": dict(sorted(by_reason.items())),
+        "candidates": candidates,
+    }
+
+
+def _discovery_candidate_location(candidate: dict[str, Any]) -> dict[str, Any]:
+    location = _dict(candidate.get("location"))
+    return {
+        "path": str(location.get("path", "") or "").strip().lstrip("./"),
+        "line": int(location.get("line", 0) or 0),
+        "symbol": str(location.get("symbol", "") or ""),
+        "symbol_kind": str(location.get("symbol_kind", "") or "function"),
+    }
+
+
+def _promoted_discovery_concern(
+    candidate: dict[str, Any],
+    factors: list[str],
+) -> dict[str, Any] | None:
+    source = str(candidate.get("source", "") or "")
+    reason = str(candidate.get("reason", "") or "")
+    if source != "near_duplicate" or reason not in PROMOTABLE_DISCOVERY_REASONS:
+        return None
+    location = _discovery_candidate_location(candidate)
+    if not location["path"]:
+        return None
+    reference = _dict(candidate.get("reference"))
+    reference_path = str(reference.get("path", "") or "").strip().lstrip("./")
+    evidence = [str(item) for item in _list(candidate.get("facts"))]
+    evidence.extend(
+        [
+            f"advisory_discovery.reason={reason}",
+            "advisory_discovery.promoted_by=risk_context",
+        ]
+    )
+    for factor in factors:
+        evidence.append(f"advisory_discovery.reinforcement={factor}")
+    references: list[dict[str, Any]] = []
+    if reference_path:
+        references.append(
+            {
+                "role": "reference",
+                "path": reference_path,
+                "line": int(reference.get("line", 0) or 0),
+                "symbol": str(reference.get("symbol", "") or ""),
+                "symbol_kind": str(reference.get("symbol_kind", "") or "function"),
+            }
+        )
+    blast_radius = [location["path"]]
+    if reference_path and reference_path not in blast_radius:
+        blast_radius.append(reference_path)
+    return {
+        "concern_id": _stable_concern_id(
+            "duplication",
+            source="advisory_discovery",
+            location=location,
+            evidence=evidence,
+        ),
+        "kind": "duplication",
+        "level": "info",
+        "confidence": 0.68,
+        "location": location,
+        "root_cause": "Discovery candidate is reinforced by external risk context.",
+        "evidence": evidence,
+        "references": references,
+        "blast_radius": blast_radius,
+        "next_steps_hint": "Review whether this wrapper or facade shape should stay separate or share a clearer boundary.",
+    }
+
+
+def _promote_discovery_candidates(
+    discovery_scan: dict[str, Any],
+    risk_context: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if risk_context is None or not discovery_scan:
+        return []
+    promoted: list[dict[str, Any]] = []
+    for candidate in _list(discovery_scan.get("candidates")):
+        if not isinstance(candidate, dict):
+            continue
+        location = _discovery_candidate_location(candidate)
+        factors = risk_context_reinforcement_factors(risk_context, location.get("path", ""))
+        if not factors:
+            continue
+        concern = _promoted_discovery_concern(candidate, factors)
+        if concern is None:
+            continue
+        candidate["promoted"] = True
+        candidate["promotion_reason"] = "risk_context"
+        candidate["promotion_factors"] = factors
+        promoted.append(concern)
+    if promoted:
+        discovery_scan["promoted_total"] = len(promoted)
+    return promoted
+
+
+def _write_discovery_artifact(
+    project_root: str | Path | None,
+    result: dict[str, Any],
+    discovery_scan: dict[str, Any],
+) -> None:
+    if project_root is None or not discovery_scan:
+        return
+    artifacts = _dict(result.get("artifacts"))
+    result["artifacts"] = artifacts
+    artifact = {
+        "mode": str(result.get("mode", "") or ""),
+        "review_type": str(result.get("review_type", "") or ""),
+        "summary": {
+            "candidate_total": int(discovery_scan.get("candidate_total", 0) or 0),
+            "by_source": _dict(discovery_scan.get("by_source")),
+            "by_reason": _dict(discovery_scan.get("by_reason")),
+            "promoted_total": int(discovery_scan.get("promoted_total", 0) or 0),
+        },
+        "candidates": _list(discovery_scan.get("candidates")),
+    }
+    path = Path(project_root) / ".architec" / DISCOVERY_ARTIFACT_FILE
+    try:
+        write_json(path, artifact)
+    except OSError as exc:
+        artifacts["code_review_discovery_error"] = str(exc)
+    else:
+        artifacts["code_review_discovery_json"] = str(path)
+
+
 def _near_duplicate_total(concerns: list[dict[str, Any]]) -> int:
     return sum(
         1
@@ -649,6 +972,7 @@ def _signals(
     report: dict[str, Any],
     concerns: list[dict[str, Any]],
     *,
+    advisory_discovery_scan: dict[str, Any] | None = None,
     architecture_contract_scan_result: dict[str, Any] | None = None,
     near_duplicate_scope: dict[str, Any] | None = None,
     plan_diff_scan: dict[str, Any] | None = None,
@@ -827,12 +1151,36 @@ def _signals(
                 "metrics": metrics,
             }
         )
+    discovery_scan = _dict(advisory_discovery_scan)
+    discovery_total = int(discovery_scan.get("candidate_total", 0) or 0)
+    if discovery_total:
+        promoted_total = int(discovery_scan.get("promoted_total", 0) or 0)
+        summary = f"{discovery_total} advisory discovery candidates available outside primary concerns."
+        if promoted_total:
+            summary = (
+                f"{discovery_total} advisory discovery candidates available; "
+                f"{promoted_total} promoted with reinforcing context."
+            )
+        signals.append(
+            {
+                "kind": "advisory_discovery",
+                "summary": summary,
+                "metrics": {
+                    "candidate_total": discovery_total,
+                    "reported_total": int(discovery_scan.get("reported_total", discovery_total) or 0),
+                    "promoted_total": promoted_total,
+                    "by_source": _dict(discovery_scan.get("by_source")),
+                    "by_reason": _dict(discovery_scan.get("by_reason")),
+                },
+            }
+        )
     plan_scan = _dict(plan_diff_scan)
     planned_path_total = int(plan_scan.get("planned_path_total", 0) or 0)
     planned_import_total = int(plan_scan.get("planned_import_total", 0) or 0)
     expected_test_total = int(plan_scan.get("expected_test_total", 0) or 0)
     public_api_migration_total = int(plan_scan.get("public_api_migration_total", 0) or 0)
-    if planned_path_total or planned_import_total or expected_test_total or public_api_migration_total:
+    semantic_intent_total = int(plan_scan.get("semantic_intent_total", 0) or 0)
+    if planned_path_total or planned_import_total or expected_test_total or public_api_migration_total or semantic_intent_total:
         plan_concern_total = sum(
             1
             for concern in concerns
@@ -868,6 +1216,16 @@ def _signals(
                     ),
                     "missing_public_api_migration_total": int(
                         plan_scan.get("missing_public_api_migration_total", 0) or 0
+                    ),
+                    "semantic_intent_total": semantic_intent_total,
+                    "observed_semantic_intent_total": int(
+                        plan_scan.get("observed_semantic_intent_total", 0) or 0
+                    ),
+                    "missing_semantic_intent_total": int(
+                        plan_scan.get("missing_semantic_intent_total", 0) or 0
+                    ),
+                    "conflicting_semantic_intent_total": int(
+                        plan_scan.get("conflicting_semantic_intent_total", 0) or 0
                     ),
                     "changed_file_total": int(plan_scan.get("changed_file_total", 0) or 0),
                     "concern_total": plan_concern_total,
@@ -991,6 +1349,39 @@ def _is_since_range_error(exc: Exception) -> bool:
     return any(marker in text for marker in markers)
 
 
+def _static_full_report(reason: str = "") -> dict[str, Any]:
+    artifacts: dict[str, Any] = {"code_review_analysis_mode": "static"}
+    reason_text = str(reason or "").strip()
+    if reason_text:
+        artifacts["code_review_static_reason"] = reason_text
+    return {
+        "scores": {},
+        "summary": {},
+        "cleanup": {},
+        "archive_candidates": {},
+        "semantic_judge": {},
+        "hotspots": [],
+        "topology": {},
+        "artifacts": artifacts,
+    }
+
+
+def _mark_static_full_result(result: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
+    summary = _dict(result.get("summary"))
+    result["summary"] = summary
+    summary["headline"] = "Full analysis was unavailable; static code-review signals were generated."
+    summary["analysis_mode"] = "static"
+    reason_text = str(reason or "").strip()
+    if reason_text:
+        summary["reason"] = reason_text
+    artifacts = _dict(result.get("artifacts"))
+    result["artifacts"] = artifacts
+    artifacts["code_review_analysis_mode"] = "static"
+    if reason_text:
+        artifacts["code_review_static_reason"] = reason_text
+    return result
+
+
 def _changed_files_from_report(report: dict[str, Any]) -> list[str]:
     change = _dict(report.get("change_analysis"))
     raw = _list(change.get("changed_files"))
@@ -1023,6 +1414,7 @@ def _is_incremental_selected_scope_concern(
 def _display_concerns_for_review(
     concerns: list[dict[str, Any]],
     *,
+    report: dict[str, Any],
     review_type: str,
     changed_files: list[str],
     project_root: str | Path | None = None,
@@ -1030,6 +1422,7 @@ def _display_concerns_for_review(
     if review_type not in {"diff", "since"}:
         calibrated = _calibrated_full_review_display_concerns(
             concerns,
+            report=report,
             project_root=project_root,
         )
         return _ranked_concerns(calibrated, limit=CONCERN_LIMIT), None
@@ -1043,7 +1436,8 @@ def _display_concerns_for_review(
         else:
             global_context.append(concern)
 
-    display = _ranked_concerns(scoped, limit=CONCERN_LIMIT)
+    display_scoped = _dedupe_cleanup_archive_display_concerns(scoped)
+    display = _ranked_concerns(display_scoped, limit=CONCERN_LIMIT)
     return display, {
         "scoped_concern_total": len(scoped),
         "global_context_concern_total": len(global_context),
@@ -1124,11 +1518,12 @@ def _result_from_report(
     plan_review: dict[str, Any] | None = None,
     risk_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    duplicate_concerns = (
-        near_duplicate_concerns(project_root)
+    near_duplicate_full_scan = (
+        near_duplicate_scan(project_root)
         if review_type == "full" and project_root is not None
-        else []
+        else None
     )
+    duplicate_concerns = list(_dict(near_duplicate_full_scan).get("concerns", []))
     near_duplicate_scope = _near_duplicate_scan_for_review(
         report,
         review_type=review_type,
@@ -1154,6 +1549,17 @@ def _result_from_report(
         project_root=project_root,
     )
     plan_diff_concerns = list(plan_diff_scan.get("concerns", []))
+    advisory_discovery_scan = _advisory_discovery_scan_for_review(
+        report,
+        review_type=review_type,
+        project_root=project_root,
+        near_duplicate_full_scan=near_duplicate_full_scan,
+        near_duplicate_scope=near_duplicate_scope,
+    )
+    promoted_discovery_concerns = _promote_discovery_candidates(
+        advisory_discovery_scan,
+        risk_context,
+    )
     generated_concerns = [
         *_cleanup_concerns(report),
         *_archive_concerns(report),
@@ -1163,11 +1569,14 @@ def _result_from_report(
         *shadow_concerns,
         *architecture_concerns,
         *plan_diff_concerns,
+        *promoted_discovery_concerns,
     ]
+    generated_concerns = _apply_semantic_review_context(generated_concerns, report)
     generated_concerns, risk_scan = apply_risk_context(generated_concerns, risk_context)
     changed_files = _changed_files_from_report(report)
     concerns, scope_counts = _display_concerns_for_review(
         generated_concerns,
+        report=report,
         review_type=review_type,
         changed_files=changed_files,
         project_root=project_root,
@@ -1175,6 +1584,7 @@ def _result_from_report(
     signals = _signals(
         report,
         generated_concerns,
+        advisory_discovery_scan=advisory_discovery_scan,
         architecture_contract_scan_result=architecture_scan,
         near_duplicate_scope=near_duplicate_scope,
         plan_diff_scan=plan_diff_scan,
@@ -1201,6 +1611,7 @@ def _result_from_report(
         "artifacts": _dict(report.get("artifacts")),
     }
     _write_concerns_artifact(project_root, result, generated_concerns)
+    _write_discovery_artifact(project_root, result, advisory_discovery_scan)
     return _finalize_payload(result)
 
 
@@ -1238,6 +1649,26 @@ def run_code_review_full(
         risk_context=risk_context,
     )
     return _with_review_event(project_root, result)
+
+
+def run_code_review_static_full(
+    project_root: str | Path,
+    *,
+    reason: str = "",
+    risk_context_path: str | Path | None = None,
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
+    if progress is not None:
+        progress("code-review static [1/1] generating deterministic signals")
+    risk_context = load_risk_context(risk_context_path) if risk_context_path else None
+    result = _result_from_report(
+        _static_full_report(reason),
+        review_type="full",
+        project_root=project_root,
+        risk_context=risk_context,
+    )
+    result = _mark_static_full_result(result, reason=reason)
+    return _with_review_event(project_root, _finalize_payload(result))
 
 
 def run_code_review_diff(
@@ -1307,5 +1738,6 @@ def run_code_review_since(
 __all__ = [
     "run_code_review_diff",
     "run_code_review_full",
+    "run_code_review_static_full",
     "run_code_review_since",
 ]
