@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from architec.support.io_utils import read_json, write_json
+from architec.code_review.scan_cache import collect_file_scan_cache
 
 
 SKIP_DIRS = {
@@ -344,14 +344,6 @@ def _collect_functions(path: Path, root: Path) -> list[_FunctionFingerprint]:
     return found
 
 
-def _file_signature(path: Path) -> dict[str, int] | None:
-    try:
-        stat = path.stat()
-    except OSError:
-        return None
-    return {"mtime_ns": int(stat.st_mtime_ns), "size": int(stat.st_size)}
-
-
 def _candidate_to_json(item: _FunctionFingerprint) -> dict[str, Any]:
     return {
         "path": item.path,
@@ -380,58 +372,15 @@ def _candidate_from_json(data: object) -> _FunctionFingerprint | None:
 
 
 def _collect_functions_cached(root: Path) -> tuple[list[_FunctionFingerprint], dict[str, int]]:
-    cache_path = root / SCAN_CACHE_PATH
-    cache = read_json(cache_path, default={})
-    try:
-        cache_version = int(cache.get("version", 0) or 0) if isinstance(cache, dict) else 0
-    except (TypeError, ValueError):
-        cache_version = 0
-    cached_files = cache.get("files", {}) if isinstance(cache, dict) and cache_version == SCAN_CACHE_VERSION else {}
-    if not isinstance(cached_files, dict):
-        cached_files = {}
-
-    out: list[_FunctionFingerprint] = []
-    next_files: dict[str, Any] = {}
-    hit_total = 0
-    miss_total = 0
-    for path in _iter_python_files(root):
-        relpath = path.relative_to(root).as_posix()
-        signature = _file_signature(path)
-        if signature is None:
-            continue
-        entry = cached_files.get(relpath, {})
-        candidates: list[_FunctionFingerprint] = []
-        if isinstance(entry, dict) and entry.get("signature") == signature:
-            for item in entry.get("candidates", []):
-                candidate = _candidate_from_json(item)
-                if candidate is not None:
-                    candidates.append(candidate)
-            hit_total += 1
-        else:
-            candidates = _collect_functions(path, root)
-            miss_total += 1
-        out.extend(candidates)
-        next_files[relpath] = {
-            "signature": signature,
-            "candidates": [_candidate_to_json(item) for item in candidates],
-        }
-
-    if miss_total or set(cached_files) != set(next_files):
-        try:
-            write_json(
-                cache_path,
-                {
-                    "version": SCAN_CACHE_VERSION,
-                    "files": next_files,
-                },
-            )
-        except OSError:
-            pass
-    return out, {
-        "file_total": len(next_files),
-        "file_cache_hit_total": hit_total,
-        "file_cache_miss_total": miss_total,
-    }
+    return collect_file_scan_cache(
+        root,
+        cache_path=SCAN_CACHE_PATH,
+        version=SCAN_CACHE_VERSION,
+        python_files=_iter_python_files(root),
+        collect_file=_collect_functions,
+        encode_item=_candidate_to_json,
+        decode_item=_candidate_from_json,
+    )
 
 
 def _build_concern(
