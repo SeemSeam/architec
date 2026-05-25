@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from architec.analysis.analysis_runner_llm import llm_summary as incremental_llm_summary
 from architec.analysis.public import run_analysis
 from architec.code_review.architecture_contracts import architecture_contract_scan
 from architec.code_review.near_duplicate import near_duplicate_concerns, near_duplicate_scan
@@ -20,8 +22,9 @@ from architec.code_review.shadow_implementation import (
     shadow_implementation_scan,
 )
 from architec.events.public import append_review_event
+from architec.integration.bundle_loader import REQUIRED_BUNDLE_FILES
 from architec.scoring.component_scoring_git import changed_files as git_changed_files
-from architec.support.io_utils import ProgressFn, clamp, write_json
+from architec.support.io_utils import ProgressFn, clamp, read_json, write_json
 
 
 CONCERN_LIMIT = 5
@@ -981,6 +984,38 @@ def _signals(
     shadow_scan: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     signals: list[dict[str, Any]] = []
+    snapshot_context = _dict(report.get("snapshot_context"))
+    if snapshot_context:
+        hippo_bundle_present = bool(snapshot_context.get("hippo_bundle_present"))
+        hippo_bundle_stale = bool(snapshot_context.get("hippo_bundle_stale"))
+        freshness_unknown = bool(snapshot_context.get("freshness_unknown"))
+        if not hippo_bundle_present:
+            summary = "Incremental review ran without a Hippo structure snapshot."
+        elif freshness_unknown:
+            summary = "Incremental review used selected-scope evidence; Hippo snapshot freshness could not be determined."
+        elif hippo_bundle_stale:
+            summary = "Incremental review used selected-scope evidence with a stale Hippo structure snapshot available."
+        else:
+            summary = "Incremental review used selected-scope evidence with a current Hippo structure snapshot available."
+        signals.append(
+            {
+                "kind": "snapshot_context",
+                "summary": summary,
+                "metrics": {
+                    "hippo_bundle_present": hippo_bundle_present,
+                    "hippo_bundle_stale": hippo_bundle_stale,
+                    "freshness_unknown": freshness_unknown,
+                    "hippo_refresh_performed": bool(snapshot_context.get("hippo_refresh_performed")),
+                    "missing_file_total": int(snapshot_context.get("missing_file_total", 0) or 0),
+                    "stale_reason_total": int(snapshot_context.get("stale_reason_total", 0) or 0),
+                    "selected_file_total": int(snapshot_context.get("selected_file_total", 0) or 0),
+                    "selected_changed_after_bundle_total": int(
+                        snapshot_context.get("selected_changed_after_bundle_total", 0) or 0
+                    ),
+                    "stale_reasons": _list(snapshot_context.get("stale_reasons")),
+                },
+            }
+        )
     contract_scan = _dict(architecture_contract_scan_result)
     contract_rule_total = int(contract_scan.get("rule_total", 0) or 0)
     if contract_rule_total:
@@ -1401,6 +1436,84 @@ def _static_incremental_report(
     }
 
 
+def _parse_snapshot_datetime(raw: str) -> datetime | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    probe = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(probe)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _selected_files_changed_after(project_root: Path, changed_files: list[str], generated_at: str) -> int:
+    parsed = _parse_snapshot_datetime(generated_at)
+    if parsed is None:
+        return 0
+    reference_ns = int(parsed.timestamp() * 1_000_000_000)
+    changed_total = 0
+    for raw_path in changed_files:
+        rel = str(raw_path or "").strip().lstrip("./")
+        if not rel:
+            continue
+        try:
+            if (project_root / rel).stat().st_mtime_ns > reference_ns:
+                changed_total += 1
+        except OSError:
+            continue
+    return changed_total
+
+
+def _incremental_snapshot_context(
+    project_root: str | Path,
+    *,
+    changed_files: list[str],
+) -> dict[str, Any]:
+    root = Path(project_root)
+    missing_files = [rel for rel in REQUIRED_BUNDLE_FILES if not (root / rel).is_file()]
+    bundle_present = not missing_files
+    state = read_json(root / ".hippocampus" / "bundle-state.json", default={})
+    metrics = read_json(root / ".hippocampus" / "architect-metrics.json", default={})
+    bundle_generated_at = str(_dict(state).get("generated_at", "") or "").strip()
+    metrics_generated_at = str(_dict(metrics).get("generated_at", "") or "").strip()
+    reference_generated_at = bundle_generated_at or metrics_generated_at
+    freshness_unknown = bool(bundle_present and _parse_snapshot_datetime(reference_generated_at) is None)
+    selected_changed_after_bundle_total = (
+        _selected_files_changed_after(root, changed_files, reference_generated_at)
+        if bundle_present and not freshness_unknown
+        else 0
+    )
+    stale_reasons: list[str] = []
+    if selected_changed_after_bundle_total:
+        stale_reasons.append(
+            "selected files changed after Hippo bundle generation "
+            f"(files={selected_changed_after_bundle_total})"
+        )
+    return {
+        "hippo_bundle_present": bundle_present,
+        "hippo_bundle_stale": bool(stale_reasons),
+        "freshness_unknown": freshness_unknown,
+        "hippo_refresh_performed": False,
+        "missing_file_total": len(missing_files),
+        "stale_reason_total": len(stale_reasons),
+        "stale_reasons": stale_reasons[:3],
+        "selected_file_total": len(changed_files),
+        "selected_changed_after_bundle_total": selected_changed_after_bundle_total,
+        "bundle_state_generated_at": bundle_generated_at,
+        "metrics_generated_at": metrics_generated_at,
+    }
+
+
+def _mark_incremental_snapshot_context(report: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    if context:
+        report["snapshot_context"] = context
+    return report
+
+
 def _mark_static_result(
     result: dict[str, Any],
     *,
@@ -1429,6 +1542,129 @@ def _mark_static_result(
 
 def _mark_static_full_result(result: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
     return _mark_static_result(result, reason=reason, review_type="full")
+
+
+def _mark_incremental_llm_report(report: dict[str, Any]) -> dict[str, Any]:
+    artifacts = _dict(report.get("artifacts"))
+    report["artifacts"] = artifacts
+    artifacts["code_review_analysis_mode"] = "incremental_llm"
+    artifacts["code_review_llm_context"] = "selected_scope"
+    artifacts.pop("code_review_static_reason", None)
+    return report
+
+
+def _compact_llm_concern(concern: dict[str, Any]) -> dict[str, Any]:
+    location = _dict(concern.get("location"))
+    return {
+        "kind": str(concern.get("kind", "") or ""),
+        "level": str(concern.get("level", "") or ""),
+        "confidence": concern.get("confidence", 0.0),
+        "path": str(location.get("path", "") or ""),
+        "symbol": str(location.get("symbol", "") or ""),
+        "root_cause": str(concern.get("root_cause", "") or ""),
+        "evidence": [str(item) for item in _list(concern.get("evidence"))[:4]],
+    }
+
+
+def _compact_llm_signal(signal: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": str(signal.get("kind", "") or ""),
+        "summary": str(signal.get("summary", "") or ""),
+        "metrics": _dict(signal.get("metrics")),
+    }
+
+
+def _incremental_llm_payload(
+    result: dict[str, Any],
+    report: dict[str, Any],
+    *,
+    changed_files: list[str],
+) -> dict[str, Any]:
+    summary = _dict(result.get("summary"))
+    return {
+        "mode": "incremental_code_review",
+        "review_type": str(result.get("review_type", "") or "diff"),
+        "analysis_context": "selected_scope",
+        "changed_file_total": len(changed_files),
+        "changed_files": changed_files[:30],
+        "summary": {
+            "concern_total": int(summary.get("concern_total", 0) or 0),
+            "top_concern_total": int(summary.get("top_concern_total", 0) or 0),
+            "scoped_concern_total": int(summary.get("scoped_concern_total", 0) or 0),
+            "global_context_concern_total": int(summary.get("global_context_concern_total", 0) or 0),
+        },
+        "concerns": [_compact_llm_concern(item) for item in _list(result.get("concerns"))[:8] if isinstance(item, dict)],
+        "signals": [_compact_llm_signal(item) for item in _list(result.get("signals"))[:8] if isinstance(item, dict)],
+        "change_analysis": _dict(report.get("change_analysis")),
+        "snapshot_context": _dict(report.get("snapshot_context")),
+    }
+
+
+def _string_list(value: object, *, limit: int) -> list[str]:
+    out: list[str] = []
+    for item in _list(value):
+        text = str(item or "").strip()
+        if text:
+            out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _dict_list(value: object, *, limit: int) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for item in _list(value):
+        if isinstance(item, dict):
+            out.append(dict(item))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _apply_incremental_llm_summary(
+    result: dict[str, Any],
+    llm_result: dict[str, Any],
+    *,
+    selected_file_total: int,
+) -> dict[str, Any]:
+    summary = _dict(result.get("summary"))
+    result["summary"] = summary
+    summary["analysis_mode"] = "incremental_llm"
+    summary["llm_context"] = "selected_scope"
+    headline = str(llm_result.get("headline", "") or "").strip()
+    if headline:
+        summary["headline"] = headline
+    executive_summary = str(llm_result.get("executive_summary", "") or "").strip()
+    if executive_summary:
+        summary["executive_summary"] = executive_summary
+    takeaways = _string_list(llm_result.get("top_takeaways"), limit=3)
+    if takeaways:
+        summary["top_takeaways"] = takeaways
+    recommendations = _dict_list(llm_result.get("recommendations"), limit=5)
+    if recommendations:
+        result["recommendations"] = recommendations
+
+    artifacts = _dict(result.get("artifacts"))
+    result["artifacts"] = artifacts
+    artifacts["code_review_analysis_mode"] = "incremental_llm"
+    artifacts["code_review_llm_context"] = "selected_scope"
+
+    signals = _list(result.get("signals"))
+    signals.append(
+        {
+            "kind": "cost_context",
+            "summary": "Incremental review used bounded selected-scope LLM context.",
+            "metrics": {
+                "selected_file_total": selected_file_total,
+                "llm_call_total": 1,
+                "cache_hit_total": 0,
+                "analysis_mode": "incremental_llm",
+                "llm_context": "selected_scope",
+            },
+        }
+    )
+    result["signals"] = signals
+    return _finalize_payload(result)
 
 
 def _changed_files_from_report(report: dict[str, Any]) -> list[str]:
@@ -1680,15 +1916,21 @@ def run_code_review_full(
     project_root: str | Path,
     *,
     risk_context_path: str | Path | None = None,
+    advice_feedback_path: str | Path | None = None,
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
+    analysis_kwargs: dict[str, Any] = {
+        "goal": "",
+        "diff": False,
+        "base": "",
+        "head": "",
+        "progress": progress,
+    }
+    if advice_feedback_path:
+        analysis_kwargs["advice_feedback_path"] = advice_feedback_path
     report = run_analysis(
         project_root,
-        goal="",
-        diff=False,
-        base="",
-        head="",
-        progress=progress,
+        **analysis_kwargs,
     )
     risk_context = load_risk_context(risk_context_path) if risk_context_path else None
     result = _result_from_report(
@@ -1705,8 +1947,10 @@ def run_code_review_static_full(
     *,
     reason: str = "",
     risk_context_path: str | Path | None = None,
+    advice_feedback_path: str | Path | None = None,
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
+    del advice_feedback_path
     if progress is not None:
         progress("code-review static [1/1] generating deterministic signals")
     risk_context = load_risk_context(risk_context_path) if risk_context_path else None
@@ -1743,6 +1987,49 @@ def run_code_review_static_diff(
     )
     result = _mark_static_result(result, reason=reason, review_type="diff")
     return _with_review_event(project_root, _finalize_payload(result))
+
+
+def run_code_review_incremental_llm(
+    project_root: str | Path,
+    *,
+    base: str = "",
+    head: str = "",
+    plan_review_path: str | Path | None = None,
+    risk_context_path: str | Path | None = None,
+    progress: ProgressFn | None = None,
+    ) -> dict[str, Any]:
+    if progress is not None:
+        progress("code-review incremental [1/3] collecting selected changes")
+    report = _mark_incremental_llm_report(
+        _static_incremental_report(project_root, base=base, head=head),
+    )
+    changed_files = _changed_files_from_report(report)
+    snapshot_context = _incremental_snapshot_context(
+        project_root,
+        changed_files=changed_files,
+    )
+    report = _mark_incremental_snapshot_context(report, snapshot_context)
+    plan_review = load_plan_review(plan_review_path) if plan_review_path else None
+    risk_context = load_risk_context(risk_context_path) if risk_context_path else None
+    if progress is not None:
+        progress("code-review incremental [2/3] generating selected-scope evidence")
+    result = _result_from_report(
+        report,
+        review_type="diff",
+        project_root=project_root,
+        plan_review=plan_review,
+        risk_context=risk_context,
+    )
+    payload = _incremental_llm_payload(result, report, changed_files=changed_files)
+    if progress is not None:
+        progress("code-review incremental [3/3] requesting selected-scope LLM summary")
+    llm_result = incremental_llm_summary(Path(project_root).resolve(), payload=payload) or {}
+    result = _apply_incremental_llm_summary(
+        result,
+        llm_result,
+        selected_file_total=len(changed_files),
+    )
+    return _with_review_event(project_root, result)
 
 
 def run_code_review_diff(
@@ -1849,6 +2136,7 @@ def run_code_review_since(
 __all__ = [
     "run_code_review_diff",
     "run_code_review_full",
+    "run_code_review_incremental_llm",
     "run_code_review_static_diff",
     "run_code_review_static_full",
     "run_code_review_static_since",

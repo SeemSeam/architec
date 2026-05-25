@@ -79,9 +79,28 @@ def test_build_parser_accepts_trailing_path():
     assert parser.prog == "archi"
     args = parser.parse_args(["--diff", "--base", "main", "--head", "HEAD", "."])
     assert args.diff is True
+    assert args.full is False
     assert args.base == "main"
     assert args.head == "HEAD"
     assert args.path == "."
+
+
+def test_build_parser_accepts_full_review_flag():
+    parser = cli.build_parser()
+
+    args = parser.parse_args(["--full", "."])
+
+    assert args.full is True
+    assert args.diff is False
+    assert args.path == "."
+
+
+def test_build_parser_accepts_advice_feedback_for_full_review():
+    parser = cli.build_parser()
+
+    args = parser.parse_args(["--full", "--advice-feedback", "feedback.json", "."])
+
+    assert args.advice_feedback == "feedback.json"
 
 
 def test_build_parser_help_mentions_self_manage_commands() -> None:
@@ -177,16 +196,19 @@ def test_validate_code_review_rejects_plan_review_with_full(capsys):
     assert "--plan-review requires --diff or --since" in captured.err
 
 
-def test_build_parser_accepts_diff_plan_review_and_rejects_without_diff(capsys):
+def test_build_parser_accepts_incremental_plan_review_and_rejects_full(capsys):
     parser = cli.build_parser()
     args = parser.parse_args(["--diff", "--plan-review", "plan.json", "."])
     assert args.plan_review == "plan.json"
     assert args.diff is True
 
-    invalid = parser.parse_args(["--plan-review", "plan.json", "."])
+    bare = parser.parse_args(["--plan-review", "plan.json", "."])
+    assert cli._validate_args(bare) is None
+
+    invalid = parser.parse_args(["--full", "--plan-review", "plan.json", "."])
     assert cli._validate_args(invalid) == 2
     captured = capsys.readouterr()
-    assert "--plan-review requires --diff" in captured.err
+    assert "--plan-review requires incremental review" in captured.err
 
 
 def test_main_top_level_check_rejects_plan_review_before_runtime_work(monkeypatch, tmp_path, capsys):
@@ -247,6 +269,8 @@ def test_build_fix_advice_parser_accepts_review_and_focus_options():
         "hotspot",
         "--concern-id",
         "code-review:hotspot:1",
+        "--advice-feedback",
+        "feedback.json",
         "--out",
         "/tmp/fix.json",
     ])
@@ -254,6 +278,7 @@ def test_build_fix_advice_parser_accepts_review_and_focus_options():
     assert args.focus_file == "src/core.py"
     assert args.focus_kind == "hotspot"
     assert args.concern_id == "code-review:hotspot:1"
+    assert args.advice_feedback == "feedback.json"
     assert args.out == "/tmp/fix.json"
 
 
@@ -288,6 +313,22 @@ def test_main_rejects_base_without_diff(monkeypatch, capsys):
     assert "--base/--head require --diff" in capsys.readouterr().err
 
 
+def test_main_rejects_advice_feedback_with_check(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["archi", "--check", "--advice-feedback", "feedback.json"])
+
+    assert cli.main() == 2
+
+    assert "--advice-feedback cannot be used with --check" in capsys.readouterr().err
+
+
+def test_main_rejects_advice_feedback_with_diff(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["archi", "--diff", "--advice-feedback", "feedback.json"])
+
+    assert cli.main() == 2
+
+    assert "--advice-feedback currently requires --full" in capsys.readouterr().err
+
+
 def test_main_code_review_rejects_base_without_diff(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", "--base", "main", "."])
     assert cli.main() == 2
@@ -302,6 +343,16 @@ def test_main_code_review_rejects_since_with_base(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "--base/--head require --diff" in captured.err
+
+
+def test_main_code_review_rejects_advice_feedback_with_diff(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--diff", "--advice-feedback", "feedback.json", "."])
+
+    assert cli.main() == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "--advice-feedback currently requires --full" in captured.err
 
 
 def test_main_version_exits_before_auth(monkeypatch):
@@ -407,11 +458,45 @@ def test_main_check_auto_refreshes_stale_bundle(monkeypatch, capsys):
     assert "Archi preflight OK" in captured.out
 
 
-def test_main_legacy_full_routes_to_code_review_full(monkeypatch, tmp_path, capsys):
+def test_main_bare_archi_routes_to_incremental_llm_without_bundle_refresh(monkeypatch, tmp_path, capsys):
     calls: list[object] = []
-    result = _code_review_result("full")
+    result = _code_review_result("diff")
+    result["summary"]["analysis_mode"] = "incremental_llm"
 
     monkeypatch.setattr(sys, "argv", ["archi", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: calls.append("auth"))
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not refresh for bare archi"))
+    monkeypatch.setattr(
+        cli,
+        "preflight_backend_llm",
+        lambda path, *, checks: calls.append(("llm", path, tuple(checks))),
+    )
+    monkeypatch.setattr(cli, "run_code_review_full", lambda *args, **kwargs: pytest.fail("full should not run"))
+    monkeypatch.setattr(
+        cli,
+        "run_code_review_incremental_llm",
+        lambda path, *, base="", head="", progress=None: calls.append(
+            ("review_incremental", path, base, head, progress is cli.emit_progress)
+        )
+        or result,
+    )
+
+    assert cli.main() == 0
+    captured = capsys.readouterr()
+    assert "archi [3/3] running incremental LLM code review" in captured.err
+    assert "No new architecture concerns were identified in the selected diff." in captured.out
+    assert calls[0] == "auth"
+    assert calls[1] == ("llm", str(tmp_path), (("architec_summary", "strong"),))
+    assert calls[2] == ("review_incremental", str(tmp_path), "", "", True)
+
+
+def test_main_full_flag_passes_advice_feedback_path(monkeypatch, tmp_path, capsys):
+    calls: list[object] = []
+    result = _code_review_result("full")
+    feedback = tmp_path / "feedback.json"
+    feedback.write_text(json.dumps({"items": []}), encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", ["archi", "--full", "--advice-feedback", str(feedback), str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: calls.append("auth"))
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: calls.append(("bundle", args.path)) or None)
     monkeypatch.setattr(
@@ -422,22 +507,18 @@ def test_main_legacy_full_routes_to_code_review_full(monkeypatch, tmp_path, caps
     monkeypatch.setattr(
         cli,
         "run_code_review_full",
-        lambda path, progress=None: calls.append(("review_full", path, progress is cli.emit_progress)) or result,
+        lambda path, *, advice_feedback_path=None, progress=None: calls.append(
+            ("review_full", path, str(advice_feedback_path), progress is cli.emit_progress)
+        )
+        or result,
     )
-    monkeypatch.setattr(cli, "run_code_review_diff", lambda *args, **kwargs: pytest.fail("diff should not run"))
 
     assert cli.main() == 0
-    captured = capsys.readouterr()
-    assert "archi [3/3] running full code review" in captured.err
-    assert "Full code review complete" in captured.out
-    assert calls[0] == "auth"
-    assert calls[1] == ("bundle", str(tmp_path))
-    assert calls[2][0] == "llm"
-    assert ("architect_component_scoring", "weak") not in calls[2][2]
-    assert calls[3] == ("review_full", str(tmp_path), True)
+    capsys.readouterr()
+    assert calls[3] == ("review_full", str(tmp_path), str(feedback), True)
 
 
-def test_main_legacy_diff_routes_to_code_review_diff_args(monkeypatch, tmp_path, capsys):
+def test_main_legacy_diff_alias_routes_to_incremental_llm_args(monkeypatch, tmp_path, capsys):
     calls: list[object] = []
     result = _code_review_result("diff")
 
@@ -447,31 +528,30 @@ def test_main_legacy_diff_routes_to_code_review_diff_args(monkeypatch, tmp_path,
         ["archi", "--diff", "--base", "main", "--head", "HEAD", str(tmp_path)],
     )
     monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: calls.append("auth"))
-    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: calls.append(("bundle", args.path)) or None)
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not refresh for incremental alias"))
     monkeypatch.setattr(
         cli,
         "preflight_backend_llm",
         lambda path, *, checks: calls.append(("llm", path, tuple(checks))),
     )
     monkeypatch.setattr(cli, "run_code_review_full", lambda *args, **kwargs: pytest.fail("full should not run"))
+    monkeypatch.setattr(cli, "run_code_review_diff", lambda *args, **kwargs: pytest.fail("direct diff should not run"))
     monkeypatch.setattr(
         cli,
-        "run_code_review_diff",
+        "run_code_review_incremental_llm",
         lambda path, *, base="", head="", progress=None: calls.append(
-            ("review_diff", path, base, head, progress is cli.emit_progress)
+            ("review_incremental", path, base, head, progress is cli.emit_progress)
         )
         or result,
     )
 
     assert cli.main() == 0
     captured = capsys.readouterr()
-    assert "archi [3/3] running diff code review" in captured.err
+    assert "archi [3/3] running incremental LLM code review" in captured.err
     assert "No new architecture concerns were identified in the selected diff." in captured.out
     assert calls[0] == "auth"
-    assert calls[1] == ("bundle", str(tmp_path))
-    assert calls[2][0] == "llm"
-    assert ("architect_component_scoring", "weak") not in calls[2][2]
-    assert calls[3] == ("review_diff", str(tmp_path), "main", "HEAD", True)
+    assert calls[1] == ("llm", str(tmp_path), (("architec_summary", "strong"),))
+    assert calls[2] == ("review_incremental", str(tmp_path), "main", "HEAD", True)
 
 
 def test_main_top_level_diff_passes_plan_review_path(monkeypatch, tmp_path, capsys):
@@ -486,7 +566,7 @@ def test_main_top_level_diff_passes_plan_review_path(monkeypatch, tmp_path, caps
         ["archi", "--diff", "--plan-review", str(plan_review), str(tmp_path)],
     )
     monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: calls.append("auth"))
-    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: calls.append(("bundle", args.path)) or None)
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not refresh for incremental alias"))
     monkeypatch.setattr(
         cli,
         "preflight_backend_llm",
@@ -494,16 +574,16 @@ def test_main_top_level_diff_passes_plan_review_path(monkeypatch, tmp_path, caps
     )
     monkeypatch.setattr(
         cli,
-        "run_code_review_diff",
+        "run_code_review_incremental_llm",
         lambda path, *, base="", head="", plan_review_path=None, progress=None: calls.append(
-            ("review_diff", path, base, head, str(plan_review_path), progress is cli.emit_progress)
+            ("review_incremental", path, base, head, str(plan_review_path), progress is cli.emit_progress)
         )
         or result,
     )
 
     assert cli.main() == 0
     capsys.readouterr()
-    assert calls[3] == ("review_diff", str(tmp_path), "", "", str(plan_review), True)
+    assert calls[2] == ("review_incremental", str(tmp_path), "", "", str(plan_review), True)
 
 
 def test_main_legacy_check_still_uses_preflight_result(monkeypatch, tmp_path, capsys):
@@ -547,16 +627,16 @@ def test_main_removed_goal_flag_is_parser_error(monkeypatch, tmp_path, capsys):
     assert "archi plan-review" not in captured.err
 
 
-def test_main_legacy_full_preserves_analysis_artifacts_in_output(monkeypatch, tmp_path, capsys):
+def test_main_full_flag_preserves_analysis_artifacts_in_output(monkeypatch, tmp_path, capsys):
     out_path = tmp_path / "legacy-full.json"
     result = _code_review_result("full")
 
-    monkeypatch.setattr(sys, "argv", ["archi", "--out", str(out_path), str(tmp_path)])
+    monkeypatch.setattr(sys, "argv", ["archi", "--full", "--out", str(out_path), str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: None)
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
     monkeypatch.setattr(cli, "preflight_backend_llm", lambda path, *, checks: None)
     monkeypatch.setattr(cli, "run_code_review_full", lambda path, progress=None: result)
-    monkeypatch.setattr(cli, "run_code_review_diff", lambda *args, **kwargs: pytest.fail("diff should not run"))
+    monkeypatch.setattr(cli, "run_code_review_incremental_llm", lambda *args, **kwargs: pytest.fail("incremental should not run"))
 
     assert cli.main() == 0
     captured = capsys.readouterr()
@@ -567,19 +647,19 @@ def test_main_legacy_full_preserves_analysis_artifacts_in_output(monkeypatch, tm
     assert "json: /tmp/.architec/architec-analysis.json" in captured.out
 
 
-def test_main_legacy_full_human_summary_includes_code_review_concerns_and_signals(
+def test_main_full_flag_human_summary_includes_code_review_concerns_and_signals(
     monkeypatch,
     tmp_path,
     capsys,
 ):
     result = _code_review_result("full")
 
-    monkeypatch.setattr(sys, "argv", ["archi", str(tmp_path)])
+    monkeypatch.setattr(sys, "argv", ["archi", "--full", str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: None)
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
     monkeypatch.setattr(cli, "preflight_backend_llm", lambda path, *, checks: None)
     monkeypatch.setattr(cli, "run_code_review_full", lambda path, progress=None: result)
-    monkeypatch.setattr(cli, "run_code_review_diff", lambda *args, **kwargs: pytest.fail("diff should not run"))
+    monkeypatch.setattr(cli, "run_code_review_incremental_llm", lambda *args, **kwargs: pytest.fail("incremental should not run"))
 
     assert cli.main() == 0
     out = capsys.readouterr().out
@@ -591,16 +671,16 @@ def test_main_legacy_full_human_summary_includes_code_review_concerns_and_signal
     _assert_advisory_only(out)
 
 
-def test_main_legacy_full_out_json_remains_code_review_payload(monkeypatch, tmp_path, capsys):
+def test_main_bare_archi_out_json_remains_code_review_payload(monkeypatch, tmp_path, capsys):
     out_path = tmp_path / "review.json"
-    result = _code_review_result("full")
+    result = _code_review_result("diff")
 
     monkeypatch.setattr(sys, "argv", ["archi", "--out", str(out_path), str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: None)
-    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not refresh for bare archi"))
     monkeypatch.setattr(cli, "preflight_backend_llm", lambda path, *, checks: None)
-    monkeypatch.setattr(cli, "run_code_review_full", lambda path, progress=None: result)
-    monkeypatch.setattr(cli, "run_code_review_diff", lambda *args, **kwargs: pytest.fail("diff should not run"))
+    monkeypatch.setattr(cli, "run_code_review_full", lambda *args, **kwargs: pytest.fail("full should not run"))
+    monkeypatch.setattr(cli, "run_code_review_incremental_llm", lambda path, *, base="", head="", progress=None: result)
 
     assert cli.main() == 0
     capsys.readouterr()
@@ -617,8 +697,9 @@ def test_main_legacy_full_and_diff_outputs_avoid_gate_terms(monkeypatch, tmp_pat
     monkeypatch.setattr(cli, "preflight_backend_llm", lambda path, *, checks: None)
     monkeypatch.setattr(cli, "run_code_review_full", lambda path, progress=None: _code_review_result("full"))
     monkeypatch.setattr(cli, "run_code_review_diff", lambda path, *, base="", head="", progress=None: _code_review_result("diff"))
+    monkeypatch.setattr(cli, "run_code_review_incremental_llm", lambda path, *, base="", head="", progress=None: _code_review_result("diff"))
 
-    monkeypatch.setattr(sys, "argv", ["archi", "--out", str(full_out), str(tmp_path)])
+    monkeypatch.setattr(sys, "argv", ["archi", "--full", "--out", str(full_out), str(tmp_path)])
     assert cli.main() == 0
     full_stdout = capsys.readouterr().out
 
@@ -807,7 +888,7 @@ def test_main_fix_advice_outputs_json_and_skips_auth_bundle_and_llm(monkeypatch,
     monkeypatch.setattr(
         cli,
         "run_fix_advice",
-        lambda review, *, focus_file="", focus_kind="", concern_id="": calls.append(
+        lambda review, *, focus_file="", focus_kind="", concern_id="", advice_feedback_path=None: calls.append(
             (str(review), focus_file, focus_kind)
         )
         or result,
@@ -819,6 +900,37 @@ def test_main_fix_advice_outputs_json_and_skips_auth_bundle_and_llm(monkeypatch,
     assert payload["mode"] == "fix_advice"
     assert calls == [("review.json", "", "cleanup")]
     assert "archi fix-advice [1/1] reading review" in captured.err
+
+
+def test_main_fix_advice_passes_advice_feedback_path(monkeypatch, tmp_path, capsys):
+    result = {
+        "mode": "fix_advice",
+        "source_review": "review.json",
+        "summary": {"headline": "Fix advice generated from review concerns."},
+        "suggestions": [],
+        "artifacts": {},
+    }
+    feedback = tmp_path / "feedback.json"
+    feedback.write_text(json.dumps({"items": []}), encoding="utf-8")
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["archi", "fix-advice", "--review", "review.json", "--advice-feedback", str(feedback)],
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_fix_advice",
+        lambda review, *, focus_file="", focus_kind="", concern_id="", advice_feedback_path=None: calls.append(
+            (str(review), str(advice_feedback_path))
+        )
+        or result,
+    )
+
+    assert cli.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "fix_advice"
+    assert calls == [("review.json", str(feedback))]
 
 
 @pytest.mark.parametrize(
@@ -1102,6 +1214,49 @@ def test_main_code_review_full_passes_risk_context_path(monkeypatch, tmp_path, c
     payload = json.loads(capsys.readouterr().out)
     assert payload["review_type"] == "full"
     assert calls[3] == ("review", str(tmp_path), str(risk_context), True)
+
+
+def test_main_code_review_full_passes_advice_feedback_path(monkeypatch, tmp_path, capsys):
+    calls: list[object] = []
+    result = {
+        "mode": "code_review",
+        "review_type": "full",
+        "scores": {},
+        "summary": {"headline": "Full code review complete"},
+        "findings": [],
+        "signals": [],
+        "evidence": [],
+        "concerns": [],
+        "artifacts": {},
+    }
+    feedback = tmp_path / "feedback.json"
+    feedback.write_text(json.dumps({"items": []}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["archi", "code-review", "--full", "--advice-feedback", str(feedback), str(tmp_path)],
+    )
+    monkeypatch.setattr(cli, "_ensure_authorized_access", lambda: calls.append("auth"))
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: calls.append(("bundle", args.path)) or None)
+    monkeypatch.setattr(
+        cli,
+        "preflight_backend_llm",
+        lambda path, *, checks: calls.append(("llm", path, tuple(checks))),
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_code_review_full",
+        lambda path, *, advice_feedback_path=None, progress=None: calls.append(
+            ("review", path, str(advice_feedback_path), progress is cli.emit_progress)
+        )
+        or result,
+    )
+
+    assert cli.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["review_type"] == "full"
+    assert calls[3] == ("review", str(tmp_path), str(feedback), True)
 
 
 def test_main_code_review_full_llm_unavailable_uses_static_review(

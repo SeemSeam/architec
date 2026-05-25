@@ -43,6 +43,53 @@ def test_build_fix_advice_generates_suggestions_from_concerns() -> None:
     assert "apply" not in json.dumps(result).lower()
 
 
+def test_build_fix_advice_demotes_rejected_concern_feedback() -> None:
+    result = build_fix_advice(
+        _review(),
+        source_review="review.json",
+        advice_feedback={
+            "_source_path": "feedback.json",
+            "items": [
+                {
+                    "concern_id": "code-review:cleanup:1",
+                    "status": "rejected",
+                    "scope": "exact_advice",
+                    "reason": "active runtime fallback",
+                }
+            ],
+        },
+    )
+
+    assert result["summary"]["source_concern_total"] == 2
+    assert result["summary"]["suggestion_total"] == 1
+    assert result["summary"]["feedback_demoted_total"] == 1
+    assert [item["concern"] for item in result["suggestions"]] == ["code-review:hotspot:1"]
+    feedback = result["artifacts"]["advice_feedback"]
+    assert feedback["input_path"] == "feedback.json"
+    assert feedback["demoted_suggestions"][0]["concern_id"] == "code-review:cleanup:1"
+    assert feedback["demoted_suggestions"][0]["status"] == "rejected"
+
+
+def test_build_fix_advice_same_path_kind_feedback_demotes_suggestion() -> None:
+    result = build_fix_advice(
+        _review(),
+        advice_feedback={
+            "items": [
+                {
+                    "path": "src/legacy.py",
+                    "kind": "cleanup",
+                    "status": "not_applicable",
+                    "scope": "same_path_kind",
+                }
+            ],
+        },
+    )
+
+    assert len(result["suggestions"]) == 1
+    assert result["suggestions"][0]["concern"] == "code-review:hotspot:1"
+    assert result["artifacts"]["advice_feedback"]["demoted_suggestion_total"] == 1
+
+
 def test_build_fix_advice_filters_by_kind_and_file() -> None:
     result = build_fix_advice(_review(), focus_kind="hotspot", focus_file="core")
 
@@ -521,6 +568,31 @@ def test_run_fix_advice_reads_review_json(tmp_path) -> None:
     assert result["source_review"] == str(review_path)
     assert len(result["suggestions"]) == 1
     assert result["suggestions"][0]["target"] == "src/legacy.py"
+
+
+def test_run_fix_advice_reads_advice_feedback_json(tmp_path) -> None:
+    review_path = tmp_path / "review.json"
+    feedback_path = tmp_path / "feedback.json"
+    review_path.write_text(json.dumps(_review()), encoding="utf-8")
+    feedback_path.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "concern_id": "code-review:cleanup:1",
+                        "status": "rejected",
+                        "scope": "exact_advice",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_fix_advice(review_path, advice_feedback_path=feedback_path)
+
+    assert result["summary"]["feedback_demoted_total"] == 1
+    assert result["artifacts"]["advice_feedback"]["input_path"] == str(feedback_path)
 
 
 def test_run_fix_advice_missing_review_json_raises_input_error(tmp_path) -> None:

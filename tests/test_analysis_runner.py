@@ -218,3 +218,56 @@ def test_run_analysis_writes_architec_artifacts(tmp_path, monkeypatch):
     assert data['artifacts']['archive_candidates_json'].endswith('architec-archive-candidates.json')
     assert data['artifacts']['semantic_judge_json'].endswith('architec-semantic-judge.json')
     assert result['summary']['headline'] == 'Snapshot'
+
+
+def test_run_analysis_applies_advice_feedback_to_recommendations(tmp_path, monkeypatch):
+    (tmp_path / 'docs').mkdir()
+    feedback_path = tmp_path / 'feedback.json'
+    feedback_path.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "path": "lib:provider_backends",
+                        "kind": "recommendation",
+                        "status": "rejected",
+                        "scope": "same_path_kind",
+                        "reason": "provider backend split is intentional",
+                    }
+                ]
+            }
+        ),
+        encoding='utf-8',
+    )
+    monkeypatch.setattr(runner.HippoSnapshot, 'load', lambda root: _Snapshot(root))
+    monkeypatch.setattr(
+        runner,
+        'analyze_history_and_iterate',
+        lambda root, llm_enabled=True: {
+            'full_score': {'score': 82.0},
+            'summary': {},
+            'component_risk': {'lib:provider_backends': {'risk_score': 12.0, 'critical': 1, 'warning': 2, 'file_count': 12}},
+        },
+    )
+    monkeypatch.setattr(runner, 'score_changed_components', lambda *args, **kwargs: {})
+    monkeypatch.setattr(runner, 'suggest_feature_architecture', lambda *args, **kwargs: {})
+    monkeypatch.setattr(runner, 'build_hotspot_digest', lambda *args, **kwargs: {'items': []})
+    monkeypatch.setattr(
+        runner,
+        '_review_folder_topology',
+        lambda *args, **kwargs: {'source_root': 'lib', 'needs_folder_management': False, 'flat_file_total': 2},
+    )
+    monkeypatch.setattr(runner, '_llm_summary', lambda *args, **kwargs: {'headline': 'Snapshot', 'executive_summary': 'Summary'})
+    monkeypatch.setattr(runner, '_run_semantic_judge', lambda *args, **kwargs: {'status': 'skipped'})
+    monkeypatch.setattr(runner, 'build_component_graph', lambda snapshot: {})
+
+    result = runner.run_analysis(tmp_path, advice_feedback_path=feedback_path)
+
+    assert result['recommendations'] == []
+    feedback = result['artifacts']['advice_feedback']
+    assert feedback['input_path'] == str(feedback_path)
+    assert feedback['demoted_recommendation_total'] == 1
+    assert feedback['demoted_recommendations'][0]['status'] == 'rejected'
+    summary_md = (tmp_path / '.architec' / 'architec-summary.md').read_text(encoding='utf-8')
+    assert 'Stabilize lib:provider_backends' not in summary_md
+    assert 'provider backend split is intentional' not in summary_md

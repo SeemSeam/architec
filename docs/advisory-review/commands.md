@@ -4,14 +4,21 @@
 
 ```bash
 archi plan-review <plan.md>
+archi
+archi --full
+archi fix-advice --review <review.json>
+archi status --trend
+archi status --snapshot
+```
+
+高级/兼容入口保留给显式范围、saved plan-review JSON、risk context 和调试：
+
+```bash
 archi code-review --full .
 archi code-review --diff .
 archi code-review --diff --plan-review <plan.json> .
 archi code-review --since <ref> .
 archi code-review --diff --risk-context <risk.json> .
-archi fix-advice --review <review.json>
-archi status --trend
-archi status --snapshot
 ```
 
 命令职责：
@@ -26,7 +33,9 @@ archi status --snapshot
 | 命令 | 模式 | 是否互斥 | 读写行为 | 说明 |
 | --- | --- | --- | --- | --- |
 | `plan-review <plan.md>` | 单方案审查 | 不适用 | 读方案，写报告 | 当前版本只支持单个 plan 文件，不支持目录级多方案协同审查。 |
-| `code-review --full` | 全量审查 | 与 `--diff` / `--since` 互斥 | 读项目，写报告 | 面向当前快照，展示整体健康状态和当前薄弱点。 |
+| `archi` | 默认增量 LLM 审查 | 与 `--full` 互斥 | 读 selected changes，写报告 | 面向当前改动，使用 compact selected-scope LLM context。 |
+| `archi --full` | 全量 LLM 审查 | 与默认增量语义互斥 | 读项目，写报告 | 面向当前快照，展示整体健康状态和当前薄弱点。 |
+| `code-review --full` | 全量审查 | 与 `--diff` / `--since` 互斥 | 读项目，写报告 | 高级/兼容入口，面向当前快照。 |
 | `code-review --diff` | 当前 diff 审查 | 与 `--full` / `--since` 互斥 | 读工作树 diff，写报告 | 只分析本次改动引入或恶化的问题。 |
 | `code-review --since <ref>` | 指定引用后的增量审查 | 与 `--full` / `--diff` 互斥 | 读指定范围，写报告 | 只分析指定范围内的结构变化。 |
 | `fix-advice --review <review.json>` | 修复建议 | 不适用 | 读 review，写建议报告 | 不生成 patch，不执行修改；`--for <review.json>` 保留为兼容别名。 |
@@ -57,12 +66,12 @@ archi status --snapshot
 
 | 现有入口 | 新定位 | 说明 |
 | --- | --- | --- |
-| `archi .` | `archi code-review --full .` | 全量架构分析转为全量代码审查建议。 |
-| `archi --diff .` | `archi code-review --diff .` | 增量分析转为增量代码审查建议。 |
+| `archi .` | `archi --full` | 历史 full review 心智后续收敛为显式全量审查。 |
+| `archi --diff .` | `archi` | 兼容 alias；默认增量审查应使用裸 `archi`。 |
 | `archi --goal ...` | parser 已移除 | 不再做目标规划；迁移到 `archi plan-review <plan.md>`。 |
-| `archi gate` | parser 已移除 | `architec` 不做门禁、不输出放行裁决；迁移到 advisory `archi code-review --diff .`。 |
+| `archi gate` | parser 已移除 | `architec` 不做门禁、不输出放行裁决；迁移到 advisory `archi --out review.json`。 |
 | `archi baseline` | parser 已移除 | 快照迁移到 `archi status --snapshot`。 |
-| `archi cleanup` | parser 已移除 | cleanup / archive 成为 `archi code-review --full .` 审查报告中的 signals 和 file-level concerns。 |
+| `archi cleanup` | parser 已移除 | cleanup / archive 成为 `archi --full` 审查报告中的 signals 和 file-level concerns。 |
 | `archi archive` | `code-review` signal | archive 成为审查报告中的一类信号。 |
 | `archi autofix` | parser 已移除 | 迁移到 `archi fix-advice --review <review.json>`；只给修复建议，不自动落地。`--for <review.json>` 仍兼容旧脚本。 |
 | `archi autofix --apply` | parser 已移除 | 不再提供自动修改行为。 |

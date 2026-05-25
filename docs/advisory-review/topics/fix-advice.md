@@ -48,6 +48,12 @@ archi fix-advice --review <review.json>
 
 `fix-advice` 面向一次已存在 review 的具体 concern；`plan-review` 的 `suggested_adjustments` 面向方案落地前的范围、位置和复用方向。两者不能混用。
 
+Advice feedback ledger 见 [Decision 067](../decisions/067-advice-feedback-ledger.md)。
+`fix-advice` 可以通过 `--advice-feedback <json>` 读取项目本地 reviewer
+feedback，把已被判定错误、不适用或 superseded 的 suggestions 降级到
+`artifacts.advice_feedback`。该行为不改变 raw review JSON，也不让 Architec
+记忆私有对话状态。
+
 ## Duplication Advice
 
 当 concern 的 `kind` 是 `duplication` 时，`fix-advice` 使用 duplication 专用建议分支。

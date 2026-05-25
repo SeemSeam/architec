@@ -70,6 +70,10 @@
 - semantic archive/retire display reinforcement 会为 semantic judge 明确判定 `archive_first` / `retire_now` 的 cleanup/archive concerns 增加 evidence 并提升展示 confidence floor。见 [064-semantic-archive-retire-display-reinforcement.md](decisions/064-semantic-archive-retire-display-reinforcement.md)。
 - incremental cleanup/archive display de-dupe 会让 diff/since selected-scope 中同路径同 category 的 cleanup/archive observations 只占一个 top concern slot，同时保留完整 artifact。见 [065-incremental-cleanup-archive-display-dedupe.md](decisions/065-incremental-cleanup-archive-display-dedupe.md)。
 - incremental static degradation 会在 diff/since 的 backend LLM 不可用时输出 `summary.analysis_mode=static` 的 selected-scope deterministic review，同时保留 bad-ref 与 bundle 错误边界。见 [066-incremental-static-degradation.md](decisions/066-incremental-static-degradation.md)。
+- advice feedback ledger v1 通过显式 `--advice-feedback <json>` 读取 reviewer 反馈，先作用于 full-review recommendations 和 `fix-advice` 降噪。见 [067-advice-feedback-ledger.md](decisions/067-advice-feedback-ledger.md)。
+- incremental-first LLM cost control 将公开心智收敛为 `archi` 增量 LLM 审查和 `archi --full` 全量 LLM 审查；成本控制来自 selected-scope context 和有界 LLM 调用，而不是让用户选择一堆参数。见 [068-incremental-first-cost-control.md](decisions/068-incremental-first-cost-control.md)。
+- incremental snapshot freshness context 会在默认 `archi` 增量审查中报告 Hippo bundle 是否存在、selected files 是否晚于 snapshot，但不触发 full refresh。见 [069-incremental-snapshot-freshness-context.md](decisions/069-incremental-snapshot-freshness-context.md)。
+- command surface documentation cleanup 将 README、commands 和 skills 主入口收敛到 `archi` / `archi --full`，历史 alias 只作为兼容说明。见 [070-command-surface-documentation-cleanup.md](decisions/070-command-surface-documentation-cleanup.md)。
 
 ## 目录
 
@@ -100,6 +104,8 @@
 | [topics/multi-repo-dogfood-audit-2026-05-14.md](topics/multi-repo-dogfood-audit-2026-05-14.md) | 多个外部 Python 库 dogfood 审查记录和 scanner/CLI calibration 信号 |
 | [topics/final-suggestion-quality-dogfood-2026-05-15.md](topics/final-suggestion-quality-dogfood-2026-05-15.md) | 收尾阶段多仓建议质量验证和后续 polish 信号 |
 | [topics/advisory-recall-calibration.md](topics/advisory-recall-calibration.md) | 高精度 primary concerns 与较宽松 discovery lane 的后续校准方案 |
+| [topics/advice-feedback-ledger.md](topics/advice-feedback-ledger.md) | reviewer 反馈账本方案，用于减少下一轮重复错误建议 |
+| [topics/incremental-first-cost-control.md](topics/incremental-first-cost-control.md) | `archi` 增量 LLM 审查与 `archi --full` 全量审查的成本控制方案 |
 | [topics/ai-signals.md](topics/ai-signals.md) | AI/vibe coding 特有坏味信号 |
 | [topics/external-signals.md](topics/external-signals.md) | 历史、测试、依赖、运行时信号取舍 |
 
@@ -109,30 +115,39 @@
 
 ```bash
 archi plan-review <plan.md>
+archi
+archi --full
+archi fix-advice --review <review.json>
+archi status --trend
+archi status --snapshot
+```
+
+高级/兼容入口：
+
+```bash
 archi code-review --full .
 archi code-review --diff .
 archi code-review --diff --plan-review <plan.json> .
 archi code-review --since <ref> .
 archi code-review --diff --risk-context <risk.json> .
-archi fix-advice --review <review.json>
-archi status --trend
-archi status --snapshot
 ```
 
 ## 能力迁移摘要
 
 | 现有入口 | 新定位 |
 | --- | --- |
-| `archi .` | `archi code-review --full .` |
-| `archi --diff .` | `archi code-review --diff .` |
+| `archi` | 默认增量 LLM 架构审查当前 selected changes |
+| `archi --full` | 显式全量 LLM 架构审查 |
+| `archi .` | compatibility alias；full review 心智应迁移到 `archi --full` |
+| `archi --diff .` | compatibility alias；默认增量审查应迁移到裸 `archi` |
 | `archi --goal ...` | parser 已移除，迁移到 `archi plan-review <plan.md>` |
-| `archi gate` | parser 已移除，不做门禁；迁移到 advisory `archi code-review --diff .` |
+| `archi gate` | parser 已移除，不做门禁；迁移到 advisory `archi --out review.json` |
 | `archi baseline` | parser 已移除，迁移到 `archi status --snapshot` |
-| `archi cleanup` | parser 已移除，迁移到 `archi code-review --full .` cleanup/archive signals |
+| `archi cleanup` | parser 已移除，迁移到 `archi --full` cleanup/archive signals |
 | `archi archive` | `code-review` signal |
 | `archi autofix` | parser 已移除，迁移到 `archi fix-advice` |
 | `archi autofix --apply` | parser 已移除，不提供自动修改 |
 
 ## 状态
 
-active · updated 2026-05-15
+active · updated 2026-05-24

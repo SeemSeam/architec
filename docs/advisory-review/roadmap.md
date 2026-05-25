@@ -121,6 +121,10 @@ Done:
 - semantic archive/retire display reinforcement v1 已落地：full review 的 cleanup/archive concerns 如果被 semantic judge 明确判定为 `archive_first` 或 `retire_now`，会记录 semantic evidence 并提高展示 confidence floor；见 [decisions/064-semantic-archive-retire-display-reinforcement.md](decisions/064-semantic-archive-retire-display-reinforcement.md)。
 - incremental cleanup/archive display de-dupe 已落地：diff/since selected-scope 中 cleanup/archive 同路径同 category observations 只占一个 displayed top concern slot，完整 generated concerns artifact 仍保留两者；见 [decisions/065-incremental-cleanup-archive-display-dedupe.md](decisions/065-incremental-cleanup-archive-display-dedupe.md)。
 - incremental static degradation 已落地：diff/since 在 backend LLM 不可用时返回明确标记的 selected-scope static CodeReviewResult，bad-ref 和 bundle validation 边界保持不变；见 [decisions/066-incremental-static-degradation.md](decisions/066-incremental-static-degradation.md)。
+- advice feedback ledger v1 已落地：显式 `--advice-feedback <json>` 可让 full-review recommendations 和 `fix-advice` 读取 reviewer feedback，并降级 rejected / not_applicable / superseded 建议；见 [decisions/067-advice-feedback-ledger.md](decisions/067-advice-feedback-ledger.md) 和 [topics/advice-feedback-ledger.md](topics/advice-feedback-ledger.md)。
+- incremental-first LLM cost control v1 已落地：裸 `archi` 走 selected-change incremental LLM review，`archi --full` 走 full-project LLM review，增量路径使用 compact selected-scope LLM context 并输出初版 `cost_context` telemetry；见 [decisions/068-incremental-first-cost-control.md](decisions/068-incremental-first-cost-control.md) 和 [topics/incremental-first-cost-control.md](topics/incremental-first-cost-control.md)。
+- incremental snapshot freshness context 已落地：默认 `archi` 会报告 Hippo bundle 是否存在、selected files 是否晚于 snapshot，并把该上下文传给 selected-scope LLM payload，但不会自动刷新 Hippo；见 [decisions/069-incremental-snapshot-freshness-context.md](decisions/069-incremental-snapshot-freshness-context.md)。
+- command surface documentation cleanup 已落地：README、commands 和 skills 主入口收敛为 `archi` / `archi --full`，历史 `archi .` / `archi --diff .` 仅作为 compatibility / migration 说明；见 [decisions/070-command-surface-documentation-cleanup.md](decisions/070-command-surface-documentation-cleanup.md)。
 
 In Progress:
 
@@ -128,9 +132,12 @@ In Progress:
 
 Next:
 
+- 继续打磨增量 LLM 审查成本 telemetry：补 elapsed time、真实 cache hit count，并评估 selected-scope AST/import/signature 输入复用；见 [topics/incremental-first-cost-control.md](topics/incremental-first-cost-control.md)。
+- 评估 incremental escalation hints：当 selected diff 很大、prompt 过大或 snapshot stale 很重时，建议用户运行 `archi --full`，但不自动升级。
 - 让 human-readable `.architec/architec-summary.md` Recommendations 与 `code-review` display calibration 对齐，避免小型成熟库中已降级的低压力 topology context 又以高优先级建议出现；见 [topics/final-suggestion-quality-dogfood-2026-05-15.md](topics/final-suggestion-quality-dogfood-2026-05-15.md)。
 - 基于 discovery lane v1 继续做 dogfood 校准：评估 recurrence、architecture contracts 或 saved plan-review 是否也应作为 discovery promotion reinforcement；见 [topics/advisory-recall-calibration.md](topics/advisory-recall-calibration.md)。
 - 评估 plan/diff consistency 后续是否需要更丰富的 explicit structured intent sources；不做 prose/LLM requirement inference。
+- 扩展 advice feedback ledger 写入体验：评估是否需要 helper command 将 reviewer decisions 写入 `.architec/advice-feedback.json`，以及是否让 `status --trend` 汇总 feedback 效果。
 
 Deferred:
 

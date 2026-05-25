@@ -39,6 +39,7 @@ from ..cleanup.semantic_judge import (
     semantic_judge_report_view,
     write_semantic_judge_artifacts,
 )
+from ..advice_feedback import apply_feedback_to_recommendations, load_advice_feedback
 from .history_analyzer import analyze_history_and_iterate
 from .hotspot_digest import build_hotspot_digest
 from ..support.io_utils import ProgressFn
@@ -58,6 +59,7 @@ def run_analysis(
     diff: bool = False,
     base: str = "",
     head: str = "",
+    advice_feedback_path: str | Path | None = None,
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root).resolve()
@@ -165,6 +167,11 @@ def run_analysis(
     llm_recs = llm_recommendations(llm_summary_value)
     if llm_recs:
         recommendations_view = llm_recs
+    advice_feedback = load_advice_feedback(advice_feedback_path) if advice_feedback_path else None
+    recommendations_view, advice_feedback_summary = apply_feedback_to_recommendations(
+        recommendations_view,
+        advice_feedback,
+    )
 
     report = build_report(
         root=root,
@@ -189,6 +196,8 @@ def run_analysis(
         cleanup_inventory=cleanup_inventory,
         graph_builder=build_component_graph,
     )
+    if advice_feedback_summary:
+        report.setdefault("artifacts", {})["advice_feedback"] = advice_feedback_summary
     advance("writing cleanup and semantic artifacts")
     report.setdefault("artifacts", {}).update(
         {

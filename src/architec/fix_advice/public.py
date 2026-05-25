@@ -5,6 +5,12 @@ import re
 from pathlib import Path
 from typing import Any
 
+from architec.advice_feedback import (
+    AdviceFeedbackInputError,
+    feedback_summary_for_concern,
+    load_advice_feedback,
+)
+
 
 LEGACY_COMPAT_TOKENS = {
     "backcompat",
@@ -400,8 +406,13 @@ def _suggestion(concern: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _summary(suggestions: list[dict[str, Any]], *, filtered_total: int) -> dict[str, Any]:
-    if not filtered_total:
+def _summary(
+    suggestions: list[dict[str, Any]],
+    *,
+    filtered_total: int,
+    feedback_demoted_total: int = 0,
+) -> dict[str, Any]:
+    if not filtered_total or not suggestions:
         headline = "No fix advice suggestions were generated for this review."
     else:
         headline = "Fix advice generated from review concerns."
@@ -410,8 +421,12 @@ def _summary(suggestions: list[dict[str, Any]], *, filtered_total: int) -> dict[
         "suggestion_total": len(suggestions),
         "source_concern_total": filtered_total,
     }
+    if feedback_demoted_total:
+        summary["feedback_demoted_total"] = feedback_demoted_total
     if not filtered_total:
         summary["reason"] = "The review has no matching concerns for the selected filters."
+    elif feedback_demoted_total and not suggestions:
+        summary["reason"] = "Reviewer feedback demoted all matching suggestions."
     return summary
 
 
@@ -422,6 +437,7 @@ def build_fix_advice(
     focus_file: str = "",
     focus_kind: str = "",
     concern_id: str = "",
+    advice_feedback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     concerns = [
         concern
@@ -434,13 +450,31 @@ def build_fix_advice(
             concern_id=concern_id,
         )
     ]
-    suggestions = [_suggestion(concern) for concern in concerns]
+    suggestions: list[dict[str, Any]] = []
+    demoted: list[dict[str, Any]] = []
+    for concern in concerns:
+        feedback_summary = feedback_summary_for_concern(concern, advice_feedback)
+        if feedback_summary:
+            demoted.append(feedback_summary)
+            continue
+        suggestions.append(_suggestion(concern))
+    artifacts: dict[str, Any] = {}
+    if advice_feedback and demoted:
+        artifacts["advice_feedback"] = {
+            "input_path": str(advice_feedback.get("_source_path", "") or ""),
+            "demoted_suggestion_total": len(demoted),
+            "demoted_suggestions": demoted,
+        }
     return {
         "mode": "fix_advice",
         "source_review": source_review,
-        "summary": _summary(suggestions, filtered_total=len(concerns)),
+        "summary": _summary(
+            suggestions,
+            filtered_total=len(concerns),
+            feedback_demoted_total=len(demoted),
+        ),
         "suggestions": suggestions,
-        "artifacts": {},
+        "artifacts": artifacts,
     }
 
 
@@ -466,16 +500,19 @@ def run_fix_advice(
     focus_file: str = "",
     focus_kind: str = "",
     concern_id: str = "",
+    advice_feedback_path: str | Path | None = None,
 ) -> dict[str, Any]:
     path = Path(review_path)
     review = _read_review_json(path)
+    advice_feedback = load_advice_feedback(advice_feedback_path) if advice_feedback_path else None
     return build_fix_advice(
         review,
         source_review=str(path),
         focus_file=focus_file,
         focus_kind=focus_kind,
         concern_id=concern_id,
+        advice_feedback=advice_feedback,
     )
 
 
-__all__ = ["FixAdviceInputError", "build_fix_advice", "run_fix_advice"]
+__all__ = ["AdviceFeedbackInputError", "FixAdviceInputError", "build_fix_advice", "run_fix_advice"]

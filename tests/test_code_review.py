@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import architec.code_review.public as code_review
@@ -1729,6 +1730,208 @@ def test_run_code_review_static_diff_uses_changed_file_scope_without_analysis(
     assert [item["kind"] for item in result["concerns"]] == ["duplication"]
     signal = next(item for item in result["signals"] if item["kind"] == "near_duplicate")
     assert signal["metrics"]["scoped_to_changed_files"] is True
+
+
+def test_run_code_review_incremental_llm_uses_selected_scope_without_full_analysis(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_near_duplicate_project(tmp_path)
+    calls: list[object] = []
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "git_changed_files",
+        lambda *args, **kwargs: [{"path": "src/changed.py", "added": 4, "deleted": 1}],
+    )
+
+    def fake_llm(root: Path, *, payload: dict[str, object]) -> dict[str, object]:
+        calls.append((root, payload))
+        return {
+            "headline": "Incremental architecture review complete",
+            "executive_summary": "The selected change repeats an existing implementation shape.",
+            "top_takeaways": ["Review whether the changed helper should reuse the existing one."],
+            "recommendations": [
+                {
+                    "priority": "P1",
+                    "title": "Compare duplicate helper intent",
+                    "why": "The selected file matches an existing implementation shape.",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(code_review, "incremental_llm_summary", fake_llm)
+
+    result = code_review.run_code_review_incremental_llm(tmp_path)
+
+    assert calls
+    llm_payload = calls[0][1]
+    assert llm_payload["analysis_context"] == "selected_scope"
+    assert llm_payload["changed_files"] == ["src/changed.py"]
+    assert result["mode"] == "code_review"
+    assert result["review_type"] == "diff"
+    assert result["summary"]["headline"] == "Incremental architecture review complete"
+    assert result["summary"]["analysis_mode"] == "incremental_llm"
+    assert result["summary"]["llm_context"] == "selected_scope"
+    assert result["summary"]["executive_summary"] == "The selected change repeats an existing implementation shape."
+    assert result["recommendations"][0]["title"] == "Compare duplicate helper intent"
+    assert result["artifacts"]["code_review_analysis_mode"] == "incremental_llm"
+    assert result["artifacts"]["code_review_llm_context"] == "selected_scope"
+    signal = next(item for item in result["signals"] if item["kind"] == "cost_context")
+    assert signal["metrics"]["selected_file_total"] == 1
+    assert signal["metrics"]["llm_call_total"] == 1
+    assert signal["metrics"]["llm_context"] == "selected_scope"
+
+
+def test_run_code_review_incremental_llm_reports_stale_snapshot_without_refresh(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_near_duplicate_project(tmp_path)
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "git_changed_files",
+        lambda *args, **kwargs: [{"path": "src/changed.py", "added": 4, "deleted": 1}],
+    )
+    hippo = tmp_path / ".hippocampus"
+    hippo.mkdir()
+    for name in (
+        "architect-metrics.json",
+        "hippocampus-index.json",
+        "code-signatures.json",
+        "structure-prompt.md",
+    ):
+        (hippo / name).write_text("{}\n", encoding="utf-8")
+    (hippo / "bundle-state.json").write_text(
+        json.dumps({"generated_at": "2000-01-01T00:00:00+00:00"}) + "\n",
+        encoding="utf-8",
+    )
+
+    def fake_llm(root: Path, *, payload: dict[str, object]) -> dict[str, object]:
+        calls.append(payload)
+        return {"headline": "Incremental architecture review complete"}
+
+    monkeypatch.setattr(code_review, "incremental_llm_summary", fake_llm)
+
+    result = code_review.run_code_review_incremental_llm(tmp_path)
+
+    snapshot_payload = calls[0]["snapshot_context"]
+    assert snapshot_payload["hippo_bundle_present"] is True
+    assert snapshot_payload["hippo_bundle_stale"] is True
+    assert snapshot_payload["hippo_refresh_performed"] is False
+    assert snapshot_payload["selected_changed_after_bundle_total"] == 1
+    signal = next(item for item in result["signals"] if item["kind"] == "snapshot_context")
+    assert signal["metrics"]["hippo_bundle_present"] is True
+    assert signal["metrics"]["hippo_bundle_stale"] is True
+    assert signal["metrics"]["hippo_refresh_performed"] is False
+    assert signal["metrics"]["stale_reason_total"] == 1
+    assert signal["metrics"]["selected_changed_after_bundle_total"] == 1
+    assert result["summary"]["analysis_mode"] == "incremental_llm"
+
+
+def test_run_code_review_incremental_llm_reports_missing_snapshot_without_refresh(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_near_duplicate_project(tmp_path)
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "git_changed_files",
+        lambda *args, **kwargs: [{"path": "src/changed.py", "added": 4, "deleted": 1}],
+    )
+    monkeypatch.setattr(
+        code_review,
+        "incremental_llm_summary",
+        lambda *args, **kwargs: {"headline": "Incremental architecture review complete"},
+    )
+
+    result = code_review.run_code_review_incremental_llm(tmp_path)
+
+    signal = next(item for item in result["signals"] if item["kind"] == "snapshot_context")
+    assert signal["metrics"]["hippo_bundle_present"] is False
+    assert signal["metrics"]["hippo_bundle_stale"] is False
+    assert signal["metrics"]["missing_file_total"] > 0
+    assert "without a Hippo structure snapshot" in signal["summary"]
+
+
+def test_run_code_review_incremental_llm_snapshot_context_is_selected_file_scoped(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_near_duplicate_project(tmp_path)
+    hippo = tmp_path / ".hippocampus"
+    hippo.mkdir()
+    for name in (
+        "architect-metrics.json",
+        "hippocampus-index.json",
+        "code-signatures.json",
+        "structure-prompt.md",
+    ):
+        (hippo / name).write_text("{}\n", encoding="utf-8")
+    generated_at = datetime.now(timezone.utc).isoformat()
+    (hippo / "bundle-state.json").write_text(
+        json.dumps({"generated_at": generated_at}) + "\n",
+        encoding="utf-8",
+    )
+    unselected = tmp_path / "src" / "unselected.py"
+    unselected.write_text("VALUE = 1\n", encoding="utf-8")
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "git_changed_files",
+        lambda *args, **kwargs: [{"path": "src/changed.py", "added": 4, "deleted": 1}],
+    )
+    monkeypatch.setattr(
+        code_review,
+        "incremental_llm_summary",
+        lambda *args, **kwargs: {"headline": "Incremental architecture review complete"},
+    )
+
+    result = code_review.run_code_review_incremental_llm(tmp_path)
+
+    signal = next(item for item in result["signals"] if item["kind"] == "snapshot_context")
+    assert signal["metrics"]["hippo_bundle_present"] is True
+    assert signal["metrics"]["hippo_bundle_stale"] is False
+    assert signal["metrics"]["selected_changed_after_bundle_total"] == 0
+
+
+def test_run_code_review_incremental_llm_reports_unknown_snapshot_freshness(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_near_duplicate_project(tmp_path)
+    hippo = tmp_path / ".hippocampus"
+    hippo.mkdir()
+    for name in (
+        "architect-metrics.json",
+        "hippocampus-index.json",
+        "code-signatures.json",
+        "structure-prompt.md",
+    ):
+        (hippo / name).write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "git_changed_files",
+        lambda *args, **kwargs: [{"path": "src/changed.py", "added": 4, "deleted": 1}],
+    )
+    monkeypatch.setattr(
+        code_review,
+        "incremental_llm_summary",
+        lambda *args, **kwargs: {"headline": "Incremental architecture review complete"},
+    )
+
+    result = code_review.run_code_review_incremental_llm(tmp_path)
+
+    signal = next(item for item in result["signals"] if item["kind"] == "snapshot_context")
+    assert signal["metrics"]["hippo_bundle_present"] is True
+    assert signal["metrics"]["hippo_bundle_stale"] is False
+    assert signal["metrics"]["freshness_unknown"] is True
+    assert signal["metrics"]["selected_changed_after_bundle_total"] == 0
+    assert "freshness could not be determined" in signal["summary"]
 
 
 def test_run_code_review_static_since_bad_ref_returns_degraded_range_result(

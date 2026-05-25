@@ -275,6 +275,31 @@ changed files from git, the CLI returns a marked static CodeReviewResult with
 deterministic selected-scope signals. Since bad-ref and bundle validation
 boundaries remain unchanged.
 
+Advice feedback ledger v1 adds explicit `--advice-feedback <json>` input for
+full-review recommendations and `fix-advice`. Reviewer-rejected,
+not-applicable, or superseded advice is demoted from default suggestions and
+recorded in `artifacts.advice_feedback`, without relying on provider memory or
+hiding raw scanner artifacts.
+
+Incremental-first LLM cost control records the next code-review direction:
+`archi` should become selected-change LLM review, while `archi --full` remains
+the full-project LLM review. Cost control should come from compact
+selected-scope prompts, bounded LLM calls, no default full Hippo refresh, and
+cache telemetry rather than a broad public budget matrix.
+
+Incremental-first LLM review v1 now routes bare `archi` to a selected-change
+LLM-backed code review and routes `archi --full` to full-project LLM review.
+The incremental path builds deterministic selected-scope evidence first, asks
+the LLM to interpret that compact context, skips default full Hippo refresh, and
+emits initial `cost_context` telemetry. It also emits `snapshot_context`
+telemetry so users can see whether a Hippo structure snapshot was present and
+whether selected files are newer than that snapshot, without forcing an
+incremental refresh.
+
+The command documentation now teaches `archi` and `archi --full` as the common
+entry points. Historical aliases such as `archi .` and `archi --diff .` remain
+compatibility/migration notes rather than the primary workflow.
+
 Final suggestion-quality dogfood against `itsdangerous`, `humanize`, and
 `python-dotenv` confirmed that the JSON `CodeReviewResult.concerns[]` display is
 now conservative for small mature libraries: paired API variants stay in

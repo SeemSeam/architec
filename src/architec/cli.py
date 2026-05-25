@@ -6,11 +6,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .advice_feedback import load_advice_feedback
 from .auth import auto_login, handle_auth_command, require_authorized_session
 from .auth.guard import ArchitecAuthRequiredError
 from .code_review.public import (
     run_code_review_diff,
     run_code_review_full,
+    run_code_review_incremental_llm,
     run_code_review_since,
     run_code_review_static_diff,
     run_code_review_static_full,
@@ -276,6 +278,10 @@ def _required_llm_checks(*, diff: bool) -> list[tuple[str, str]]:
     ]
 
 
+def _incremental_llm_checks() -> list[tuple[str, str]]:
+    return [('architec_summary', 'strong')]
+
+
 def _add_argument(parser: argparse.ArgumentParser, *args: str, **kwargs: Any) -> None:
     parser.add_argument(*args, **kwargs)
 
@@ -294,9 +300,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_argument(
         parser,
+        '--full',
+        action='store_true',
+        help='run full project LLM architecture review',
+    )
+    _add_argument(
+        parser,
         '--diff',
         action='store_true',
-        help='run incremental git diff analysis',
+        help='compatibility alias for default incremental review',
     )
     _add_argument(parser, '--base', default='', help='git base ref (only with --diff)')
     _add_argument(parser, '--head', default='', help='git head ref (only with --diff)')
@@ -313,6 +325,13 @@ def build_parser() -> argparse.ArgumentParser:
         default='',
         metavar='RISK_JSON',
         help='optional external risk context JSON for code-review concerns',
+    )
+    _add_argument(
+        parser,
+        '--advice-feedback',
+        default='',
+        metavar='FEEDBACK_JSON',
+        help='optional reviewer feedback JSON for full-review recommendations',
     )
     _add_argument(parser, '--component', default='', help='reserved component hint')
     _add_argument(
@@ -413,6 +432,13 @@ def build_code_review_parser() -> argparse.ArgumentParser:
     )
     _add_argument(
         parser,
+        '--advice-feedback',
+        default='',
+        metavar='FEEDBACK_JSON',
+        help='optional reviewer feedback JSON for full-review recommendations',
+    )
+    _add_argument(
+        parser,
         '--out',
         default='',
         help='optional output JSON path override',
@@ -455,6 +481,7 @@ def build_fix_advice_parser() -> argparse.ArgumentParser:
     _add_argument(parser, '--focus-file', default='', help='only include concerns whose path contains this text')
     _add_argument(parser, '--focus-kind', default='', help='only include concerns of this kind')
     _add_argument(parser, '--concern-id', default='', help='only include one concern id')
+    _add_argument(parser, '--advice-feedback', default='', metavar='FEEDBACK_JSON', help='optional reviewer feedback JSON')
     _add_argument(parser, '--out', default='', help='optional output JSON path override')
     return parser
 
@@ -499,6 +526,7 @@ def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
     since_ref = str(args.since or "").strip()
     plan_review_path = str(getattr(args, "plan_review", "") or "").strip()
     risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
+    advice_feedback_path = str(getattr(args, "advice_feedback", "") or "").strip()
     if since_ref:
         emit_progress("archi code-review [3/3] running since code review")
         kwargs: dict[str, Any] = {"ref": since_ref, "progress": emit_progress}
@@ -529,14 +557,25 @@ def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
     kwargs = {"progress": emit_progress}
     if risk_context_path:
         kwargs["risk_context_path"] = risk_context_path
+    if advice_feedback_path:
+        kwargs["advice_feedback_path"] = advice_feedback_path
     return run_code_review_full(args.path, **kwargs)
 
 
 def _is_full_code_review_args(args: argparse.Namespace) -> bool:
     return (
         not bool(getattr(args, "check", False))
+        and bool(getattr(args, "full", False))
         and not bool(getattr(args, "diff", False))
         and not str(getattr(args, "since", "") or "").strip()
+    )
+
+
+def _should_ensure_bundle(args: argparse.Namespace) -> bool:
+    return (
+        bool(getattr(args, "check", False))
+        or bool(getattr(args, "full", False))
+        or bool(getattr(args, "refresh_from_hippo", False))
     )
 
 
@@ -549,6 +588,9 @@ def _static_full_code_review_result(args: argparse.Namespace, reason: str) -> di
     risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
     if risk_context_path:
         kwargs["risk_context_path"] = risk_context_path
+    advice_feedback_path = str(getattr(args, "advice_feedback", "") or "").strip()
+    if advice_feedback_path:
+        kwargs["advice_feedback_path"] = advice_feedback_path
     return run_code_review_static_full(args.path, **kwargs)
 
 
@@ -616,21 +658,31 @@ def _fix_advice_result(args: argparse.Namespace) -> dict[str, Any]:
         focus_file=str(args.focus_file or "").strip(),
         focus_kind=str(args.focus_kind or "").strip(),
         concern_id=str(args.concern_id or "").strip(),
+        advice_feedback_path=str(getattr(args, "advice_feedback", "") or "").strip() or None,
     )
 
 
 def _validate_args(args: argparse.Namespace) -> int | None:
+    if bool(getattr(args, "full", False)) and bool(getattr(args, "diff", False)):
+        print('--full and --diff are mutually exclusive', file=sys.stderr)
+        return 2
     if (args.base or args.head) and not args.diff:
         print('--base/--head require --diff', file=sys.stderr)
         return 2
     if getattr(args, "plan_review", "") and bool(args.check):
         print('--plan-review cannot be used with --check', file=sys.stderr)
         return 2
-    if getattr(args, "plan_review", "") and not args.diff:
-        print('--plan-review requires --diff', file=sys.stderr)
+    if getattr(args, "plan_review", "") and bool(getattr(args, "full", False)):
+        print('--plan-review requires incremental review', file=sys.stderr)
         return 2
     if getattr(args, "risk_context", "") and bool(args.check):
         print('--risk-context cannot be used with --check', file=sys.stderr)
+        return 2
+    if getattr(args, "advice_feedback", "") and bool(args.check):
+        print('--advice-feedback cannot be used with --check', file=sys.stderr)
+        return 2
+    if getattr(args, "advice_feedback", "") and not bool(getattr(args, "full", False)):
+        print('--advice-feedback currently requires --full', file=sys.stderr)
         return 2
     return None
 
@@ -642,7 +694,16 @@ def _validate_code_review_args(args: argparse.Namespace) -> int | None:
     if getattr(args, "plan_review", "") and bool(args.full):
         print('--plan-review requires --diff or --since', file=sys.stderr)
         return 2
+    if getattr(args, "advice_feedback", "") and not bool(args.full):
+        print('--advice-feedback currently requires --full', file=sys.stderr)
+        return 2
     return None
+
+
+def _validate_advice_feedback_arg(args: argparse.Namespace) -> None:
+    path = str(getattr(args, "advice_feedback", "") or "").strip()
+    if path:
+        load_advice_feedback(path)
 
 
 _REMOVED_LEGACY_COMMAND_REPLACEMENTS = {
@@ -676,8 +737,8 @@ def _run_command(
 ) -> dict[str, Any]:
     if args.check:
         return _checked_result(args, checks)
-    if bool(args.diff):
-        emit_progress("archi [3/3] running diff code review")
+    if not bool(getattr(args, "full", False)):
+        emit_progress("archi [3/3] running incremental LLM code review")
         kwargs: dict[str, Any] = {
             "base": str(args.base or "").strip(),
             "head": str(args.head or "").strip(),
@@ -689,12 +750,15 @@ def _run_command(
         risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
         if risk_context_path:
             kwargs["risk_context_path"] = risk_context_path
-        return run_code_review_diff(args.path, **kwargs)
+        return run_code_review_incremental_llm(args.path, **kwargs)
     emit_progress("archi [3/3] running full code review")
     kwargs = {"progress": emit_progress}
     risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
     if risk_context_path:
         kwargs["risk_context_path"] = risk_context_path
+    advice_feedback_path = str(getattr(args, "advice_feedback", "") or "").strip()
+    if advice_feedback_path:
+        kwargs["advice_feedback_path"] = advice_feedback_path
     return run_code_review_full(args.path, **kwargs)
 
 
@@ -746,6 +810,7 @@ def main() -> int:
         if argv and argv[0] == 'fix-advice':
             parser = build_fix_advice_parser()
             args = parser.parse_args(argv[1:])
+            _validate_advice_feedback_arg(args)
             result = _fix_advice_result(args)
             _emit_json(result, args.out or None)
             return 0
@@ -767,6 +832,7 @@ def main() -> int:
             invalid = _validate_code_review_args(args)
             if invalid is not None:
                 return invalid
+            _validate_advice_feedback_arg(args)
             if not bool(args.skip_auth):
                 _ensure_authorized_access()
             try:
@@ -826,25 +892,32 @@ def main() -> int:
         invalid = _validate_args(args)
         if invalid is not None:
             return invalid
+        _validate_advice_feedback_arg(args)
         if not bool(args.skip_auth):
             _ensure_authorized_access()
-        try:
-            refresh_result = _ensure_bundle(args)
-        except (FileNotFoundError, RuntimeError) as exc:
-            if not _is_full_code_review_args(args):
-                raise
-            result = _static_full_code_review_result(
-                args,
-                _availability_reason("Hippo bundle unavailable", exc),
-            )
-            _emit(
-                result,
-                args.out or None,
-                output_format=str(args.format or "all"),
-                check_mode=False,
-            )
-            return 0
-        checks = _required_llm_checks(diff=bool(args.diff))
+        refresh_result = None
+        if _should_ensure_bundle(args):
+            try:
+                refresh_result = _ensure_bundle(args)
+            except (FileNotFoundError, RuntimeError) as exc:
+                if not _is_full_code_review_args(args):
+                    raise
+                result = _static_full_code_review_result(
+                    args,
+                    _availability_reason("Hippo bundle unavailable", exc),
+                )
+                _emit(
+                    result,
+                    args.out or None,
+                    output_format=str(args.format or "all"),
+                    check_mode=False,
+                )
+                return 0
+        checks = (
+            _required_llm_checks(diff=False)
+            if bool(args.check) or bool(getattr(args, "full", False))
+            else _incremental_llm_checks()
+        )
         emit_progress("archi [2/3] checking backend LLM configuration")
         try:
             preflight_backend_llm(args.path, checks=checks)

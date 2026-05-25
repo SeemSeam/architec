@@ -4,7 +4,10 @@
 
 The primary CLI command is `archi`.
 
-It consumes Hippo bundle inputs from `.hippocampus/`, runs architecture analysis with backend LLM support, and writes its own outputs to `.architec/`.
+Default `archi` reviews current selected changes with bounded LLM context.
+Use `archi --full` when you want a refreshed whole-project architecture review.
+Architec can consume Hippo bundle inputs from `.hippocampus/`, runs architecture
+analysis with backend LLM support, and writes its own outputs to `.architec/`.
 
 ## Install
 
@@ -115,15 +118,15 @@ The website installer syncs them into:
 
 Current skill map:
 
-- `archi-full`: full-project advisory code review via `archi .` or `archi code-review --full .`
-- `archi-diff`: change-scoped advisory code review via `archi --diff .` or `archi code-review --diff .`
+- `archi-full`: full-project advisory code review via `archi --full`
+- `archi-diff`: change-scoped advisory code review via `archi`
 - `archi-goal`: retired public workflow; write a plan Markdown file and run `archi plan-review <plan.md>` instead
 - `archi-advice`: legacy planning-oriented workflow; advisory review output now uses `plan-review`, `code-review`, and `fix-advice`
 
 Recommended usage order:
 
-1. Run `archi-full` to establish the current structural review.
-2. Add `archi-diff` when evaluating active changes.
+1. Run `archi` when evaluating active changes.
+2. Run `archi --full` when you need a whole-project baseline.
 3. When a concrete target or refactor objective exists, write it as a plan Markdown file and run `archi plan-review <plan.md>`.
 4. Use code-review output as advisory input for human or agent follow-up; `architec` does not plan, gate, or automatically repair work.
 
@@ -184,16 +187,17 @@ Version-gated auth behavior:
 Advisory review:
 
 ```bash
-archi .
-archi code-review --full .
-archi --diff .
-archi code-review --diff .
+archi
+archi --full
 archi code-review --diff --plan-review plan.json .
 archi code-review --diff --risk-context risk.json .
 archi code-review --since main .
 ```
 
-`archi .` and `archi --diff .` are top-level aliases for code-review output. When `--out <path>` is used with those aliases, the JSON shape is CodeReviewResult rather than the legacy analysis result.
+`archi` runs selected-change LLM review and does not refresh Hippo by default.
+`archi --full` runs full-project LLM review. Compatibility aliases such as
+`archi .` and `archi --diff .` still return CodeReviewResult JSON, but new
+documentation and skills should use `archi` / `archi --full`.
 
 Diff and since reviews use the same base LLM preflight as full review. If a
 `code-review --since <ref>` range cannot be resolved, the command returns a
@@ -258,10 +262,10 @@ The top-level `--goal` flag has been removed. Write the intent as a plan Markdow
 
 Legacy maintenance command parsers have been removed. Use these replacement workflows instead:
 
-- `archi cleanup .` -> `archi code-review --full .`
+- `archi cleanup .` -> `archi --full`
 - `archi autofix .` -> `archi fix-advice --review <review.json>`
 - `archi baseline .` -> `archi status --snapshot`
-- `archi gate .` -> `archi code-review --diff . --out review.json`
+- `archi gate .` -> `archi --out review.json`
 
 `code-review --full` carries cleanup/archive observations as advisory signals and file-level concerns. `code-review --diff` output is advisory review data for humans or agents. Do not treat review output as a merge decision, and do not use automatic apply flows as part of the advisory-review workflow.
 
@@ -272,12 +276,12 @@ archi update
 archi uninstall
 ```
 
-Diff analysis:
+Advanced diff analysis:
 
 ```bash
-archi --diff .
-archi --diff --base main --head HEAD .
-archi code-review --diff .
+archi
+archi code-review --diff --base main --head HEAD .
+archi code-review --since main .
 ```
 
 Refresh Hippo bundle first:
@@ -309,13 +313,14 @@ Hippo remains the producer of input artifacts under `.hippocampus/`.
 ## Notes
 
 - `--goal` has been removed from the parser; use `archi plan-review <plan.md>` for plan or intent review.
-- Default top-level mode is full advisory code review.
-- `--diff` switches the top-level alias to advisory diff code review against the working tree or an explicit git range.
-- `archi cleanup` and `archi autofix` command parsers have been removed; use `archi code-review --full .` cleanup/archive signals and `archi fix-advice --review <review.json>`. The older `fix-advice --for <review.json>` flag remains a compatibility alias.
+- Default top-level mode is incremental selected-change LLM review.
+- Use `archi --full` for full-project LLM review.
+- `--diff` remains a compatibility alias for incremental review against the working tree or an explicit git range.
+- `archi cleanup` and `archi autofix` command parsers have been removed; use `archi --full` cleanup/archive signals and `archi fix-advice --review <review.json>`. The older `fix-advice --for <review.json>` flag remains a compatibility alias.
 - `archi update` checks the latest public release when possible, then reruns the production installer; if the current version already matches, it simply reinstalls the latest build.
 - `archi uninstall` is a deep uninstall by default: it removes the managed launcher, install tree, bundled skills, local config dirs, and attempts to uninstall `hippocampus` and `llmgateway` from the active Python environment. Use `--yes` only for non-interactive automation.
 - repo-root `.architecture-rules.toml` can now annotate cleanup candidates via `[[shared.cleanup_metadata]]` or `[[archi.cleanup_metadata]]` with `owner`, `ttl_days`, and `expires_at`; those fields flow through cleanup/archive signals and legacy compatibility internals.
-- `archi baseline` and `archi gate` command parsers have been removed; use `archi status --snapshot` and advisory `archi code-review --diff . --out review.json`.
+- `archi baseline` and `archi gate` command parsers have been removed; use `archi status --snapshot` and advisory `archi --out review.json`.
 - `--refresh-from-hippo` refreshes Hippo inputs through stable local commands:
   `hippo init .`, `hippo sig-extract .`, `hippo tree .`, `hippo index --no-llm .`,
   `hippo structure-prompt --profile map --no-llm-enhance .`,

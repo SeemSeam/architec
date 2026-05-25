@@ -136,9 +136,9 @@ The next architecture-stability work should prioritize contract and drift contro
 
 Recommended use for long-term maintenance:
 
-- run `archi code-review --diff . --out review.json` after coding-agent changes;
+- run `archi --out review.json` after coding-agent changes;
 - run `archi fix-advice --review review.json` for the concerns worth acting on;
-- run `archi code-review --full .` on a schedule or before larger releases;
+- run `archi --full` on a schedule or before larger releases;
 - run `archi status --trend` to watch whether structural concerns are accumulating;
 - keep boundary-contract decisions in versioned config or plan docs before asking agents to implement broad changes.
 
