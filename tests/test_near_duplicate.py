@@ -89,6 +89,76 @@ def second(records):
     assert first[0]["concern_id"].startswith("code-review:duplication:")
 
 
+def test_near_duplicate_scan_reuses_file_index(tmp_path) -> None:
+    (tmp_path / "a.py").write_text(
+        """
+def first(value):
+    total = 0
+    for item in value:
+        if item > 10:
+            total += item * 2
+        else:
+            total += item
+    return total
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "b.py").write_text(
+        """
+def second(records):
+    result = 0
+    for row in records:
+        if row > 99:
+            result += row * 2
+        else:
+            result += row
+    return result
+""",
+        encoding="utf-8",
+    )
+
+    first = near_duplicate_scan(tmp_path)
+    second = near_duplicate_scan(tmp_path)
+
+    assert first["scan_cache"] == {
+        "file_total": 2,
+        "file_cache_hit_total": 0,
+        "file_cache_miss_total": 2,
+    }
+    assert second["scan_cache"] == {
+        "file_total": 2,
+        "file_cache_hit_total": 2,
+        "file_cache_miss_total": 0,
+    }
+    assert first["concerns"][0]["concern_id"] == second["concerns"][0]["concern_id"]
+
+
+def test_near_duplicate_scan_ignores_invalid_file_index(tmp_path) -> None:
+    (tmp_path / ".architec" / "cache").mkdir(parents=True)
+    (tmp_path / ".architec" / "cache" / "code-review-near-duplicate-index.json").write_text(
+        '{"version": "not-a-number", "files": {}}',
+        encoding="utf-8",
+    )
+    (tmp_path / "a.py").write_text(
+        """
+def first(value):
+    total = 0
+    for item in value:
+        total += item
+    return total
+""",
+        encoding="utf-8",
+    )
+
+    scan = near_duplicate_scan(tmp_path)
+
+    assert scan["scan_cache"] == {
+        "file_total": 1,
+        "file_cache_hit_total": 0,
+        "file_cache_miss_total": 1,
+    }
+
+
 def test_near_duplicate_concerns_ignores_small_boilerplate(tmp_path) -> None:
     (tmp_path / "a.py").write_text("def a():\n    return 1\n", encoding="utf-8")
     (tmp_path / "b.py").write_text("def b():\n    return 2\n", encoding="utf-8")

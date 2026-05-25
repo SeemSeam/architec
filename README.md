@@ -165,7 +165,7 @@ bash ../architec-release/tools/cut_release.sh
 
 This runs the core release checks across the sibling source, website, and release-management repos, creates the `v<version>` tag from the source repo `pyproject.toml`, and then uses the release-management tooling to publish into `bfly123/architec-releases`.
 
-Local auth commands:
+Optional account commands, used for portal diagnostics and release smoke tests:
 
 ```bash
 archi login
@@ -198,6 +198,8 @@ archi code-review --since main .
 `archi --full` runs full-project LLM review. Compatibility aliases such as
 `archi .` and `archi --diff .` still return CodeReviewResult JSON, but new
 documentation and skills should use `archi` / `archi --full`.
+Architecture analysis commands do not require `archi login`; account commands
+remain available for release/auth smoke tests and portal diagnostics.
 
 Diff and since reviews use the same base LLM preflight as full review. If a
 `code-review --since <ref>` range cannot be resolved, the command returns a

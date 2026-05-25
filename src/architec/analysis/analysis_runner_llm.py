@@ -10,7 +10,7 @@ from architec.support.llm_guard import guard_llm_result
 
 def llm_summary(root: Path, *, payload: dict[str, Any]) -> dict[str, Any] | None:
     prompt = f"Input:\n{payload}"
-    result, _ = run_cached_analysis(
+    result, cache_hit = run_cached_analysis(
         root,
         namespace="architec_summary",
         payload=payload,
@@ -28,7 +28,11 @@ def llm_summary(root: Path, *, payload: dict[str, Any]) -> dict[str, Any] | None
             ),
         ),
     )
-    return result if isinstance(result, dict) else None
+    if not isinstance(result, dict):
+        return None
+    out = dict(result)
+    out["_cache_hit"] = bool(cache_hit)
+    return out
 
 
 def run_diff_analysis(root: Path, *, diff: bool, base: str, head: str, runner) -> dict[str, Any]:

@@ -1780,7 +1780,39 @@ def test_run_code_review_incremental_llm_uses_selected_scope_without_full_analys
     signal = next(item for item in result["signals"] if item["kind"] == "cost_context")
     assert signal["metrics"]["selected_file_total"] == 1
     assert signal["metrics"]["llm_call_total"] == 1
+    assert signal["metrics"]["cache_hit_total"] == 0
+    assert signal["metrics"]["llm_cache_hit_total"] == 0
+    assert signal["metrics"]["llm_backend_call_total"] == 1
     assert signal["metrics"]["llm_context"] == "selected_scope"
+
+
+def test_run_code_review_incremental_llm_reports_summary_cache_hit(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_near_duplicate_project(tmp_path)
+    monkeypatch.setattr(code_review, "run_analysis", lambda *args, **kwargs: pytest.fail("analysis should not run"))
+    monkeypatch.setattr(
+        code_review,
+        "git_changed_files",
+        lambda *args, **kwargs: [{"path": "src/changed.py", "added": 4, "deleted": 1}],
+    )
+    monkeypatch.setattr(
+        code_review,
+        "incremental_llm_summary",
+        lambda *args, **kwargs: {
+            "headline": "Incremental architecture review complete",
+            "_cache_hit": True,
+        },
+    )
+
+    result = code_review.run_code_review_incremental_llm(tmp_path)
+
+    signal = next(item for item in result["signals"] if item["kind"] == "cost_context")
+    assert signal["metrics"]["llm_call_total"] == 1
+    assert signal["metrics"]["cache_hit_total"] == 1
+    assert signal["metrics"]["llm_cache_hit_total"] == 1
+    assert signal["metrics"]["llm_backend_call_total"] == 0
 
 
 def test_run_code_review_incremental_llm_reports_stale_snapshot_without_refresh(
@@ -2197,11 +2229,14 @@ def test_code_review_diff_adds_changed_file_scoped_near_duplicate_signal(tmp_pat
     assert concern["references"][0]["path"] == "src/existing.py"
     signal = next(item for item in result["signals"] if item["kind"] == "near_duplicate")
     assert signal["summary"] == "1 near-duplicate function concerns detected in changed files."
-    assert signal["metrics"] == {
-        "concern_total": 1,
-        "scoped_to_changed_files": True,
-        "changed_file_total": 1,
-        "candidate_total_before_scope": 1,
+    assert signal["metrics"]["concern_total"] == 1
+    assert signal["metrics"]["scoped_to_changed_files"] is True
+    assert signal["metrics"]["changed_file_total"] == 1
+    assert signal["metrics"]["candidate_total_before_scope"] == 1
+    assert signal["metrics"]["scan_cache"] == {
+        "file_total": 2,
+        "file_cache_hit_total": 0,
+        "file_cache_miss_total": 2,
     }
 
 

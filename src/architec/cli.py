@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .advice_feedback import load_advice_feedback
-from .auth import auto_login, handle_auth_command, require_authorized_session
+from .auth import handle_auth_command
 from .auth.guard import ArchitecAuthRequiredError
 from .code_review.public import (
     run_code_review_diff,
@@ -369,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         '--skip-auth',
         action='store_true',
-        help='development-only bypass for local auth gate',
+        help='compatibility no-op; analysis commands no longer require login',
     )
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
     return parser
@@ -453,7 +453,7 @@ def build_code_review_parser() -> argparse.ArgumentParser:
         parser,
         '--skip-auth',
         action='store_true',
-        help='development-only bypass for local auth gate',
+        help='compatibility no-op; analysis commands no longer require login',
     )
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
     return parser
@@ -762,26 +762,6 @@ def _run_command(
     return run_code_review_full(args.path, **kwargs)
 
 
-def _interactive_terminal() -> bool:
-    streams = (sys.stdin, sys.stdout, sys.stderr)
-    return all(getattr(stream, "isatty", lambda: False)() for stream in streams)
-
-
-def _ensure_authorized_access() -> None:
-    try:
-        require_authorized_session()
-        return
-    except ArchitecAuthRequiredError as exc:
-        if not _interactive_terminal():
-            raise
-        print(str(exc), file=sys.stderr)
-        print("Authorizing this install in the browser...", file=sys.stderr)
-    login_status = auto_login()
-    if login_status != 0:
-        raise ArchitecAuthRequiredError("Browser authorization did not complete.")
-    require_authorized_session()
-
-
 def _with_refresh_result(
     result: dict[str, Any],
     *,
@@ -833,8 +813,6 @@ def main() -> int:
             if invalid is not None:
                 return invalid
             _validate_advice_feedback_arg(args)
-            if not bool(args.skip_auth):
-                _ensure_authorized_access()
             try:
                 refresh_result = _ensure_bundle(args)
             except (FileNotFoundError, RuntimeError) as exc:
@@ -893,8 +871,6 @@ def main() -> int:
         if invalid is not None:
             return invalid
         _validate_advice_feedback_arg(args)
-        if not bool(args.skip_auth):
-            _ensure_authorized_access()
         refresh_result = None
         if _should_ensure_bundle(args):
             try:

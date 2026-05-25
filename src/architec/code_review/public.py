@@ -1136,6 +1136,9 @@ def _signals(
             metrics["candidate_total_before_scope"] = int(
                 scoped.get("candidate_total_before_scope", near_duplicate_total) or 0
             )
+        scan_cache = _dict(scoped.get("scan_cache"))
+        if scan_cache:
+            metrics["scan_cache"] = scan_cache
         signals.append(
             {
                 "kind": "near_duplicate",
@@ -1175,6 +1178,9 @@ def _signals(
             metrics["candidate_total_before_scope"] = int(
                 scoped.get("candidate_total_before_scope", len(shadow_items)) or 0
             )
+        scan_cache = _dict(scoped.get("scan_cache"))
+        if scan_cache:
+            metrics["scan_cache"] = scan_cache
         summary = (
             f"{len(shadow_items)} shadow implementation candidates detected in changed files."
             if scoped.get("scoped_to_changed_files")
@@ -1567,10 +1573,12 @@ def _compact_llm_concern(concern: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compact_llm_signal(signal: dict[str, Any]) -> dict[str, Any]:
+    metrics = dict(_dict(signal.get("metrics")))
+    metrics.pop("scan_cache", None)
     return {
         "kind": str(signal.get("kind", "") or ""),
         "summary": str(signal.get("summary", "") or ""),
-        "metrics": _dict(signal.get("metrics")),
+        "metrics": metrics,
     }
 
 
@@ -1649,6 +1657,7 @@ def _apply_incremental_llm_summary(
     artifacts["code_review_analysis_mode"] = "incremental_llm"
     artifacts["code_review_llm_context"] = "selected_scope"
 
+    llm_cache_hit = bool(llm_result.get("_cache_hit", False))
     signals = _list(result.get("signals"))
     signals.append(
         {
@@ -1657,7 +1666,9 @@ def _apply_incremental_llm_summary(
             "metrics": {
                 "selected_file_total": selected_file_total,
                 "llm_call_total": 1,
-                "cache_hit_total": 0,
+                "cache_hit_total": 1 if llm_cache_hit else 0,
+                "llm_cache_hit_total": 1 if llm_cache_hit else 0,
+                "llm_backend_call_total": 0 if llm_cache_hit else 1,
                 "analysis_mode": "incremental_llm",
                 "llm_context": "selected_scope",
             },

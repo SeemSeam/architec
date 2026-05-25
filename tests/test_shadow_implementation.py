@@ -6,6 +6,7 @@ import architec.code_review.public as code_review
 from architec.code_review.shadow_implementation import (
     shadow_implementation_concerns,
     shadow_implementation_file_dry_run,
+    shadow_implementation_scan,
 )
 
 
@@ -154,6 +155,44 @@ def component_permission_policy(component, rules, context):
 """,
         encoding="utf-8",
     )
+
+
+def test_shadow_implementation_scan_reuses_file_index(tmp_path) -> None:
+    _write_shadow_policy_project(tmp_path)
+
+    first = shadow_implementation_scan(tmp_path)
+    second = shadow_implementation_scan(tmp_path)
+
+    assert first["scan_cache"] == {
+        "file_total": 3,
+        "file_cache_hit_total": 0,
+        "file_cache_miss_total": 3,
+    }
+    assert second["scan_cache"] == {
+        "file_total": 3,
+        "file_cache_hit_total": 3,
+        "file_cache_miss_total": 0,
+    }
+    assert [item["concern_id"] for item in first["concerns"]] == [
+        item["concern_id"] for item in second["concerns"]
+    ]
+
+
+def test_shadow_implementation_scan_ignores_invalid_file_index(tmp_path) -> None:
+    (tmp_path / ".architec" / "cache").mkdir(parents=True)
+    (tmp_path / ".architec" / "cache" / "code-review-shadow-implementation-index.json").write_text(
+        '{"version": "not-a-number", "files": {}}',
+        encoding="utf-8",
+    )
+    _write_shadow_policy_project(tmp_path)
+
+    scan = shadow_implementation_scan(tmp_path)
+
+    assert scan["scan_cache"] == {
+        "file_total": 3,
+        "file_cache_hit_total": 0,
+        "file_cache_miss_total": 3,
+    }
 
 
 def _write_render_assembly_split(tmp_path) -> None:
@@ -1350,11 +1389,14 @@ def test_code_review_full_includes_shadow_signal_and_concern(tmp_path, monkeypat
     concern = next(item for item in result["concerns"] if item["kind"] == "shadow-implementation")
     assert concern["references"][0]["role"] == "existing_implementation"
     signal = next(item for item in result["signals"] if item["kind"] == "shadow_implementation")
-    assert signal["metrics"] == {
-        "candidate_total": 3,
-        "high_confidence_total": 3,
-        "by_role": {"policy": 3},
-        "by_symbol_kind": {"function": 3},
+    assert signal["metrics"]["candidate_total"] == 3
+    assert signal["metrics"]["high_confidence_total"] == 3
+    assert signal["metrics"]["by_role"] == {"policy": 3}
+    assert signal["metrics"]["by_symbol_kind"] == {"function": 3}
+    assert signal["metrics"]["scan_cache"] == {
+        "file_total": 3,
+        "file_cache_hit_total": 0,
+        "file_cache_miss_total": 3,
     }
 
 

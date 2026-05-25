@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from architec.support.io_utils import read_json, write_json
+
 
 SKIP_DIRS = {
     ".architec",
@@ -66,6 +68,8 @@ MEMBER_VARIANT_TOKENS = {
     "wheel",
 }
 VERSION_SEGMENT_MEMBER_NAMES = {"major", "minor", "micro"}
+SCAN_CACHE_VERSION = 1
+SCAN_CACHE_PATH = Path(".architec/cache/code-review-near-duplicate-index.json")
 
 
 @dataclass(frozen=True)
@@ -340,6 +344,96 @@ def _collect_functions(path: Path, root: Path) -> list[_FunctionFingerprint]:
     return found
 
 
+def _file_signature(path: Path) -> dict[str, int] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return {"mtime_ns": int(stat.st_mtime_ns), "size": int(stat.st_size)}
+
+
+def _candidate_to_json(item: _FunctionFingerprint) -> dict[str, Any]:
+    return {
+        "path": item.path,
+        "line": item.line,
+        "symbol": item.symbol,
+        "fingerprint": item.fingerprint,
+        "node_count": item.node_count,
+        "thin_wrapper_call": item.thin_wrapper_call,
+    }
+
+
+def _candidate_from_json(data: object) -> _FunctionFingerprint | None:
+    if not isinstance(data, dict):
+        return None
+    try:
+        return _FunctionFingerprint(
+            path=str(data.get("path", "") or ""),
+            line=int(data.get("line", 0) or 0),
+            symbol=str(data.get("symbol", "") or ""),
+            fingerprint=str(data.get("fingerprint", "") or ""),
+            node_count=int(data.get("node_count", 0) or 0),
+            thin_wrapper_call=str(data.get("thin_wrapper_call", "") or ""),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _collect_functions_cached(root: Path) -> tuple[list[_FunctionFingerprint], dict[str, int]]:
+    cache_path = root / SCAN_CACHE_PATH
+    cache = read_json(cache_path, default={})
+    try:
+        cache_version = int(cache.get("version", 0) or 0) if isinstance(cache, dict) else 0
+    except (TypeError, ValueError):
+        cache_version = 0
+    cached_files = cache.get("files", {}) if isinstance(cache, dict) and cache_version == SCAN_CACHE_VERSION else {}
+    if not isinstance(cached_files, dict):
+        cached_files = {}
+
+    out: list[_FunctionFingerprint] = []
+    next_files: dict[str, Any] = {}
+    hit_total = 0
+    miss_total = 0
+    for path in _iter_python_files(root):
+        relpath = path.relative_to(root).as_posix()
+        signature = _file_signature(path)
+        if signature is None:
+            continue
+        entry = cached_files.get(relpath, {})
+        candidates: list[_FunctionFingerprint] = []
+        if isinstance(entry, dict) and entry.get("signature") == signature:
+            for item in entry.get("candidates", []):
+                candidate = _candidate_from_json(item)
+                if candidate is not None:
+                    candidates.append(candidate)
+            hit_total += 1
+        else:
+            candidates = _collect_functions(path, root)
+            miss_total += 1
+        out.extend(candidates)
+        next_files[relpath] = {
+            "signature": signature,
+            "candidates": [_candidate_to_json(item) for item in candidates],
+        }
+
+    if miss_total or set(cached_files) != set(next_files):
+        try:
+            write_json(
+                cache_path,
+                {
+                    "version": SCAN_CACHE_VERSION,
+                    "files": next_files,
+                },
+            )
+        except OSError:
+            pass
+    return out, {
+        "file_total": len(next_files),
+        "file_cache_hit_total": hit_total,
+        "file_cache_miss_total": miss_total,
+    }
+
+
 def _build_concern(
     duplicate: _FunctionFingerprint,
     reference: _FunctionFingerprint,
@@ -558,9 +652,9 @@ def near_duplicate_scan(
     root = Path(project_root)
     changed_scope = _normalized_changed_files(changed_files)
     by_fingerprint: dict[str, list[_FunctionFingerprint]] = {}
-    for path in _iter_python_files(root):
-        for item in _collect_functions(path, root):
-            by_fingerprint.setdefault(item.fingerprint, []).append(item)
+    all_candidates, scan_cache = _collect_functions_cached(root)
+    for item in all_candidates:
+        by_fingerprint.setdefault(item.fingerprint, []).append(item)
 
     concerns: list[dict[str, Any]] = []
     discovery_candidates: list[dict[str, Any]] = []
@@ -634,6 +728,7 @@ def near_duplicate_scan(
     result: dict[str, Any] = {
         "concerns": concerns[:limit],
         "candidate_total_before_scope": candidate_total_before_scope,
+        "scan_cache": scan_cache,
     }
     if discovery_by_reason:
         result["discovery"] = {

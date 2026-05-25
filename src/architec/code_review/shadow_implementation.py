@@ -12,6 +12,8 @@ from itertools import combinations
 from pathlib import Path
 from typing import Any, Iterable
 
+from architec.support.io_utils import read_json, write_json
+
 
 SKIP_DIRS = {
     ".architec",
@@ -216,6 +218,8 @@ MIN_SIGNATURE_SIMILARITY = 0.6
 MIN_CLASS_API_SIMILARITY = 0.6
 MIN_AST_SIMILARITY = 0.82
 MIN_CONFIDENCE = 0.78
+SCAN_CACHE_VERSION = 1
+SCAN_CACHE_PATH = Path(".architec/cache/code-review-shadow-implementation-index.json")
 
 
 @dataclass(frozen=True)
@@ -687,6 +691,131 @@ def _collect_classes(path: Path, root: Path) -> list[_FunctionCandidate]:
     return found
 
 
+def _file_signature(path: Path) -> dict[str, int] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return {"mtime_ns": int(stat.st_mtime_ns), "size": int(stat.st_size)}
+
+
+def _sorted_strings(values: Iterable[str]) -> list[str]:
+    return sorted(str(value) for value in values)
+
+
+def _candidate_to_json(item: _FunctionCandidate) -> dict[str, Any]:
+    return {
+        "path": item.path,
+        "line": item.line,
+        "symbol": item.symbol,
+        "symbol_kind": item.symbol_kind,
+        "node_count": item.node_count,
+        "fingerprint": item.fingerprint,
+        "name_tokens": _sorted_strings(item.name_tokens),
+        "all_tokens": _sorted_strings(item.all_tokens),
+        "role_tokens": _sorted_strings(item.role_tokens),
+        "signature_tokens": _sorted_strings(item.signature_tokens),
+        "parameter_count": item.parameter_count,
+        "feature_vector": dict(item.feature_vector),
+        "names": _sorted_strings(item.names),
+        "calls": _sorted_strings(item.calls),
+        "attrs": _sorted_strings(item.attrs),
+        "imports": _sorted_strings(item.imports),
+        "api_tokens": _sorted_strings(item.api_tokens),
+        "member_tokens": _sorted_strings(item.member_tokens),
+        "member_count": item.member_count,
+    }
+
+
+def _candidate_from_json(data: object) -> _FunctionCandidate | None:
+    if not isinstance(data, dict):
+        return None
+    try:
+        return _FunctionCandidate(
+            path=str(data.get("path", "") or ""),
+            line=int(data.get("line", 0) or 0),
+            symbol=str(data.get("symbol", "") or ""),
+            symbol_kind=str(data.get("symbol_kind", "") or "function"),
+            node_count=int(data.get("node_count", 0) or 0),
+            fingerprint=str(data.get("fingerprint", "") or ""),
+            name_tokens=frozenset(str(item) for item in data.get("name_tokens", []) if str(item or "").strip()),
+            all_tokens=frozenset(str(item) for item in data.get("all_tokens", []) if str(item or "").strip()),
+            role_tokens=frozenset(str(item) for item in data.get("role_tokens", []) if str(item or "").strip()),
+            signature_tokens=frozenset(
+                str(item) for item in data.get("signature_tokens", []) if str(item or "").strip()
+            ),
+            parameter_count=int(data.get("parameter_count", 0) or 0),
+            feature_vector={
+                str(key): float(value)
+                for key, value in (data.get("feature_vector", {}) or {}).items()
+            },
+            names=frozenset(str(item) for item in data.get("names", []) if str(item or "").strip()),
+            calls=frozenset(str(item) for item in data.get("calls", []) if str(item or "").strip()),
+            attrs=frozenset(str(item) for item in data.get("attrs", []) if str(item or "").strip()),
+            imports=frozenset(str(item) for item in data.get("imports", []) if str(item or "").strip()),
+            api_tokens=frozenset(str(item) for item in data.get("api_tokens", []) if str(item or "").strip()),
+            member_tokens=frozenset(str(item) for item in data.get("member_tokens", []) if str(item or "").strip()),
+            member_count=int(data.get("member_count", 0) or 0),
+        )
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _collect_candidates_cached(root: Path) -> tuple[list[_FunctionCandidate], dict[str, int]]:
+    cache_path = root / SCAN_CACHE_PATH
+    cache = read_json(cache_path, default={})
+    try:
+        cache_version = int(cache.get("version", 0) or 0) if isinstance(cache, dict) else 0
+    except (TypeError, ValueError):
+        cache_version = 0
+    cached_files = cache.get("files", {}) if isinstance(cache, dict) and cache_version == SCAN_CACHE_VERSION else {}
+    if not isinstance(cached_files, dict):
+        cached_files = {}
+
+    out: list[_FunctionCandidate] = []
+    next_files: dict[str, Any] = {}
+    hit_total = 0
+    miss_total = 0
+    for path in _iter_python_files(root):
+        relpath = path.relative_to(root).as_posix()
+        signature = _file_signature(path)
+        if signature is None:
+            continue
+        entry = cached_files.get(relpath, {})
+        candidates: list[_FunctionCandidate] = []
+        if isinstance(entry, dict) and entry.get("signature") == signature:
+            for item in entry.get("candidates", []):
+                candidate = _candidate_from_json(item)
+                if candidate is not None:
+                    candidates.append(candidate)
+            hit_total += 1
+        else:
+            candidates = [*_collect_functions(path, root), *_collect_classes(path, root)]
+            miss_total += 1
+        out.extend(candidates)
+        next_files[relpath] = {
+            "signature": signature,
+            "candidates": [_candidate_to_json(item) for item in candidates],
+        }
+
+    if miss_total or set(cached_files) != set(next_files):
+        try:
+            write_json(
+                cache_path,
+                {
+                    "version": SCAN_CACHE_VERSION,
+                    "files": next_files,
+                },
+            )
+        except OSError:
+            pass
+    return out, {
+        "file_total": len(next_files),
+        "file_cache_hit_total": hit_total,
+        "file_cache_miss_total": miss_total,
+    }
+
+
 def _public_top_level_symbols(tree: ast.Module) -> tuple[list[ast.AST], frozenset[str], frozenset[str]]:
     nodes: list[ast.AST] = []
     api_tokens: set[str] = set()
@@ -1080,10 +1209,7 @@ def shadow_implementation_scan(
 ) -> dict[str, Any]:
     root = Path(project_root)
     changed_scope = _normalized_changed_files(changed_files)
-    candidates: list[_FunctionCandidate] = []
-    for path in _iter_python_files(root):
-        candidates.extend(_collect_functions(path, root))
-        candidates.extend(_collect_classes(path, root))
+    candidates, scan_cache = _collect_candidates_cached(root)
 
     candidate_total_before_scope = 0
     concerns: list[dict[str, Any]] = []
@@ -1117,6 +1243,7 @@ def shadow_implementation_scan(
     result: dict[str, Any] = {
         "concerns": sorted_concerns,
         "candidate_total_before_scope": candidate_total_before_scope,
+        "scan_cache": scan_cache,
     }
     if changed_scope is not None:
         result["scoped_to_changed_files"] = True
