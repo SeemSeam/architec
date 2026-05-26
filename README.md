@@ -1,71 +1,88 @@
 # Architec
 
-`architec` is an analysis-only architecture review tool.
+Architec is an advisory architecture review CLI for codebases.
 
-The primary CLI command is `archi`.
+It answers a practical question: **will this change make the project harder to
+maintain?** It looks for architecture drift, repeated implementations,
+boundary pressure, stale structure, risky hotspots, and mismatches between a
+plan and the selected code changes.
 
-Default `archi` reviews current selected changes with bounded LLM context.
-Use `archi --full` when you want a refreshed whole-project architecture review.
-Architec can consume Hippo bundle inputs from `.hippocampus/`, runs architecture
-analysis with backend LLM support, and writes its own outputs to `.architec/`.
+The command is:
+
+```bash
+archi
+```
+
+By default, `archi` reviews the current selected changes with bounded LLM
+context. Use `archi --full` only when you want a whole-project architecture
+baseline.
+
+Architec is analysis-only. It does not require login, does not make merge
+decisions, and does not automatically edit your code.
+
+## Why Architec
+
+Modern LLM-assisted coding can move quickly, but it can also create slow
+architecture drift:
+
+- duplicate implementations that should share a helper or facade;
+- new code that bypasses the intended module boundary;
+- compatibility shims that are not documented as compatibility shims;
+- cleanup/archive concerns that keep accumulating;
+- plans that say one thing while the diff touches another;
+- changes in high-churn or weakly covered areas that deserve extra review.
+
+Architec turns those signals into structured review output for humans and
+agents. It is intentionally advisory: a reviewer still decides what to do.
 
 ## Install
 
-For end users, use the production installer:
+Recommended public install:
 
 ```bash
 curl -fsSL https://www.architec.top/downloads/latest/install_prod.sh -o install_prod.sh
 bash install_prod.sh
 ```
 
-This is the only recommended public install path. It installs the compiled Architec
-build, pulls the bundled open-source dependency wheels when available, performs
-basic environment checks, and leaves you with a working `archi` command.
+This installs the compiled `archi` command and prepares the open-source runtime
+dependencies used by Architec, including Hippo and llmgateway when bundled
+wheels are available.
 
-The installer auto-detects the current OS and CPU architecture. End users should
-normally use the same command on Linux and macOS. The only hard requirement is
-that the selected release already contains the matching compiled asset, such as
-`archi-linux-x86_64.tar.gz` or `archi-macos-arm64.tar.gz`.
-
-The production installer supports explicit release selection and checksum
-verification:
+Optional release selection:
 
 ```bash
-bash install_prod.sh --version v0.1.1
-bash install_prod.sh --skip-checksum
+bash install_prod.sh --version v0.2.10
 ```
 
-Default behavior is to fetch `SHA256SUMS.txt` from the selected GitHub release and verify the downloaded archive before installation.
+The installer verifies release checksums by default when `SHA256SUMS.txt` is
+available.
 
-You can override the target directory with `ARCHITEC_USER_CONFIG_DIR`.
-
-For compiled release packaging:
+For local development from this repository:
 
 ```bash
-python3 ../architec-release/tools/build_release.py --with-nuitka
+python3 -m pip install -e .
 ```
 
-The production installer also ensures the open-source `hippocampus` and
-`llmgateway` Python packages are installed from bundled release wheels when
-available, then falls back to their public Git sources.
+## Configure an LLM
 
-Minimal runtime config split:
+Architec uses llmgateway for provider routing. Put provider credentials in
+`~/.llmgateway/config.yaml`:
 
 ```yaml
-# ~/.llmgateway/config.yaml
 version: 1
 provider:
-  provider_type: glm
+  provider_type: openai
   api_style: openai_responses
-  base_url: https://your-llm-endpoint
+  base_url: https://your-llm-endpoint/v1
   api_key: sk-...
 settings:
-  strong_model: gpt-5.4
-  weak_model: gpt-5.4
+  strong_model: your-strong-model
+  weak_model: your-fast-model
 ```
 
+Architec maps review tasks to model tiers in `~/.architec/config.yaml`:
+
 ```yaml
-# ~/.architec/config.yaml
 version: 1
 tasks:
   architect_history:
@@ -76,163 +93,91 @@ tasks:
     tier: strong
 ```
 
-Runtime config lookup now prefers:
+Concrete model names belong in llmgateway. Architec only asks for `strong` or
+`weak` task tiers.
 
-1. provider route under `~/.llmgateway/`
-2. project override under `.architec/`
-3. user-global Architec config under `~/.architec/`
-4. repo/package defaults under `config/`
-
-Concrete model names are owned by `llmgateway`. `architec` only decides which
-tasks use the `strong` or `weak` tier.
-`architect_component_scoring` may remain configured for runtime scoring, but
-advisory diff/since preflight does not require it.
-
-Validate end-to-end from a project that already has Hippo inputs:
+Check the installation and LLM route:
 
 ```bash
 archi --check .
-archi --refresh-from-hippo --check .
 ```
 
-The installer already runs backend LLM preflight without requiring `.hippocampus/`.
+## Quick Start
 
-For `archi --refresh-from-hippo`, the supported runtime sources are:
-
-- published `hippo` on `PATH`
-- installed `hippocampus` in the active Python environment
-
-A sibling checkout such as `./hippocampus/src` is not a supported runtime fallback for end-user installs or release validation.
-
-## Skills
-
-Bundled skill source trees live in:
-
-- `codex_skills/`
-- `claude_skills/`
-
-The website installer syncs them into:
-
-- `~/.codex/skills`
-- `~/.claude/skills`
-
-Current skill map:
-
-- `archi-full`: full-project advisory code review via `archi --full`
-- `archi-diff`: change-scoped advisory code review via `archi`
-- `archi-goal`: retired public workflow; write a plan Markdown file and run `archi plan-review <plan.md>` instead
-- `archi-advice`: legacy planning-oriented workflow; advisory review output now uses `plan-review`, `code-review`, and `fix-advice`
-
-Recommended usage order:
-
-1. Run `archi` when evaluating active changes.
-2. Run `archi --full` when you need a whole-project baseline.
-3. When a concrete target or refactor objective exists, write it as a plan Markdown file and run `archi plan-review <plan.md>`.
-4. Use code-review output as advisory input for human or agent follow-up; `architec` does not plan, gate, or automatically repair work.
-
-## Usage
-
-Detailed manual:
-
-- `docs/usage-manual.md`
-- `docs/advisory-review/release-notes.md`
-- `docs/commercial-rollout-plan.md`
-- `../architec-cloud/docs/local-auth-portal-mvp.md`
-- `../architec-cloud/README.md`
-- `../architec-release/docs/release-sop.md`
-
-Real release-install regression:
-
-```bash
-bash ../architec-release/tools/release_install_smoke.sh
-```
-
-This starts the sibling `architec-cloud` portal, runs the website smoke, installs the public GitHub Release build, authorizes it through `/api/cli/authorize`, and verifies `archi login`, `archi whoami --json`, `archi status --json`, `archi devices --json`, and `archi logout`.
-
-Live production browser-auth regression:
-
-```bash
-bash tools/prod_browser_auth_smoke.sh
-```
-
-This uses `https://www.architec.top` directly, installs from the public website script into an isolated run directory, completes the browser-authorization callback over local `127.0.0.1`, and verifies `archi whoami --json`, `archi status --json`, and `archi devices --json`.
-
-Release cut helper:
-
-```bash
-bash ../architec-release/tools/cut_release.sh
-```
-
-This runs the core release checks across the sibling source, website, and release-management repos, creates the `v<version>` tag from the source repo `pyproject.toml`, and then uses the release-management tooling to publish into `bfly123/architec-releases`.
-
-Optional account commands, used for portal diagnostics and release smoke tests:
-
-```bash
-archi login
-archi status --json
-archi whoami --json
-archi devices --json
-archi logout
-```
-
-Version-gated auth behavior:
-
-- `archi login` includes the local CLI version in the browser approval URL and in the code-exchange request.
-- `archi status` and `archi whoami` include the current CLI version when querying the portal.
-- lease refresh now also includes the current CLI version, so the portal can enforce a minimum supported build after rollout.
-- if the portal returns an upgrade requirement, the CLI surfaces the GitHub Releases download URL instead of a generic auth failure.
-- `archi status --json` and `archi whoami --json` now expose `action_required`, release links, and `recommended_upgrade_command` when the local build is too old.
-- for automation, prefer the stable `upgrade` object in `archi status --json` and `archi whoami --json` instead of reading scattered top-level fields.
-
-Advisory review:
+From a git repository:
 
 ```bash
 archi
-archi --full
-archi code-review --diff --plan-review plan.json .
-archi code-review --diff --risk-context risk.json .
-archi code-review --since main .
 ```
 
-`archi` runs selected-change LLM review and does not refresh Hippo by default.
-`archi --full` runs full-project LLM review. Compatibility aliases such as
-`archi .` and `archi --diff .` still return CodeReviewResult JSON, but new
-documentation and skills should use `archi` / `archi --full`.
-Architecture analysis commands do not require `archi login`; account commands
-remain available for release/auth smoke tests and portal diagnostics.
+This runs selected-change architecture review. It reads the current git changes,
+uses compact evidence, sends the selected-scope context to the LLM, and returns
+bounded advisory output.
 
-Diff and since reviews use the same base LLM preflight as full review. If a
-`code-review --since <ref>` range cannot be resolved, the command returns a
-structured CodeReviewResult explaining the unresolved range instead of falling
-back to a full review.
+Run a full baseline when you need repository-wide context:
 
-Exact `near_duplicate` detection and conservative `shadow_implementation`
-detection both support changed-file-scoped diff/since review: the primary
-concern location is in the changed files, while structured references can point
-to unchanged existing implementations.
+```bash
+archi --full
+```
 
-Saved plan-review JSON can be supplied to diff/since review with
-`--plan-review <plan.json>`. This adds path-level `plan-diff-consistency`
-observations when changed files fall outside the saved plan touchpoints, or
-when planned paths are not present in the selected diff. Structured
-`understood_plan.dependencies[]` import expectations are also checked against
-selected changed Python files.
+Write JSON for automation or agent follow-up:
 
-External risk context JSON can be supplied with `--risk-context <risk.json>`.
-It may contain coverage-by-file, churn-by-file, source-to-test mappings, or
-changed test files. `architec` only attaches those facts to existing concerns;
-it does not execute tests or create coverage reports.
+```bash
+archi --out review.json
+archi --full --out full-review.json
+```
 
-Displayed top concerns use portfolio ranking: severity remains first, and
-same-level concerns prefer a mix of kinds before filling remaining slots.
-`summary.payload_bytes` reports a compact main-payload estimate, and oversized
-display facts are truncated with metadata in `artifacts.payload_truncation`.
-Full generated concerns are written to `.architec/code-review-concerns.json`
-and exposed as `artifacts.code_review_concerns_json`.
+Refresh Hippo inputs first when you explicitly want a fresh structural snapshot:
 
-Generated `concern_id` values in current code-review output are fact-based identifiers, not display positions. `fix-advice` reports a CLI error for missing, invalid, or non-object review JSON; a valid review with no concerns still produces an empty suggestions list. `fix-advice` has dedicated advisory branches for duplication and shadow-implementation concerns when the review includes structured reference locations.
+```bash
+archi --refresh-from-hippo --full
+```
 
-Plan review:
+Default `archi` does **not** refresh Hippo automatically. It reports whether the
+available snapshot is present, stale, or unknown as review context.
+
+## Core Commands
+
+| Command | Use it for |
+| --- | --- |
+| `archi` | Default incremental LLM architecture review for selected changes. |
+| `archi --full` | Whole-project LLM architecture review and baseline artifacts. |
+| `archi --check .` | Validate Hippo bundle state and LLM configuration. |
+| `archi --out review.json` | Save the current review JSON. |
+| `archi plan-review plan.md --out plan.json` | Convert a written plan into structured plan-review JSON. |
+| `archi code-review --diff --plan-review plan.json .` | Compare selected changes against a saved plan. |
+| `archi code-review --since main .` | Review changes since a git ref. |
+| `archi fix-advice --review review.json` | Produce advisory follow-up options for a saved review. |
+| `archi status --snapshot` | Record an advisory project status snapshot. |
+| `archi status --trend` | Read recent advisory review trend data. |
+
+`archi --diff` remains as a compatibility alias for the default incremental
+review path.
+
+## What Architec Looks For
+
+Full and incremental reviews can surface:
+
+- `duplication`: exact normalized Python function duplication, with conservative
+  suppression for intentional wrappers and variant families;
+- `shadow-implementation`: function/class implementations that look like a
+  second copy of existing behavior without a reuse edge;
+- `architecture-contract`: project-local import or ownership rules from
+  `.architecture-rules.toml`;
+- `plan-diff-consistency`: changed files, import expectations, tests, public API
+  migrations, or explicit intent checks that do not line up with a saved plan;
+- `cleanup` and `archive`: stale docs, compatibility layers, legacy paths, and
+  cleanup candidates;
+- `hotspot` and `topology`: full-review signals about concentration and package
+  structure;
+- `risk_context`: optional external facts such as coverage, churn, complexity,
+  public API files, or recurrence attached to existing concerns.
+
+These are review signals, not proof of correctness.
+
+## Plan Review
+
+For larger changes, write the intended touchpoints first:
 
 ````markdown
 # Plan
@@ -250,81 +195,109 @@ dependencies:
   - source: src/api/**
     imports:
       - app.service.facade
+expected_tests:
+  - source: src/service/**
+    test_glob: tests/service/**
 ```
 ````
 
+Then run:
+
 ```bash
-archi plan-review plan.md
 archi plan-review plan.md --out plan.json
 archi code-review --diff --plan-review plan.json .
+```
+
+Architec only treats explicit structured plan entries as requirements. Prose
+notes stay context.
+
+## Risk Context
+
+You can enrich existing concerns with external facts:
+
+```bash
 archi code-review --diff --risk-context risk.json .
 ```
 
-The top-level `--goal` flag has been removed. Write the intent as a plan Markdown file and use `archi plan-review <plan.md>`.
+Supported inputs include conservative coverage.py-style file maps,
+radon-like complexity maps, churn maps, public API files, source-to-test maps,
+and changed test files. Architec does not run tests, generate coverage, or mine
+git history by itself.
 
-Legacy maintenance command parsers have been removed. Use these replacement workflows instead:
+## Outputs
 
-- `archi cleanup .` -> `archi --full`
-- `archi autofix .` -> `archi fix-advice --review <review.json>`
-- `archi baseline .` -> `archi status --snapshot`
-- `archi gate .` -> `archi --out review.json`
+Architec writes generated files under `.architec/`:
 
-`code-review --full` carries cleanup/archive observations as advisory signals and file-level concerns. `code-review --diff` output is advisory review data for humans or agents. Do not treat review output as a merge decision, and do not use automatic apply flows as part of the advisory-review workflow.
+- `.architec/architec-analysis.json`
+- `.architec/architec-summary.md`
+- `.architec/architec-viz.html`
+- `.architec/code-review-concerns.json`
+- `.architec/code-review-discovery.json`
+- `.architec/review-events.jsonl`
+- `.architec/cache/*`
 
-CLI self-maintenance:
+Hippo remains the producer of input artifacts under `.hippocampus/`.
+
+Top-level review JSON is intentionally bounded. Full generated concerns are
+kept in `.architec/code-review-concerns.json`.
+
+## No Login Required
+
+Architecture analysis commands do not require `archi login`.
+
+These account commands still exist for portal diagnostics and release smoke
+tests, but they are not part of normal review usage:
+
+```bash
+archi login
+archi whoami --json
+archi status --json
+archi devices --json
+archi logout
+```
+
+## Skills
+
+The release can install helper skills for agent environments:
+
+- `archi-full`: use `archi --full` for whole-project review;
+- `archi-diff`: use `archi` for selected-change review;
+- `archi-goal`: use plan Markdown plus `archi plan-review`;
+- `archi-advice`: synthesize review output into a practical refactor roadmap.
+
+Skill source trees live in `codex_skills/` and `claude_skills/`.
+
+## Development
+
+Run tests:
+
+```bash
+PYTHONPATH=src python3 -m pytest -q
+```
+
+Run Architec from this checkout:
+
+```bash
+PYTHONPATH=src python3 -m architec
+PYTHONPATH=src python3 -m architec --full
+```
+
+Build a compiled release from the sibling release repository:
+
+```bash
+python3 ../architec-release/tools/build_release.py --with-nuitka
+```
+
+Maintenance commands:
 
 ```bash
 archi update
 archi uninstall
 ```
 
-Advanced diff analysis:
+## More Documentation
 
-```bash
-archi
-archi code-review --diff --base main --head HEAD .
-archi code-review --since main .
-```
-
-Refresh Hippo bundle first:
-
-```bash
-archi --refresh-from-hippo .
-```
-
-## Outputs
-
-Architec writes only to `.architec/`:
-
-- `.architec/architec-analysis.json`
-- `.architec/architec-summary.md`
-- `.architec/architec-viz.html`
-- `.architec/architec-cleanup-inventory.json`
-- `.architec/architec-cleanup-ledger.json`
-- `.architec/architec-cleanup-summary.md`
-- `.architec/architec-archive-candidates.json`
-- `.architec/architec-archive-summary.md`
-- `.architec/architec-semantic-judge.json`
-- `.architec/architec-semantic-judge-summary.md`
-- `.architec/cache/*`
-
-Historical legacy artifacts such as `.architec/architec-autofix-plan.json`, `.architec/architec-autofix-summary.md`, `.architec/architec-baseline.json`, `.architec/architec-baseline-summary.md`, `.architec/architec-gate.json`, and `.architec/architec-gate-summary.md` may exist from older runs. Cleanup, autofix, baseline, and gate wrapper public APIs and command parsers have been retired. Current advisory commands do not write these legacy-only artifacts.
-
-Hippo remains the producer of input artifacts under `.hippocampus/`.
-
-## Notes
-
-- `--goal` has been removed from the parser; use `archi plan-review <plan.md>` for plan or intent review.
-- Default top-level mode is incremental selected-change LLM review.
-- Use `archi --full` for full-project LLM review.
-- `--diff` remains a compatibility alias for incremental review against the working tree or an explicit git range.
-- `archi cleanup` and `archi autofix` command parsers have been removed; use `archi --full` cleanup/archive signals and `archi fix-advice --review <review.json>`. The older `fix-advice --for <review.json>` flag remains a compatibility alias.
-- `archi update` checks the latest public release when possible, then reruns the production installer; if the current version already matches, it simply reinstalls the latest build.
-- `archi uninstall` is a deep uninstall by default: it removes the managed launcher, install tree, bundled skills, local config dirs, and attempts to uninstall `hippocampus` and `llmgateway` from the active Python environment. Use `--yes` only for non-interactive automation.
-- repo-root `.architecture-rules.toml` can now annotate cleanup candidates via `[[shared.cleanup_metadata]]` or `[[archi.cleanup_metadata]]` with `owner`, `ttl_days`, and `expires_at`; those fields flow through cleanup/archive signals and legacy compatibility internals.
-- `archi baseline` and `archi gate` command parsers have been removed; use `archi status --snapshot` and advisory `archi --out review.json`.
-- `--refresh-from-hippo` refreshes Hippo inputs through stable local commands:
-  `hippo init .`, `hippo sig-extract .`, `hippo tree .`, `hippo index --no-llm .`,
-  `hippo structure-prompt --profile map --no-llm-enhance .`,
-  then `architec/tools/collect_repo_metrics.py`.
-- `architec` does not perform automatic repair loops.
+- [Usage manual](docs/usage-manual.md)
+- [Advisory review release notes](docs/advisory-review/release-notes.md)
+- [Architecture stability notes](docs/advisory-review/topics/architecture-stability.md)
+- [Evidence model](docs/advisory-review/topics/evidence-model.md)
