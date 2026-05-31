@@ -124,3 +124,6 @@ def test_preflight_does_not_fallback_legacy_when_architect_yaml_exists_invalid(
             checks=[("architect_history", "strong")],
         )
     assert "no backend LLM candidate configured" in str(exc.value)
+    assert "~/.llmgateway/config.yaml" in str(exc.value)
+    assert "strong_model" in str(exc.value)
+    assert "weak_model" in str(exc.value)

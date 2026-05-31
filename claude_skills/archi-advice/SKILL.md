@@ -1,51 +1,63 @@
 ---
 name: archi-advice
-description: Produce advisory architecture guidance by combining code-review output with plan-review, diff context, and fix-advice. Do not use the removed archi --goal flag.
+description: Produce architecture improvement advice from existing-code Archi analysis. Use when the user wants concrete modification suggestions, sequencing advice, or a practical refactor roadmap based on the current codebase rather than task-goal planning.
 ---
 
 # archi-advice
 
-This skill synthesizes advisory review outputs. It should combine full code review plus plan-review, diff context, or fix-advice before giving architecture advice.
+This skill synthesizes existing-code Archi review outputs. It should combine
+full analysis plus current diff context when relevant before giving
+architecture modification advice.
 
 ## Trigger
 
 - Architecture improvement plan
 - Refactor roadmap
-- Redesign direction
+- Existing-code redesign direction
 - Prioritized next steps
 
 ## Preferred Workflow
 
-1. Run full code review:
+1. Inspect the local command shape:
+
+```bash
+archi --help
+```
+
+2. Run baseline analysis. If help includes `--full`, use:
+
+```bash
+archi --full
+```
+
+If help lacks `--full`, use:
 
 ```bash
 archi .
 ```
 
-2. Add plan context when relevant:
+3. Add diff context when relevant. If help includes `--full`, use:
 
 ```bash
-archi plan-review <plan.md>
+archi
 ```
 
-3. Add diff context when relevant:
+If help lacks `--full` but includes `--diff`, use:
 
 ```bash
 archi --diff .
 ```
 
-4. Generate repair-direction advice from a saved review when needed:
-
-```bash
-archi fix-advice --for <review.json>
-```
+4. Do not run goal, plan-review, or fix-advice commands. Synthesize advice from
+the baseline output, incremental output, and the current codebase.
 
 ## Read Outputs
 
 - `.architec/architec-summary.md`
 - `.architec/architec-analysis.json`
 
-Use full code review as the baseline. Use plan-review, diff, or fix-advice results as advisory modifiers.
+Use full code review as the baseline. Use diff results as advisory modifiers
+when the user is asking about current changes.
 
 ## Output Rule
 
@@ -56,15 +68,15 @@ Use full code review as the baseline. Use plan-review, diff, or fix-advice resul
 
 ## Avoid Misuse
 
-- Do not use removed `archi --goal`.
 - Do not use this skill without a baseline full analysis.
-- Do not produce a refactor roadmap from plan or diff context alone; use them only after `archi-full` establishes the structural baseline.
+- Do not produce a refactor roadmap from diff context alone; use it only after
+  `archi-full` establishes the structural baseline.
 
 ## Example Prompts
 
 - Based on the current architecture, what should we improve next?
 - Give me a concrete architecture refactor roadmap for this repo.
-- Combine the baseline architecture review with the current plan and propose a phased plan.
+- Turn the current Archi findings into a phased refactor plan.
 
 ## Standard Output Template
 

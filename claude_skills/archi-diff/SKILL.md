@@ -5,7 +5,8 @@ description: Run diff-based architecture analysis with archi. Use when the user 
 
 # archi-diff
 
-Use `archi --diff` for change-scoped architecture review.
+Use `archi` for change-scoped architecture review. First inspect the local
+command shape because installed Archi versions may differ.
 
 ## Trigger
 
@@ -17,10 +18,24 @@ Use `archi --diff` for change-scoped architecture review.
 ## Commands
 
 ```bash
+archi --help
+```
+
+If help includes `--full`, use the new default incremental entrypoint:
+
+```bash
+archi
+```
+
+If help lacks `--full` but includes `--diff`, use the legacy incremental
+entrypoint:
+
+```bash
 archi --diff .
 ```
 
-Or with an explicit range:
+When the user provides an explicit range and the local help advertises
+`--diff`, `--base`, and `--head`, use:
 
 ```bash
 archi --diff --base <base> --head <head> .

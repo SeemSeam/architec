@@ -126,6 +126,29 @@ def test_build_parser_help_omits_goal() -> None:
     assert "--goal" not in help_text
 
 
+def test_build_parser_help_keeps_public_parameter_surface_small() -> None:
+    help_text = cli.build_parser().format_help()
+
+    assert "--full" in help_text
+    assert "--refresh-from-hippo" in help_text
+    assert "--check" in help_text
+    assert "--out" in help_text
+
+    for hidden in (
+        "--diff",
+        "--base",
+        "--head",
+        "--plan-review",
+        "--risk-context",
+        "--advice-feedback",
+        "--component",
+        "--format",
+        "--open-browser",
+        "--skip-auth",
+    ):
+        assert hidden not in help_text
+
+
 def test_required_llm_checks_no_longer_include_goal_feature_check() -> None:
     full_checks = cli._required_llm_checks(diff=False)
     diff_checks = cli._required_llm_checks(diff=True)
@@ -699,10 +722,10 @@ def test_main_legacy_full_and_diff_outputs_avoid_gate_terms(monkeypatch, tmp_pat
 @pytest.mark.parametrize(
     ("argv", "removed_name", "replacement"),
     [
-        (["archi", "cleanup"], "cleanup", "archi code-review --full ."),
-        (["archi", "autofix"], "autofix", "archi fix-advice --review <review.json>"),
-        (["archi", "baseline"], "baseline", "archi status --snapshot"),
-        (["archi", "gate"], "gate", "archi code-review --diff . --out review.json"),
+        (["archi", "cleanup"], "cleanup", "archi --full"),
+        (["archi", "autofix"], "autofix", "review the Archi suggestions"),
+        (["archi", "baseline"], "baseline", "archi --full"),
+        (["archi", "gate"], "gate", "archi"),
     ],
 )
 def test_main_removed_legacy_tokens_are_friendly_errors(monkeypatch, capsys, argv, removed_name, replacement):
@@ -721,10 +744,10 @@ def test_main_removed_legacy_tokens_are_friendly_errors(monkeypatch, capsys, arg
 @pytest.mark.parametrize(
     ("argv", "replacement"),
     [
-        (["archi", "cleanup", "."], "archi code-review --full ."),
-        (["archi", "autofix", "--apply", "."], "archi fix-advice --review <review.json>"),
-        (["archi", "baseline", "--out", "baseline.json", "."], "archi status --snapshot"),
-        (["archi", "gate", "--out", "gate.json", "."], "archi code-review --diff . --out review.json"),
+        (["archi", "cleanup", "."], "archi --full"),
+        (["archi", "autofix", "--apply", "."], "review the Archi suggestions"),
+        (["archi", "baseline", "--out", "baseline.json", "."], "archi --full"),
+        (["archi", "gate", "--out", "gate.json", "."], "archi"),
     ],
 )
 def test_main_removed_legacy_commands_with_old_args_are_friendly_errors(monkeypatch, capsys, argv, replacement):

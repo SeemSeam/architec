@@ -122,5 +122,7 @@ def preflight_backend_llm(
         raise ArchitectLLMUnavailableError(
             "Architec LLM preflight failed:\n"
             + "\n".join(problems)
-            + "\nHint: configure ~/.llmgateway/config.yaml and ~/.architec/config.yaml, or provide project overrides in .architec/config.yaml."
+            + "\nHint: configure provider credentials plus strong_model and weak_model in "
+            "~/.llmgateway/config.yaml. Optional Architec task overrides may live in "
+            "~/.architec/config.yaml or project .architec/config.yaml."
         )

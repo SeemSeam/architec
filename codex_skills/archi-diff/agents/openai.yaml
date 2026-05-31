@@ -1,4 +1,4 @@
 interface:
   display_name: "Archi Diff"
   short_description: "Run diff-based architecture review for current changes"
-  default_prompt: "Run archi --diff for the current repo, read .architec artifacts, and answer with incremental risk, impacted components, and required improvements."
+  default_prompt: "Inspect archi --help, run the locally supported incremental architecture review command, read .architec artifacts, and answer with incremental risk, impacted components, and suggested improvements."

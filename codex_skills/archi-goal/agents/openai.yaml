@@ -1,4 +1,0 @@
-interface:
-  display_name: "Archi Goal"
-  short_description: "Review a target change plan with archi plan-review"
-  default_prompt: "Write or use a plan for the requested objective, run archi plan-review <plan.md>, optionally pair it with code-review context, and answer with target components, placement advice, and boundary risks."

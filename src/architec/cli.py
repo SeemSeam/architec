@@ -308,38 +308,38 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         '--diff',
         action='store_true',
-        help='compatibility alias for default incremental review',
+        help=argparse.SUPPRESS,
     )
-    _add_argument(parser, '--base', default='', help='git base ref (only with --diff)')
-    _add_argument(parser, '--head', default='', help='git head ref (only with --diff)')
+    _add_argument(parser, '--base', default='', help=argparse.SUPPRESS)
+    _add_argument(parser, '--head', default='', help=argparse.SUPPRESS)
     _add_argument(
         parser,
         '--plan-review',
         default='',
         metavar='PLAN_JSON',
-        help='optional plan-review JSON for diff consistency observations (only with --diff)',
+        help=argparse.SUPPRESS,
     )
     _add_argument(
         parser,
         '--risk-context',
         default='',
         metavar='RISK_JSON',
-        help='optional external risk context JSON for code-review concerns',
+        help=argparse.SUPPRESS,
     )
     _add_argument(
         parser,
         '--advice-feedback',
         default='',
         metavar='FEEDBACK_JSON',
-        help='optional reviewer feedback JSON for full-review recommendations',
+        help=argparse.SUPPRESS,
     )
-    _add_argument(parser, '--component', default='', help='reserved component hint')
+    _add_argument(parser, '--component', default='', help=argparse.SUPPRESS)
     _add_argument(
         parser,
         '--format',
         default='all',
         choices=['json', 'md', 'html', 'all'],
-        help='preferred output format',
+        help=argparse.SUPPRESS,
     )
     _add_argument(
         parser,
@@ -351,7 +351,7 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         '--open-browser',
         action='store_true',
-        help='reserved flag; current implementation only generates HTML',
+        help=argparse.SUPPRESS,
     )
     _add_argument(
         parser,
@@ -369,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         '--skip-auth',
         action='store_true',
-        help='compatibility no-op; analysis commands no longer require login',
+        help=argparse.SUPPRESS,
     )
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
     return parser
@@ -707,10 +707,10 @@ def _validate_advice_feedback_arg(args: argparse.Namespace) -> None:
 
 
 _REMOVED_LEGACY_COMMAND_REPLACEMENTS = {
-    "cleanup": "archi code-review --full .",
-    "autofix": "archi fix-advice --review <review.json>",
-    "baseline": "archi status --snapshot",
-    "gate": "archi code-review --diff . --out review.json",
+    "cleanup": "archi --full",
+    "autofix": "review the Archi suggestions, edit code manually, then rerun archi",
+    "baseline": "archi --full",
+    "gate": "archi",
 }
 
 
