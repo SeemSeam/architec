@@ -115,7 +115,7 @@ Architec requires Python 3.11+.
 Recommended install from GitHub:
 
 ```bash
-python3 -m pip install --user "architec @ git+https://github.com/bfly123/architec.git"
+python3 -m pip install --user "architec @ git+https://github.com/SeemSeam/architec.git"
 ```
 
 This installs:
@@ -123,13 +123,6 @@ This installs:
 - `archi`, the Architec CLI;
 - `llmgateway`, the LLM provider gateway;
 - `hippocampus`, the package that provides Hippo structural snapshots.
-
-Packaged release installer:
-
-```bash
-curl -fsSL https://www.architec.top/downloads/latest/install_prod.sh -o install_prod.sh
-bash install_prod.sh
-```
 
 Local development from this repository:
 
@@ -272,8 +265,8 @@ archi --help
 Architecture analysis does not require `archi login`.
 
 Account commands such as `archi login`, `archi whoami --json`, and
-`archi devices --json` may exist for portal diagnostics or release smoke tests,
-but they are not part of normal Architec analysis.
+`archi devices --json` may exist for diagnostics, but they are not part of
+normal Architec analysis.
 
 ## Development
 
@@ -288,13 +281,6 @@ Run Architec from this checkout:
 ```bash
 PYTHONPATH=src python3 -m architec
 PYTHONPATH=src python3 -m architec --full
-```
-
-Maintenance commands:
-
-```bash
-archi update
-archi uninstall
 ```
 
 ## More Documentation
@@ -406,7 +392,7 @@ Architec 结合确定性代码信号和 LLM 解释：
 推荐从 GitHub 安装：
 
 ```bash
-python3 -m pip install --user "architec @ git+https://github.com/bfly123/architec.git"
+python3 -m pip install --user "architec @ git+https://github.com/SeemSeam/architec.git"
 ```
 
 这会安装：
@@ -414,13 +400,6 @@ python3 -m pip install --user "architec @ git+https://github.com/bfly123/archite
 - `archi`：Architec CLI；
 - `llmgateway`：LLM provider 网关；
 - `hippocampus`：提供 Hippo 结构快照能力的包。
-
-也可以使用发布安装器：
-
-```bash
-curl -fsSL https://www.architec.top/downloads/latest/install_prod.sh -o install_prod.sh
-bash install_prod.sh
-```
 
 本地开发安装：
 
@@ -517,5 +496,5 @@ Hippo 写入 `.hippocampus/`。
 
 ### 无需登录
 
-架构分析不需要 `archi login`。账号相关命令可能用于门户诊断或发布 smoke test，
-但不是日常 Architec 分析流程的一部分。
+架构分析不需要 `archi login`。账号相关命令可能用于诊断，但不是日常 Architec
+分析流程的一部分。
