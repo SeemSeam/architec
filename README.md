@@ -124,6 +124,9 @@ This installs:
 - `llmgateway`, the LLM provider gateway;
 - `hippocampus`, the package that provides Hippo structural snapshots.
 
+`llmgateway` and `hippocampus` are installed from the SeemSeam GitHub
+repositories, so no separate package index setup is required.
+
 Local development from this repository:
 
 ```bash

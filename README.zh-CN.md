@@ -114,6 +114,9 @@ python3 -m pip install --user "architec @ git+https://github.com/SeemSeam/archit
 - `llmgateway`：LLM provider 网关；
 - `hippocampus`：提供 Hippo 结构快照能力的包。
 
+`llmgateway` 和 `hippocampus` 会从 SeemSeam GitHub 仓库安装，不需要额外配置
+Python 包索引。
+
 本地开发安装：
 
 ```bash
