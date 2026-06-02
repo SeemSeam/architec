@@ -167,8 +167,6 @@ archi uninstall --yes
 
 - `archi-full`
 - `archi-diff`
-- `archi-goal`
-- `archi-advice`
 
 默认同步目录：
 
@@ -181,25 +179,21 @@ archi uninstall --yes
 职责划分：
 
 - `archi-full`
-  全量建议型代码审查，对应 `archi .` 或 `archi code-review --full .`
+  全量架构检查，对应 `archi --full`
 - `archi-diff`
-  基于当前 `git diff` 的增量建议型代码审查，对应 `archi --diff .` 或 `archi code-review --diff .`
-- `archi-goal`
-  旧目标驱动入口已退位；把目标写成方案 Markdown，并运行 `archi plan-review <plan.md>`
-- `archi-advice`
-  旧规划型工作流；建议迁移到 `plan-review`、`code-review` 以及 `fix-advice` 工作流
+  增量架构检查，对应 `archi`
 
 推荐顺序：
 
 1. 先用 `archi-full` 查看当前结构审查结果
 2. 有活动改动时再用 `archi-diff`
-3. 有明确目标时写成方案 Markdown，再用 `archi plan-review <plan.md>`
-4. 后续修复方向由人或 agent 基于 review 输出判断，`architec` 不做规划、不做门禁、不自动修复
+3. 后续修复方向由人或 agent 基于 review 输出判断，`architec` 不做规划、不做门禁、不自动修复
 
 误用边界：
 
 - 不要用 `archi-diff` 代替全量基线分析
 - 不要继续使用 `--goal`；该参数已从 parser 移除
+- 不要继续使用旧的 `archi-goal` 或 `archi-advice` skills
 - 不要把 review 输出当成放行门禁或自动修复计划
 
 最小示例 prompt：
@@ -208,8 +202,6 @@ archi uninstall --yes
   "Analyze this repo's overall architecture and summarize the main structural problems."
 - `archi-diff`
   "Review the current git diff from an architecture perspective."
-- plan review
-  "Write a short plan Markdown for stabilizing service boundaries, then run `archi plan-review plan.md`."
 
 建议输出模板：
 
@@ -217,8 +209,6 @@ archi uninstall --yes
   `Summary -> Concerns -> Evidence`
 - `archi-diff`
   `Summary -> New Concerns -> Evidence`
-- `plan-review`
-  `Intent -> Changes -> Dependencies -> Concerns -> Suggested Adjustments`
 
 ## 3.2 修改后建议测试
 

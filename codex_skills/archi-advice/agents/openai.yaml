@@ -1,4 +1,0 @@
-interface:
-  display_name: "Archi Advice"
-  short_description: "Turn archi results into a concrete improvement plan"
-  default_prompt: "Use full archi analysis as the baseline, combine diff context when relevant, then answer with a prioritized architecture improvement plan for the existing codebase."

@@ -1,44 +1,29 @@
 ---
 name: archi-diff
-description: Run diff-based architecture analysis with archi. Use when the user asks whether current changes are architecturally safe, what the current git diff impacts, or which changed components carry structural risk.
+description: Run incremental architecture review with archi. Use when the user asks whether current changes introduce architecture risk or what the current selected changes affect.
 ---
 
 # archi-diff
 
-Use `archi` for change-scoped architecture review. First inspect the local
-command shape because installed Archi versions may differ.
+Use `archi` for the public incremental architecture review workflow.
 
 ## Trigger
 
 - Architecture review for current git changes
-- Diff impact review
-- Incremental architecture score
-- Changed-component risk review
+- "Did these changes make the architecture worse?"
+- Changed-file or changed-component risk review
+- Incremental architecture concerns
 
-## Commands
-
-```bash
-archi --help
-```
-
-If help includes `--full`, use the new default incremental entrypoint:
+## Command
 
 ```bash
 archi
 ```
 
-If help lacks `--full` but includes `--diff`, use the legacy incremental
-entrypoint:
+Save JSON only when the user asks for a file:
 
 ```bash
-archi --diff .
-```
-
-When the user provides an explicit range and the local help advertises
-`--diff`, `--base`, and `--head`, use:
-
-```bash
-archi --diff --base <base> --head <head> .
+archi --out review.json
 ```
 
 ## Read Outputs
@@ -46,24 +31,30 @@ archi --diff --base <base> --head <head> .
 - `.architec/architec-summary.md`
 - `.architec/architec-analysis.json`
 
-Focus on `scores.incremental`, `change_analysis`, `recommendations`, and `hotspots`.
+Focus on:
+
+- `recommendations`
+- `concerns`
+- `signals`
+- `summary`
 
 ## Output Rule
 
-- Lead with whether the diff is architecturally safe.
-- Summarize impacted components and the required improvements before merge.
+- Lead with whether the current changes introduce architecture concerns.
+- Summarize impacted components and main risks.
+- End with the minimal set of improvements, if any.
 - Do not paste raw JSON.
 
 ## Avoid Misuse
 
-- Do not use this skill as the only architecture view when the user needs a repo-wide structural baseline; run `archi-full` first.
+- Do not use this skill as the only architecture view when the user needs a repo-wide structural baseline; use `archi-full`.
 - Do not infer long-term redesign direction from diff results alone.
 
 ## Example Prompts
 
-- Review the current git diff from an architecture perspective.
-- Tell me whether these changes are architecturally safe to merge.
-- Run incremental architecture analysis and summarize the main risks.
+- "Review the current git diff from an architecture perspective."
+- "Tell me whether these changes are architecturally safe to merge."
+- "Run incremental architecture analysis and summarize the main risks."
 
 ## Standard Output Template
 
@@ -71,16 +62,15 @@ Use this response shape:
 
 ```text
 Verdict
-- diff status: <safe / caution / unsafe>
-- incremental score: <score>
+- incremental status: <no concerns / caution / concern>
 
 Impacted Areas
 - <component or area 1>
 - <component or area 2>
 - <component or area 3>
 
-Required Changes
-- <required improvement 1>
-- <required improvement 2>
-- <required improvement 3>
+Improvements
+- <improvement 1>
+- <improvement 2>
+- <improvement 3>
 ```
