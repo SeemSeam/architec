@@ -20,6 +20,7 @@ SKIP_DIRS = {
     ".cache",
     ".ccb",
     ".git",
+    ".hippos",
     ".hippocampus",
     ".mypy_cache",
     ".pytest_cache",

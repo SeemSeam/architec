@@ -24,6 +24,13 @@ def _resolve_default_path(value: str | None, fallback: Path) -> Path:
     return Path(value).resolve() if value else fallback
 
 
+def _bundle_dir(root: Path) -> Path:
+    canonical = root / ".hippos"
+    if canonical.exists() or not (root / ".hippocampus").exists():
+        return canonical
+    return root / ".hippocampus"
+
+
 def _optional_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -98,10 +105,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _resolve_runtime_paths(args: argparse.Namespace, role_root: Path, root: Path) -> dict[str, Path]:
+    bundle_dir = _bundle_dir(root)
     return {
         "metrics": _resolve_default_path(
             args.metrics,
-            root / ".hippocampus" / "architect-metrics.json",
+            bundle_dir / "architect-metrics.json",
         ),
         "rubric": _resolve_default_path(
             args.rubric,
@@ -109,11 +117,11 @@ def _resolve_runtime_paths(args: argparse.Namespace, role_root: Path, root: Path
         ),
         "structure": _resolve_default_path(
             args.structure,
-            root / ".hippocampus" / "structure-prompt.md",
+            bundle_dir / "structure-prompt.md",
         ),
         "out": _resolve_default_path(
             args.out,
-            root / ".hippocampus" / "architect-prompt.md",
+            bundle_dir / "architect-prompt.md",
         ),
     }
 

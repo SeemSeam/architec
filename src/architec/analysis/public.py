@@ -72,7 +72,7 @@ def run_analysis(
         if progress is not None:
             progress(f"analysis [{step}/{steps}] {label}")
 
-    advance("loading Hippo snapshot")
+    advance("loading Hippos snapshot")
     snapshot = HippoSnapshot.load(root)
     advance("running history analysis")
     history = analyze_history_and_iterate(root, llm_enabled=True)

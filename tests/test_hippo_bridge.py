@@ -100,10 +100,20 @@ def test_hippo_base_command_uses_python_module_when_cli_missing(tmp_path, monkey
     assert hippo_bridge._hippo_base_command(tmp_path) == [hippo_bridge.sys.executable, "-m", "hippocampus.cli"]
 
 
+def test_hippo_base_command_prefers_hippos_cli(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        hippo_bridge.shutil,
+        "which",
+        lambda name: "/usr/bin/hippos" if name == "hippos" else "/usr/bin/hippo",
+    )
+
+    assert hippo_bridge._hippo_base_command(tmp_path) == ["/usr/bin/hippos"]
+
+
 def test_hippo_base_command_does_not_fall_back_to_repo_source(tmp_path, monkeypatch):
     monkeypatch.setattr(hippo_bridge.shutil, "which", lambda name: None)
     monkeypatch.setattr(hippo_bridge.importlib.util, "find_spec", lambda name: None)
     (tmp_path / "hippocampus" / "src").mkdir(parents=True)
 
-    with pytest.raises(FileNotFoundError, match="Hippo CLI not found"):
+    with pytest.raises(FileNotFoundError, match="Hippos CLI not found"):
         hippo_bridge._hippo_base_command(tmp_path)

@@ -37,9 +37,9 @@ def test_component_for_path_uses_generic_tests_mapping(tmp_path: Path) -> None:
 
 def test_component_for_path_strips_file_suffix_for_project_packages(tmp_path: Path) -> None:
     snapshot = _snapshot(tmp_path)
-    out1 = snapshot.component_for_path("hippocampus/src/hippocampus/cli_commands_pipeline.py")
+    out1 = snapshot.component_for_path("hippos/src/hippos/cli_commands_pipeline.py")
     out2 = snapshot.component_for_path("llm-proxy/src/llm_proxy/project_router.py")
-    assert out1 == "hippocampus:cli_commands_pipeline"
+    assert out1 == "hippos:cli_commands_pipeline"
     assert out2 == "llm-proxy:project_router"
 
 

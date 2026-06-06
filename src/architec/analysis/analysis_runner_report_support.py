@@ -5,6 +5,7 @@ from typing import Any
 
 from architec.scoring.contract_engine import summarize_findings
 from architec.integration.hippo_adapter import HippoSnapshot
+from architec.integration.bundle_loader import bundle_dir
 from architec.support.io_utils import write_json
 from architec.integration.paths import (
     ANALYSIS_JSON_PATH,
@@ -60,7 +61,7 @@ def graph_view(
 
 def bundle_view(root: Path, snapshot: HippoSnapshot) -> dict[str, Any]:
     return {
-        'source_dir': str(root / '.hippocampus'),
+        'source_dir': str(bundle_dir(root)),
         'metrics_loaded': bool(snapshot.metrics),
         'index_loaded': bool(snapshot.index),
         'signatures_loaded': bool(snapshot.signatures),

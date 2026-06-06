@@ -1,7 +1,7 @@
 """Architec analysis engine.
 
-Independent from runtime proxy internals; integrates with Hippocampus via
-read-only `.hippocampus` artifacts and writes its own outputs to `.architec`.
+Independent from runtime proxy internals; integrates with Hippos via
+read-only `.hippos` artifacts and writes its own outputs to `.architec`.
 """
 
 __all__ = [

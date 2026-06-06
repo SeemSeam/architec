@@ -196,9 +196,11 @@ def _installer_paths() -> dict[str, Path]:
         "install_base": install_base,
         "bin_dir": bin_dir,
         "archi_bin": bin_dir / "archi",
+        "hippos_bin": bin_dir / "hippos",
         "hippo_bin": bin_dir / "hippo",
         "repomix_bin": bin_dir / "repomix",
         "architec_config": Path(os.environ.get("ARCHITEC_USER_CONFIG_DIR", home / ".architec")).expanduser(),
+        "hippos_config": Path(os.environ.get("HIPPOS_USER_CONFIG_DIR", home / ".hippos")).expanduser(),
         "hippocampus_config": Path(os.environ.get("HIPPOCAMPUS_USER_CONFIG_DIR", home / ".hippocampus")).expanduser(),
         "llmgateway_config": Path(os.environ.get("LLMGATEWAY_USER_CONFIG_DIR", home / ".llmgateway")).expanduser(),
         "codex_skills": Path(os.environ.get("ARCHITEC_CODEX_SKILLS_DIR", home / ".codex/skills")).expanduser(),
@@ -255,6 +257,7 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
 
     removed: list[str] = []
     _remove_path(paths["archi_bin"], removed)
+    _remove_tool_if_managed(paths["hippos_bin"], install_base / "python-tools", removed)
     _remove_tool_if_managed(paths["hippo_bin"], install_base / "python-tools", removed)
     _remove_tool_if_managed(paths["repomix_bin"], install_base / "node-tools", removed)
     _remove_path(install_base, removed)
@@ -262,6 +265,7 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     _remove_managed_skills(paths["claude_skills"], removed)
 
     _remove_path(paths["architec_config"], removed)
+    _remove_path(paths["hippos_config"], removed)
     _remove_path(paths["hippocampus_config"], removed)
     _remove_path(paths["llmgateway_config"], removed)
 

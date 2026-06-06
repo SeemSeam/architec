@@ -130,7 +130,7 @@ def test_build_parser_help_keeps_public_parameter_surface_small() -> None:
     help_text = cli.build_parser().format_help()
 
     assert "--full" in help_text
-    assert "--refresh-from-hippo" in help_text
+    assert "--refresh-from-hippos" in help_text
     assert "--check" in help_text
     assert "--out" in help_text
 
@@ -445,10 +445,10 @@ def test_main_check_auto_refreshes_missing_bundle(monkeypatch, capsys):
 
     assert cli.main() == 0
     captured = capsys.readouterr()
-    assert "Hippo bundle missing, refreshing via hippo" in captured.err
+    assert "Hippos bundle missing, refreshing via hippos" in captured.err
     out = captured.out
     assert "Archi preflight OK" in out
-    assert "Hippo bundle: refreshed" in out
+    assert "Hippos bundle: refreshed" in out
 
 
 def test_main_check_auto_refreshes_stale_bundle(monkeypatch, capsys):
@@ -471,7 +471,7 @@ def test_main_check_auto_refreshes_stale_bundle(monkeypatch, capsys):
 
     assert cli.main() == 0
     captured = capsys.readouterr()
-    assert "Hippo bundle stale, refreshing via hippo" in captured.err
+    assert "Hippos bundle stale, refreshing via hippos" in captured.err
     assert "Archi preflight OK" in captured.out
 
 

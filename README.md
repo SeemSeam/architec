@@ -52,14 +52,14 @@ Architec is the review layer. It uses two companion components:
 | Component | Command / package | Role |
 | --- | --- | --- |
 | **Architec** | `archi` / `architec` | Runs architecture review, calls the LLM through llmgateway, writes advisory results under `.architec/`. |
-| **Hippo** | `hippo` / `hippocampus` | Builds structural project snapshots under `.hippocampus/`: file manifests, code signatures, repository indexes, structure prompts, and metrics. |
+| **Hippos** | `hippos` / `seemseam-hippos` | Builds structural project snapshots under `.hippos/`: file manifests, code signatures, repository indexes, structure prompts, and metrics. |
 | **llmgateway** | `llmgateway` | Owns provider credentials, base URLs, API style, model names, and strong/weak model routing. |
 
 ```text
 source tree + git changes
         |
         v
-Hippo structural snapshot  ->  .hippocampus/
+Hippos structural snapshot  ->  .hippos/
         |
         v
 Architec evidence builder  ->  selected-scope or full-project context
@@ -72,8 +72,8 @@ Architec review output     ->  .architec/
 ```
 
 Day-to-day `archi` runs still use the LLM, but they avoid refreshing the whole
-Hippo snapshot unless requested. `archi --full` uses the Hippo snapshot more
-heavily, and `archi --refresh-from-hippo --full` refreshes it before review.
+Hippos snapshot unless requested. `archi --full` uses the Hippos snapshot more
+heavily, and `archi --refresh-from-hippos --full` refreshes it before review.
 
 ## How It Works
 
@@ -86,7 +86,7 @@ layer turns that evidence into readable architecture advice.
    - `archi --full` reviews the whole project.
 
 2. **Read structural context**
-   - Hippo produces `.hippocampus/` snapshots: file manifests, code signatures,
+   - Hippos produces `.hippos/` snapshots: file manifests, code signatures,
      repository indexes, metrics, and structure prompts.
    - Architec checks whether that snapshot is present, stale, or unknown.
 
@@ -112,20 +112,20 @@ layer turns that evidence into readable architecture advice.
 
 Architec requires Python 3.11+.
 
-Recommended install from GitHub:
+Recommended install from PyPI:
 
 ```bash
-python3 -m pip install --user "architec @ git+https://github.com/SeemSeam/architec.git"
+python3 -m pip install --user architec
 ```
 
 This installs:
 
 - `archi`, the Architec CLI;
-- `llmgateway`, the LLM provider gateway;
-- `hippocampus`, the package that provides Hippo structural snapshots.
+- `seemseam-llmgateway`, the package that provides the LLM provider gateway;
+- `seemseam-hippos`, the package that provides Hippos structural snapshots.
 
-`llmgateway` and `hippocampus` are installed from the SeemSeam GitHub
-repositories, so no separate package index setup is required.
+The runtime imports remain `llmgateway` and `hippos`; no separate package index
+setup is required.
 
 Local development from this repository:
 
@@ -189,10 +189,10 @@ archi --out review.json
 archi --full --out full-review.json
 ```
 
-Refresh Hippo inputs before full review:
+Refresh Hippos inputs before full review:
 
 ```bash
-archi --refresh-from-hippo --full
+archi --refresh-from-hippos --full
 ```
 
 ## Command Summary
@@ -203,8 +203,8 @@ archi --refresh-from-hippo --full
 | `archi --full` | Full-project LLM architecture review. |
 | `archi --out review.json` | Save incremental review JSON. |
 | `archi --full --out full-review.json` | Save full-review JSON. |
-| `archi --refresh-from-hippo --full` | Refresh Hippo structural inputs, then run full review. |
-| `archi --check .` | Validate Hippo bundle state and llmgateway configuration. |
+| `archi --refresh-from-hippos --full` | Refresh Hippos structural inputs, then run full review. |
+| `archi --check .` | Validate Hippos bundle state and llmgateway configuration. |
 
 Advanced compatibility flags and older subcommands may still be accepted for
 existing automation, but new usage should prefer the commands above.
@@ -219,7 +219,7 @@ Architec reports advisory concerns and signals, including:
 - **Cleanup/archive candidates**: stale or legacy-looking code and docs.
 - **Hotspots**: churn-heavy or structurally risky areas.
 - **Topology pressure**: flat or confusing project structure.
-- **Snapshot freshness**: missing, stale, or unknown Hippo context.
+- **Snapshot freshness**: missing, stale, or unknown Hippos context.
 - **Risk context**: optional external facts attached to existing concerns.
 
 The output is advisory. It is not a pass/fail result and is not proof of
@@ -240,7 +240,7 @@ Architec writes generated files under `.architec/`:
   cache/
 ```
 
-Hippo writes structural inputs under `.hippocampus/`.
+Hippos writes structural inputs under `.hippos/`.
 
 Start with `.architec/architec-summary.md` for the human-readable report, then
 open `.architec/architec-analysis.json` for exact scores, concerns, signals,

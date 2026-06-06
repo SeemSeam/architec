@@ -24,10 +24,12 @@ def _write_valid_bundle(
     *,
     metrics_payload: dict | None = None,
     with_bundle_state: bool = True,
+    bundle_dir_name: str = ".hippocampus",
+    index_name: str = "hippocampus-index.json",
 ) -> None:
     _touch(root / "src" / "app.py", "print('ok')\n")
-    hippo = root / ".hippocampus"
-    _touch(hippo / "hippocampus-index.json", '{"files": {"src/app.py": {}}}\n')
+    hippo = root / bundle_dir_name
+    _touch(hippo / index_name, '{"files": {"src/app.py": {}}}\n')
     _touch(hippo / "code-signatures.json", '{"files": {"src/app.py": {"signatures": []}}}\n')
     _touch(hippo / "file-manifest.json", '{"files": {"src/app.py": {"kind": "source"}}}\n')
     _touch(hippo / "structure-prompt.md", "# prompt\n")
@@ -47,7 +49,7 @@ def _write_valid_bundle(
 def test_inspect_bundle_reports_missing_files(tmp_path):
     status = inspect_bundle(tmp_path)
     assert status.ok is False
-    assert ".hippocampus/architect-metrics.json" in status.missing_files
+    assert ".hippos/architect-metrics.json" in status.missing_files
 
 
 def test_require_bundle_passes_when_all_required_files_exist(tmp_path):
@@ -57,6 +59,18 @@ def test_require_bundle_passes_when_all_required_files_exist(tmp_path):
     assert status.ok is True
     assert status.bundle_state_present is True
     assert status.bundle_state_fingerprint == status.metrics_fingerprint
+
+
+def test_require_bundle_passes_with_canonical_hippos_bundle(tmp_path):
+    _write_valid_bundle(
+        tmp_path,
+        bundle_dir_name=".hippos",
+        index_name="hippos-index.json",
+    )
+
+    status = require_bundle(tmp_path)
+    assert status.ok is True
+    assert ".hippos/hippos-index.json" in status.present_files
 
 
 def test_inspect_bundle_marks_metrics_without_fingerprint_as_stale(tmp_path):

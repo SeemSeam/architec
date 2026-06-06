@@ -10,6 +10,7 @@ from architec.integration.hippo_adapter_paths import (
     is_hidden_path,
     prefixed_component,
 )
+from architec.integration.bundle_loader import bundle_file
 from architec.integration.hippo_adapter_snapshot import (
     add_unique_paths,
     signatures_from_file_map,
@@ -29,13 +30,12 @@ class HippoSnapshot:
 
     @classmethod
     def load(cls, project_root: Path) -> "HippoSnapshot":
-        hippo = project_root / ".hippocampus"
-        metrics = read_json(hippo / "architect-metrics.json", default={})
-        index = read_json(hippo / "hippocampus-index.json", default={})
-        signatures = read_json(hippo / "code-signatures.json", default={})
-        file_manifest = read_json(hippo / "file-manifest.json", default={})
+        metrics = read_json(bundle_file(project_root, "architect-metrics.json"), default={})
+        index = read_json(bundle_file(project_root, "index"), default={})
+        signatures = read_json(bundle_file(project_root, "code-signatures.json"), default={})
+        file_manifest = read_json(bundle_file(project_root, "file-manifest.json"), default={})
         try:
-            structure_prompt = (hippo / "structure-prompt.md").read_text(encoding="utf-8")
+            structure_prompt = bundle_file(project_root, "structure-prompt.md").read_text(encoding="utf-8")
         except Exception:
             structure_prompt = ""
         return cls(

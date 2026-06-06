@@ -22,7 +22,7 @@ from architec.code_review.shadow_implementation import (
     shadow_implementation_scan,
 )
 from architec.events.public import append_review_event
-from architec.integration.bundle_loader import REQUIRED_BUNDLE_FILES
+from architec.integration.bundle_loader import bundle_file, inspect_bundle
 from architec.scoring.component_scoring_git import changed_files as git_changed_files
 from architec.support.io_utils import ProgressFn, clamp, read_json, write_json
 
@@ -990,13 +990,13 @@ def _signals(
         hippo_bundle_stale = bool(snapshot_context.get("hippo_bundle_stale"))
         freshness_unknown = bool(snapshot_context.get("freshness_unknown"))
         if not hippo_bundle_present:
-            summary = "Incremental review ran without a Hippo structure snapshot."
+            summary = "Incremental review ran without a Hippos structure snapshot."
         elif freshness_unknown:
-            summary = "Incremental review used selected-scope evidence; Hippo snapshot freshness could not be determined."
+            summary = "Incremental review used selected-scope evidence; Hippos snapshot freshness could not be determined."
         elif hippo_bundle_stale:
-            summary = "Incremental review used selected-scope evidence with a stale Hippo structure snapshot available."
+            summary = "Incremental review used selected-scope evidence with a stale Hippos structure snapshot available."
         else:
-            summary = "Incremental review used selected-scope evidence with a current Hippo structure snapshot available."
+            summary = "Incremental review used selected-scope evidence with a current Hippos structure snapshot available."
         signals.append(
             {
                 "kind": "snapshot_context",
@@ -1480,10 +1480,11 @@ def _incremental_snapshot_context(
     changed_files: list[str],
 ) -> dict[str, Any]:
     root = Path(project_root)
-    missing_files = [rel for rel in REQUIRED_BUNDLE_FILES if not (root / rel).is_file()]
+    status = inspect_bundle(root)
+    missing_files = status.missing_files
     bundle_present = not missing_files
-    state = read_json(root / ".hippocampus" / "bundle-state.json", default={})
-    metrics = read_json(root / ".hippocampus" / "architect-metrics.json", default={})
+    state = read_json(bundle_file(root, "bundle-state.json"), default={})
+    metrics = read_json(bundle_file(root, "architect-metrics.json"), default={})
     bundle_generated_at = str(_dict(state).get("generated_at", "") or "").strip()
     metrics_generated_at = str(_dict(metrics).get("generated_at", "") or "").strip()
     reference_generated_at = bundle_generated_at or metrics_generated_at
@@ -1496,7 +1497,7 @@ def _incremental_snapshot_context(
     stale_reasons: list[str] = []
     if selected_changed_after_bundle_total:
         stale_reasons.append(
-            "selected files changed after Hippo bundle generation "
+            "selected files changed after Hippos bundle generation "
             f"(files={selected_changed_after_bundle_total})"
         )
     return {
