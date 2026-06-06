@@ -33,7 +33,7 @@ dependencies = [
     "certifi>=2024.0.0",
     "PyYAML>=6.0",
     "seemseam-llmgateway>=0.1.2",
-    "seemseam-hippos>=0.1.8",
+    "hippocampus>=0.1.7",
     "cryptography>=43",
 ]
 
