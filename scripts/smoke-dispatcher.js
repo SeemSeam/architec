@@ -136,6 +136,13 @@ try {
   if (postinstallResult.status !== 0) {
     fail("postinstall config smoke test failed", postinstallResult);
   }
+  const postinstallStderr = String(postinstallResult.stderr || "");
+  if (
+    !postinstallStderr.includes("project: https://github.com/SeemSeam/architec") ||
+    !postinstallStderr.includes("more info: https://github.com/SeemSeam/architec#readme")
+  ) {
+    fail("postinstall did not print GitHub project/more-info links", postinstallResult);
+  }
   if (!fs.existsSync(llmgatewayConfig)) {
     fail("postinstall did not create starter llmgateway config");
   }

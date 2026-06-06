@@ -41,6 +41,7 @@ _ZH_TRANSLATIONS = {
     "cli.description": "Archi 架构分析 CLI",
     "cli.epilog": "维护命令：`archi update` 和 `archi uninstall`。",
     "cli.full_and_diff": "--full 和 --diff 不能同时使用",
+    "cli.help.allow_static": "后端 LLM 不可用时允许静态降级结果",
     "cli.help.check": "验证后端 LLM 配置并退出",
     "cli.help.full": "运行全项目 LLM 架构审查",
     "cli.help.out": "可选的输出 JSON 路径覆盖",

@@ -273,6 +273,19 @@ archi uninstall --yes --purge-config
 
 安装器只会在 `~/.llmgateway/config.yaml` 缺失时创建 starter template；已有文件不会被 install/update 覆盖，即使传入了环境变量或 `--configure-llm`。starter template 包含主 provider、headers / model_map 示例、strong / weak / fallback 模型、并发和超时设置，以及注释形式的备用 provider 示例。备用 API 源是否实际生效取决于 llmgateway 当前 schema；当前 llmgateway 支持 `providers` 有序链，未取消注释的示例不会参与运行。
 
+运行分析前建议执行：
+
+```bash
+archi --check .
+```
+
+普通分析命令默认要求后端 LLM 可用；如果 provider 凭据、`api_key` 或 `base_url` 缺失，命令会失败。只有在明确接受非 LLM 降级结果时，才使用 `--allow-static`：
+
+```bash
+archi --allow-static .
+archi code-review --allow-static --diff .
+```
+
 如果你希望临时改目录，可以使用 `ARCHITEC_USER_CONFIG_DIR`。
 
 ### 4.2 方式二：环境变量输入给安装脚本

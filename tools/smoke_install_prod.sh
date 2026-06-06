@@ -35,11 +35,13 @@ run_installer() {
       --bin-dir "${home_dir}/bin" \
       --os linux \
       --arch x64 \
-      "$@" >/dev/null
+      "$@"
 }
 
 missing_home="${TMP_DIR}/missing-home"
-run_installer "${missing_home}"
+missing_output="$(run_installer "${missing_home}")"
+printf '%s\n' "${missing_output}" | grep -q "Project: https://github.com/SeemSeam/architec"
+printf '%s\n' "${missing_output}" | grep -q "More info: https://github.com/SeemSeam/architec#readme"
 "${missing_home}/bin/archi" | grep -q "archi smoke"
 
 starter_config="${missing_home}/.llmgateway/config.yaml"
@@ -97,7 +99,7 @@ before_hash="$(sha256sum "${existing_config}" | awk '{print $1}')"
 
 architec_llm_main_url="https://env.example.invalid" \
   architec_llm_main_api_key="env-value-must-not-overwrite" \
-  run_installer "${existing_home}" --configure-llm
+  run_installer "${existing_home}" --configure-llm >/dev/null
 
 after_hash="$(sha256sum "${existing_config}" | awk '{print $1}')"
 if [[ "${before_hash}" != "${after_hash}" ]]; then

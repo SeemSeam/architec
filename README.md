@@ -191,6 +191,11 @@ settings, and commented fallback-provider examples. Fallback behavior depends on
 the installed llmgateway schema; current llmgateway supports an ordered
 `providers` chain.
 
+Use `archi --check .` to validate provider credentials before analysis. Regular
+analysis commands now fail when the required backend LLM is unavailable. Pass
+`--allow-static` only when you intentionally want Architec to return static
+code-review signals instead of LLM-backed results.
+
 Minimal example:
 
 ```yaml

@@ -404,6 +404,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_argument(
         parser,
+        '--allow-static',
+        action='store_true',
+        help=tr(
+            "cli.help.allow_static",
+            "allow static fallback when backend LLM is unavailable",
+        ),
+    )
+    _add_argument(
+        parser,
         '--out',
         default='',
         help=tr("cli.help.out", "optional output JSON path override"),
@@ -507,6 +516,12 @@ def build_code_review_parser() -> argparse.ArgumentParser:
         '--skip-auth',
         action='store_true',
         help='compatibility no-op; analysis commands no longer require login',
+    )
+    _add_argument(
+        parser,
+        '--allow-static',
+        action='store_true',
+        help='allow static fallback when backend LLM is unavailable',
     )
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
     return parser
@@ -707,6 +722,10 @@ def _static_code_review_result(args: argparse.Namespace, reason: str) -> dict[st
     if _is_full_code_review_args(args):
         return _static_full_code_review_result(args, reason)
     return _static_incremental_code_review_result(args, reason)
+
+
+def _allow_static_fallback(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "allow_static", False))
 
 
 def _availability_reason(prefix: str, exc: Exception) -> str:
@@ -922,7 +941,7 @@ def main() -> int:
             try:
                 preflight_backend_llm(args.path, checks=checks)
             except ArchitectLLMUnavailableError as exc:
-                if bool(getattr(args, "check", False)):
+                if bool(getattr(args, "check", False)) or not _allow_static_fallback(args):
                     raise
                 result = _static_code_review_result(
                     args,
@@ -938,7 +957,7 @@ def main() -> int:
             try:
                 result = _code_review_result(args)
             except ArchitectLLMUnavailableError as exc:
-                if bool(getattr(args, "check", False)):
+                if bool(getattr(args, "check", False)) or not _allow_static_fallback(args):
                     raise
                 result = _static_code_review_result(
                     args,
@@ -993,7 +1012,7 @@ def main() -> int:
         try:
             preflight_backend_llm(args.path, checks=checks)
         except ArchitectLLMUnavailableError as exc:
-            if bool(getattr(args, "check", False)):
+            if bool(getattr(args, "check", False)) or not _allow_static_fallback(args):
                 raise
             result = _static_code_review_result(
                 args,
@@ -1014,7 +1033,7 @@ def main() -> int:
         try:
             result = _run_command(args, checks)
         except ArchitectLLMUnavailableError as exc:
-            if bool(getattr(args, "check", False)):
+            if bool(getattr(args, "check", False)) or not _allow_static_fallback(args):
                 raise
             result = _static_code_review_result(
                 args,

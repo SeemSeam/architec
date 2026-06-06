@@ -156,6 +156,7 @@ def test_build_parser_help_keeps_public_parameter_surface_small() -> None:
     assert "--full" in help_text
     assert "--refresh-from-hippos" in help_text
     assert "--check" in help_text
+    assert "--allow-static" in help_text
     assert "--out" in help_text
 
     for hidden in (
@@ -196,8 +197,11 @@ def test_build_plan_review_parser_accepts_plan_and_project_root():
 def test_build_code_review_parser_accepts_full_and_trailing_path():
     parser = cli.build_code_review_parser()
     assert parser.prog == "archi code-review"
-    args = parser.parse_args(["--full", "--out", "/tmp/review.json", "--risk-context", "risk.json", "."])
+    args = parser.parse_args(
+        ["--full", "--allow-static", "--out", "/tmp/review.json", "--risk-context", "risk.json", "."]
+    )
     assert args.full is True
+    assert args.allow_static is True
     assert args.diff is False
     assert args.since == ""
     assert args.out == "/tmp/review.json"
@@ -1066,7 +1070,7 @@ def test_main_code_review_full_outputs_json_contract(monkeypatch, tmp_path, caps
         "artifacts": {"analysis_json": "/tmp/.architec/architec-analysis.json"},
     }
 
-    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", str(tmp_path)])
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", "--allow-static", str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: calls.append(("bundle", args.path)) or None)
     monkeypatch.setattr(
         cli,
@@ -1286,7 +1290,7 @@ def test_main_code_review_full_llm_unavailable_uses_static_review(
     result["summary"]["analysis_mode"] = "static"
     result["artifacts"] = {"code_review_analysis_mode": "static"}
 
-    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", str(tmp_path)])
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", "--allow-static", str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: calls.append(("bundle", args.path)) or None)
     monkeypatch.setattr(
         cli,
@@ -1309,6 +1313,27 @@ def test_main_code_review_full_llm_unavailable_uses_static_review(
     assert calls[0] == ("bundle", str(tmp_path))
     assert calls[1][0] == "static"
     assert "provider 403" in calls[1][2]
+
+
+def test_main_code_review_full_llm_unavailable_fails_without_static_opt_in(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
+    monkeypatch.setattr(
+        cli,
+        "preflight_backend_llm",
+        lambda path, *, checks: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+    )
+    monkeypatch.setattr(cli, "run_code_review_full", lambda *args, **kwargs: pytest.fail("full should not run"))
+    monkeypatch.setattr(cli, "run_code_review_static_full", lambda *args, **kwargs: pytest.fail("static should not run"))
+
+    assert cli.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "provider 403" in captured.err
 
 
 def test_main_code_review_full_bundle_error_uses_static_review(
@@ -1358,7 +1383,7 @@ def test_main_code_review_diff_llm_unavailable_uses_static_review(
     result["summary"]["analysis_mode"] = "static"
     result["artifacts"] = {"code_review_analysis_mode": "static"}
 
-    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--diff", str(tmp_path)])
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--diff", "--allow-static", str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
     monkeypatch.setattr(
         cli,
@@ -1381,6 +1406,27 @@ def test_main_code_review_diff_llm_unavailable_uses_static_review(
     assert payload["summary"]["analysis_mode"] == "static"
     assert calls[0][0] == "static-diff"
     assert "provider 403" in calls[0][4]
+
+
+def test_main_top_level_llm_unavailable_fails_without_static_opt_in(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    monkeypatch.setattr(sys, "argv", ["archi", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not refresh"))
+    monkeypatch.setattr(
+        cli,
+        "preflight_backend_llm",
+        lambda path, *, checks: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+    )
+    monkeypatch.setattr(cli, "run_code_review_incremental_llm", lambda *args, **kwargs: pytest.fail("review should not run"))
+    monkeypatch.setattr(cli, "run_code_review_static_diff", lambda *args, **kwargs: pytest.fail("static should not run"))
+
+    assert cli.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "provider 403" in captured.err
 
 
 def test_main_code_review_check_llm_unavailable_remains_input_error(

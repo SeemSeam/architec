@@ -478,4 +478,6 @@ write_auth_preferences
 say "Installed Architec ${VERSION} to ${TARGET_DIR}"
 say "Installed launcher ${BIN_DIR}/archi"
 say "LLMGateway config: ${LLMGATEWAY_CONFIG_PATH}"
+say "Project: https://github.com/${REPO}"
+say "More info: https://github.com/${REPO}#readme"
 say "Next step: archi --version"
