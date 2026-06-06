@@ -32,8 +32,8 @@ classifiers = [
 dependencies = [
     "certifi>=2024.0.0",
     "PyYAML>=6.0",
-    "llmgateway>=0.1.1",
-    "hippocampus>=0.1.7",
+    "seemseam-llmgateway>=0.1.2",
+    "seemseam-hippos>=0.1.8",
     "cryptography>=43",
 ]
 
