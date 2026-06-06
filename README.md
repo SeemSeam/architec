@@ -127,6 +127,19 @@ This installs:
 The runtime imports remain `llmgateway` and `hippos`; no separate package index
 setup is required.
 
+## Output Language
+
+Architec prints English by default, and automatically switches CLI status,
+error, and maintenance output to Chinese when the system locale is Chinese
+(`LC_ALL`, `LC_MESSAGES`, `LANGUAGE`, or `LANG` starts with `zh`).
+
+You can force a language for scripts or tests:
+
+```bash
+ARCHITEC_LANG=zh archi --version
+ARCHITEC_LANG=en archi --check .
+```
+
 Local development from this repository:
 
 ```bash

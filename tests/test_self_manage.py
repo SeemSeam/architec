@@ -63,6 +63,21 @@ def test_print_version_status_reports_update_available(monkeypatch, capsys) -> N
     assert "Run: archi update" in out
 
 
+def test_print_version_status_uses_chinese_locale(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("ARCHITEC_LANG", "zh")
+    monkeypatch.setattr(self_manage, "current_cli_version", lambda: "0.2.1")
+    monkeypatch.setattr(self_manage, "_latest_release_version", lambda _url: "0.2.2")
+
+    result = self_manage.print_version_status()
+
+    assert result == 0
+    out = capsys.readouterr().out
+    assert "Architec CLI 版本：0.2.1" in out
+    assert "最新发布：0.2.2" in out
+    assert "有可用更新：是" in out
+    assert "运行：archi update" in out
+
+
 def test_print_version_status_handles_release_lookup_failure(monkeypatch, capsys) -> None:
     monkeypatch.setattr(self_manage, "current_cli_version", lambda: "0.2.1")
     monkeypatch.setattr(

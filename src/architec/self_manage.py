@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+from .i18n import localize_argparse_parser, tr
 from .support.tls import ensure_default_ca_bundle_env
 from .version import current_cli_version
 
@@ -27,10 +28,18 @@ def _urlopen(target: Any, *, timeout: float):
 
 
 def _build_self_manage_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="archi", description="Architec maintenance commands")
+    parser = argparse.ArgumentParser(
+        prog="archi",
+        description=tr("self_manage.description", "Architec maintenance commands"),
+    )
+    localize_argparse_parser(parser)
     subparsers = parser.add_subparsers(dest="self_manage_command", required=True)
 
-    update = subparsers.add_parser("update", help="reinstall the latest public Architec build")
+    update = subparsers.add_parser(
+        "update",
+        help=tr("self_manage.help.update", "reinstall the latest public Architec build"),
+    )
+    localize_argparse_parser(update)
     update.add_argument(
         "--force",
         action="store_true",
@@ -47,7 +56,14 @@ def _build_self_manage_parser() -> argparse.ArgumentParser:
         help=argparse.SUPPRESS,
     )
 
-    uninstall = subparsers.add_parser("uninstall", help="deep-remove the installed Architec launcher, assets, configs, and managed deps")
+    uninstall = subparsers.add_parser(
+        "uninstall",
+        help=tr(
+            "self_manage.help.uninstall",
+            "deep-remove the installed Architec launcher, assets, configs, and managed deps",
+        ),
+    )
+    localize_argparse_parser(uninstall)
     uninstall.add_argument(
         "--purge",
         action="store_true",
@@ -61,7 +77,7 @@ def _build_self_manage_parser() -> argparse.ArgumentParser:
     uninstall.add_argument(
         "--yes",
         action="store_true",
-        help="skip the interactive confirmation prompt",
+        help=tr("self_manage.help.yes", "skip the interactive confirmation prompt"),
     )
     return parser
 
@@ -137,20 +153,20 @@ def resolve_version_status(metadata_url: str = DEFAULT_RELEASE_METADATA_URL) -> 
 
 def print_version_status(metadata_url: str = DEFAULT_RELEASE_METADATA_URL) -> int:
     status = resolve_version_status(metadata_url)
-    print(f"Architec CLI version: {status['current_version']}")
+    print(tr("self_manage.cli_version", "Architec CLI version: {version}", version=status["current_version"]))
     latest_version = str(status.get("latest_version", "") or "").strip()
     latest_error = str(status.get("latest_error", "") or "").strip()
     if latest_version:
-        print(f"Latest release: {latest_version}")
+        print(tr("self_manage.latest_release", "Latest release: {version}", version=latest_version))
         if bool(status.get("upgrade_available")):
-            print("Update available: yes")
-            print(f"Run: {status['recommended_command']}")
+            print(tr("self_manage.update_available_yes", "Update available: yes"))
+            print(tr("self_manage.run", "Run: {command}", command=status["recommended_command"]))
         else:
-            print("Update available: no")
+            print(tr("self_manage.update_available_no", "Update available: no"))
     else:
-        print("Latest release: unknown")
+        print(tr("self_manage.latest_release_unknown", "Latest release: unknown"))
         if latest_error:
-            print(f"Latest check failed: {latest_error}")
+            print(tr("self_manage.latest_check_failed", "Latest check failed: {error}", error=latest_error))
     return 0
 
 
@@ -170,21 +186,39 @@ def _cmd_update(args: argparse.Namespace) -> int:
     latest_error = str(status.get("latest_error", "") or "")
 
     if latest_version:
-        print(f"Current version: {current_version}")
-        print(f"Latest version: {latest_version}")
+        print(tr("self_manage.current_version", "Current version: {version}", version=current_version))
+        print(tr("self_manage.latest_version", "Latest version: {version}", version=latest_version))
         if not bool(status.get("upgrade_available")):
-            print(f"Current version already matches the latest release; reinstalling {latest_version}.")
+            print(
+                tr(
+                    "self_manage.already_latest_reinstalling",
+                    "Current version already matches the latest release; reinstalling {version}.",
+                    version=latest_version,
+                )
+            )
     else:
         if latest_error:
-            print(f"Warning: could not resolve latest release version: {latest_error}", file=sys.stderr)
-        print(f"Current version: {current_version}")
-        print("Latest version: unknown")
-        print("Proceeding with installer refresh because latest metadata could not be verified.")
+            print(
+                tr(
+                    "self_manage.warning_latest",
+                    "Warning: could not resolve latest release version: {error}",
+                    error=latest_error,
+                ),
+                file=sys.stderr,
+            )
+        print(tr("self_manage.current_version", "Current version: {version}", version=current_version))
+        print(tr("self_manage.latest_version_unknown", "Latest version: unknown"))
+        print(
+            tr(
+                "self_manage.installer_refresh_unverified",
+                "Proceeding with installer refresh because latest metadata could not be verified.",
+            )
+        )
 
-    print(f"Running installer: {args.install_script_url}")
+    print(tr("self_manage.running_installer", "Running installer: {url}", url=args.install_script_url))
     result = _run_install_script(str(args.install_script_url or DEFAULT_INSTALL_SCRIPT_URL))
     if result == 0:
-        print("Architec update completed.")
+        print(tr("self_manage.update_completed", "Architec update completed."))
     return result
 
 
@@ -243,9 +277,11 @@ def _confirm_uninstall(args: argparse.Namespace, install_base: Path) -> bool:
     if bool(args.yes):
         return True
     if not _is_interactive_terminal():
-        print("Non-interactive uninstall requires --yes.", file=sys.stderr)
+        print(tr("self_manage.non_interactive_yes", "Non-interactive uninstall requires --yes."), file=sys.stderr)
         return False
-    answer = input(f"Remove Architec from {install_base}? [y/N]: ").strip().lower()
+    answer = input(
+        tr("self_manage.remove_prompt", "Remove Architec from {path}? [y/N]: ", path=install_base)
+    ).strip().lower()
     return answer in {"y", "yes"}
 
 
@@ -270,15 +306,15 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     _remove_path(paths["llmgateway_config"], removed)
 
     if removed:
-        print("Removed:")
+        print(tr("self_manage.removed", "Removed:"))
         for item in removed:
             print(f"- {item}")
     else:
-        print("No Architec install artifacts were found.")
+        print(tr("self_manage.no_artifacts", "No Architec install artifacts were found."))
 
-    print("Config purge: enabled")
-    print("Managed Python dependency environment purge: enabled")
-    print("Architec uninstall complete.")
+    print(tr("self_manage.config_purge", "Config purge: enabled"))
+    print(tr("self_manage.python_deps_purge", "Managed Python dependency environment purge: enabled"))
+    print(tr("self_manage.uninstall_complete", "Architec uninstall complete."))
     return 0
 
 

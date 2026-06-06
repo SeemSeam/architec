@@ -21,6 +21,7 @@ from .code_review.public import (
 from .fix_advice.public import run_fix_advice
 from .integration.bundle_loader import inspect_bundle
 from .integration.hippo_bridge import refresh_bundle_from_hippo
+from .i18n import localize_argparse_error, localize_argparse_parser, tr
 from .plan_review.public import run_plan_review
 from .project_status.public import run_status_snapshot, run_status_trend
 from .self_manage import handle_self_manage_command, print_version_status
@@ -29,14 +30,23 @@ from .support.llm_guard import ArchitectLLMUnavailableError
 from .support.llm_preflight import preflight_backend_llm
 
 
+class ArchitecArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(
+            2,
+            f"{self.prog}: {tr('argparse.error', 'error')}: {localize_argparse_error(message)}\n",
+        )
+
+
 def _score_line(scores: dict[str, Any]) -> str:
     parts: list[str] = []
     for label, key in (
-        ("overall", "overall"),
-        ("governance", "governance_overall"),
-        ("structure", "structure"),
-        ("full", "full"),
-        ("incremental", "incremental"),
+        (tr("label.overall", "overall"), "overall"),
+        (tr("label.governance", "governance"), "governance_overall"),
+        (tr("label.structure", "structure"), "structure"),
+        (tr("label.full", "full"), "full"),
+        (tr("label.incremental", "incremental"), "incremental"),
     ):
         value = scores.get(key)
         if value is None:
@@ -48,9 +58,9 @@ def _score_line(scores: dict[str, Any]) -> str:
 def _code_review_count_line(summary: dict[str, Any]) -> str:
     parts: list[str] = []
     for label, key in (
-        ("total", "concern_total"),
-        ("shown", "top_concern_total"),
-        ("limit", "concern_limit"),
+        (tr("count.total", "total"), "concern_total"),
+        (tr("count.shown", "shown"), "top_concern_total"),
+        (tr("count.limit", "limit"), "concern_limit"),
     ):
         if key in summary:
             parts.append(f"{label}={summary.get(key)}")
@@ -61,7 +71,7 @@ def _format_concern_line(concern: dict[str, Any]) -> str:
     kind = str(concern.get("kind", "") or "concern").strip()
     level = str(concern.get("level", "") or "").strip()
     location = concern.get("location", {}) if isinstance(concern.get("location"), dict) else {}
-    path = str(location.get("path", "") or "unknown path").strip()
+    path = str(location.get("path", "") or tr("cli.unknown_path", "unknown path")).strip()
     root_cause = str(concern.get("root_cause", "") or "").strip()
     prefix = f"{kind} [{level}]" if level else kind
     if root_cause:
@@ -72,11 +82,11 @@ def _format_concern_line(concern: dict[str, Any]) -> str:
 def _append_code_review_summary(lines: list[str], result: dict[str, Any], summary: dict[str, Any]) -> None:
     count_line = _code_review_count_line(summary)
     if count_line:
-        lines.append(f"Concerns: {count_line}")
+        lines.append(f"{tr('cli.concerns', 'Concerns')}: {count_line}")
 
     signals = result.get("signals", [])
     if isinstance(signals, list) and signals:
-        lines.append("Signals:")
+        lines.append(tr("cli.signals", "Signals:"))
         for signal in signals[:5]:
             if not isinstance(signal, dict):
                 continue
@@ -89,7 +99,7 @@ def _append_code_review_summary(lines: list[str], result: dict[str, Any], summar
 
     concerns = result.get("concerns", [])
     if isinstance(concerns, list) and concerns:
-        lines.append("Top concerns:")
+        lines.append(tr("cli.top_concerns", "Top concerns:"))
         for concern in concerns[:5]:
             if isinstance(concern, dict):
                 lines.append(_format_concern_line(concern))
@@ -98,10 +108,10 @@ def _append_code_review_summary(lines: list[str], result: dict[str, Any], summar
 def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
     lines: list[str] = []
     if check_mode:
-        lines.append("Archi preflight OK")
+        lines.append(tr("cli.preflight_ok", "Archi preflight OK"))
         checked_path = str(result.get("checked_path", "") or "").strip()
         if checked_path:
-            lines.append(f"Path: {checked_path}")
+            lines.append(f"{tr('cli.path', 'Path')}: {checked_path}")
         checks = result.get("checks", [])
         if isinstance(checks, list) and checks:
             rendered = []
@@ -115,10 +125,13 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
                 elif task:
                     rendered.append(task)
             if rendered:
-                lines.append(f"LLM checks: {', '.join(rendered)}")
+                lines.append(f"{tr('cli.checks', 'LLM checks')}: {', '.join(rendered)}")
         refresh = result.get("refresh")
         if isinstance(refresh, dict) and refresh:
-            lines.append("Hippos bundle: refreshed")
+            lines.append(
+                f"{tr('cli.hippos.bundle', 'Hippos bundle')}: "
+                f"{tr('cli.hippos_refreshed', 'refreshed')}"
+            )
         return lines
 
     summary = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
@@ -126,16 +139,19 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
     recommendations = result.get("recommendations", [])
     artifacts = result.get("artifacts", {}) if isinstance(result.get("artifacts"), dict) else {}
 
-    headline = str(summary.get("headline", "") or "").strip() or "Archi analysis complete"
+    headline = str(summary.get("headline", "") or "").strip() or tr(
+        "cli.analysis_complete",
+        "Archi analysis complete",
+    )
     lines.append(headline)
 
     score_line = _score_line(scores)
     if score_line:
-        lines.append(f"Scores: {score_line}")
+        lines.append(f"{tr('cli.scores', 'Scores')}: {score_line}")
 
     executive_summary = str(summary.get("executive_summary", "") or "").strip()
     if executive_summary:
-        lines.append(f"Summary: {executive_summary}")
+        lines.append(f"{tr('cli.summary', 'Summary')}: {executive_summary}")
 
     if str(result.get("mode", "") or "") == "code_review":
         _append_code_review_summary(lines, result, summary)
@@ -144,27 +160,38 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
     if cleanup:
         candidate_total = int(cleanup.get("candidate_total", 0) or 0)
         review_required = int(cleanup.get("review_required_total", 0) or 0)
-        lines.append(f"Cleanup: candidates={candidate_total} | review_required={review_required}")
+        lines.append(
+            f"{tr('cli.cleanup', 'Cleanup')}: "
+            f"{tr('label.candidates', 'candidates')}={candidate_total} | "
+            f"{tr('label.review_required', 'review_required')}={review_required}"
+        )
         owner_total = int(cleanup.get("owner_total", 0) or 0)
         ttl_total = int(cleanup.get("ttl_total", 0) or 0)
         expires_total = int(cleanup.get("expires_total", 0) or 0)
         expired_total = int(cleanup.get("expired_total", 0) or 0)
         if owner_total or ttl_total or expires_total or expired_total:
             lines.append(
-                "Cleanup metadata: "
-                f"owner={owner_total} | ttl={ttl_total} | "
-                f"expires_at={expires_total} | expired={expired_total}"
+                f"{tr('cli.cleanup.metadata', 'Cleanup metadata')}: "
+                f"{tr('label.owner', 'owner')}={owner_total} | "
+                f"{tr('label.ttl', 'ttl')}={ttl_total} | "
+                f"{tr('label.expires_at', 'expires_at')}={expires_total} | "
+                f"{tr('label.expired', 'expired')}={expired_total}"
             )
         by_category = cleanup.get("by_category", {})
         if isinstance(by_category, dict) and by_category:
             rendered = ", ".join(f"{key}={value}" for key, value in sorted(by_category.items()))
-            lines.append(f"Cleanup categories: {rendered}")
+            lines.append(f"{tr('cli.cleanup.categories', 'Cleanup categories')}: {rendered}")
     archive_candidates = result.get("archive_candidates", {}) if isinstance(result.get("archive_candidates"), dict) else {}
     if archive_candidates:
         candidate_total = int(archive_candidates.get("candidate_total", 0) or 0)
         ready_total = int(archive_candidates.get("ready_total", 0) or 0)
         review_total = int(archive_candidates.get("review_total", 0) or 0)
-        lines.append(f"Archive: candidates={candidate_total} | ready={ready_total} | review={review_total}")
+        lines.append(
+            f"{tr('archive.label', 'Archive')}: "
+            f"{tr('label.candidates', 'candidates')}={candidate_total} | "
+            f"{tr('label.ready', 'ready')}={ready_total} | "
+            f"{tr('label.review', 'review')}={review_total}"
+        )
     semantic_judge = result.get("semantic_judge", {}) if isinstance(result.get("semantic_judge"), dict) else {}
     if semantic_judge:
         status = str(semantic_judge.get("status", "") or "skipped").strip()
@@ -176,12 +203,18 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
                 if isinstance(by_decision, dict) and by_decision
                 else ""
             )
-            line = f"Semantic judge: reviewed={reviewed_total}"
+            line = (
+                f"{tr('cli.semantic_judge', 'Semantic judge')}: "
+                f"{tr('label.reviewed', 'reviewed')}={reviewed_total}"
+            )
             if rendered:
                 line += f" | {rendered}"
             lines.append(line)
         elif status != "skipped":
-            lines.append(f"Semantic judge: status={status}")
+            lines.append(
+                f"{tr('cli.semantic_judge', 'Semantic judge')}: "
+                f"{tr('label.status', 'status')}={status}"
+            )
     takeaways = summary.get("top_takeaways", [])
     if isinstance(takeaways, list):
         for item in takeaways[:3]:
@@ -190,7 +223,7 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
                 lines.append(f"- {text}")
 
     if isinstance(recommendations, list) and recommendations:
-        lines.append("Top improvements:")
+        lines.append(tr("cli.top_improvements", "Top improvements:"))
         for item in recommendations[:5]:
             if not isinstance(item, dict):
                 continue
@@ -225,27 +258,27 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
         or semantic_judge_json
         or semantic_judge_summary
     ):
-        lines.append("Artifacts:")
+        lines.append(tr("artifacts.header", "Artifacts:"))
         if summary_md:
-            lines.append(f"- summary: {summary_md}")
+            lines.append(f"- {tr('artifacts.summary', 'summary')}: {summary_md}")
         if viz_html:
-            lines.append(f"- viz: {viz_html}")
+            lines.append(f"- {tr('artifacts.viz', 'viz')}: {viz_html}")
         if analysis_json:
-            lines.append(f"- json: {analysis_json}")
+            lines.append(f"- {tr('artifacts.json', 'json')}: {analysis_json}")
         if cleanup_inventory:
-            lines.append(f"- cleanup inventory: {cleanup_inventory}")
+            lines.append(f"- {tr('artifacts.cleanup_inventory', 'cleanup inventory')}: {cleanup_inventory}")
         if cleanup_ledger:
-            lines.append(f"- cleanup ledger: {cleanup_ledger}")
+            lines.append(f"- {tr('artifacts.cleanup_ledger', 'cleanup ledger')}: {cleanup_ledger}")
         if cleanup_summary:
-            lines.append(f"- cleanup summary: {cleanup_summary}")
+            lines.append(f"- {tr('artifacts.cleanup_summary', 'cleanup summary')}: {cleanup_summary}")
         if archive_candidates_json:
-            lines.append(f"- archive candidates: {archive_candidates_json}")
+            lines.append(f"- {tr('artifacts.archive_candidates', 'archive candidates')}: {archive_candidates_json}")
         if archive_summary:
-            lines.append(f"- archive summary: {archive_summary}")
+            lines.append(f"- {tr('artifacts.archive_summary', 'archive summary')}: {archive_summary}")
         if semantic_judge_json:
-            lines.append(f"- semantic judge: {semantic_judge_json}")
+            lines.append(f"- {tr('artifacts.semantic_judge', 'semantic judge')}: {semantic_judge_json}")
         if semantic_judge_summary:
-            lines.append(f"- semantic judge summary: {semantic_judge_summary}")
+            lines.append(f"- {tr('artifacts.semantic_judge_summary', 'semantic judge summary')}: {semantic_judge_summary}")
     return lines
 
 
@@ -287,22 +320,23 @@ def _add_argument(parser: argparse.ArgumentParser, *args: str, **kwargs: Any) ->
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = ArchitecArgumentParser(
         prog='archi',
-        description='Archi analysis CLI',
-        epilog='Maintenance commands: `archi update` and `archi uninstall`.',
+        description=tr("cli.description", "Archi analysis CLI"),
+        epilog=tr("cli.epilog", "Maintenance commands: `archi update` and `archi uninstall`."),
     )
+    localize_argparse_parser(parser)
     _add_argument(
         parser,
         '--version',
         action='store_true',
-        help='show current CLI version and latest release status',
+        help=tr("cli.help.version", "show current CLI version and latest release status"),
     )
     _add_argument(
         parser,
         '--full',
         action='store_true',
-        help='run full project LLM architecture review',
+        help=tr("cli.help.full", "run full project LLM architecture review"),
     )
     _add_argument(
         parser,
@@ -353,7 +387,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--refresh-from-hippos',
         dest='refresh_from_hippo',
         action='store_true',
-        help='force-refresh Hippos bundle before analysis',
+        help=tr("cli.help.refresh", "force-refresh Hippos bundle before analysis"),
     )
     _add_argument(
         parser,
@@ -365,13 +399,13 @@ def build_parser() -> argparse.ArgumentParser:
         parser,
         '--check',
         action='store_true',
-        help='validate backend LLM config and exit',
+        help=tr("cli.help.check", "validate backend LLM config and exit"),
     )
     _add_argument(
         parser,
         '--out',
         default='',
-        help='optional output JSON path override',
+        help=tr("cli.help.out", "optional output JSON path override"),
     )
     _add_argument(
         parser,
@@ -379,11 +413,12 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help=argparse.SUPPRESS,
     )
-    _add_argument(parser, 'path', nargs='?', default='.', help='project root')
+    _add_argument(parser, 'path', nargs='?', default='.', help=tr("cli.help.path", "project root"))
     return parser
 
 def build_plan_review_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi plan-review', description='Archi plan review CLI')
+    parser = ArchitecArgumentParser(prog='archi plan-review', description='Archi plan review CLI')
+    localize_argparse_parser(parser)
     _add_argument(
         parser,
         '--out',
@@ -401,7 +436,8 @@ def build_plan_review_parser() -> argparse.ArgumentParser:
 
 
 def build_code_review_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi code-review', description='Archi code review CLI')
+    parser = ArchitecArgumentParser(prog='archi code-review', description='Archi code review CLI')
+    localize_argparse_parser(parser)
     mode = parser.add_mutually_exclusive_group(required=True)
     _add_argument(
         mode,
@@ -475,7 +511,8 @@ def build_code_review_parser() -> argparse.ArgumentParser:
     return parser
 
 def build_status_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi status', description='Archi project status CLI')
+    parser = ArchitecArgumentParser(prog='archi status', description='Archi project status CLI')
+    localize_argparse_parser(parser)
     mode = parser.add_mutually_exclusive_group(required=True)
     _add_argument(mode, '--trend', action='store_true', help='show advisory project trend')
     _add_argument(mode, '--snapshot', action='store_true', help='write advisory project status snapshot')
@@ -490,7 +527,8 @@ def build_status_parser() -> argparse.ArgumentParser:
 
 
 def build_fix_advice_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='archi fix-advice', description='Archi fix advice CLI')
+    parser = ArchitecArgumentParser(prog='archi fix-advice', description='Archi fix advice CLI')
+    localize_argparse_parser(parser)
     review_group = parser.add_mutually_exclusive_group(required=True)
     review_group.add_argument('--review', dest='review', help='review JSON file to read')
     review_group.add_argument('--for', dest='review', help='compatibility alias for --review')
@@ -512,26 +550,36 @@ def _preflight_result(path: str, checks: list[tuple[str, str]]) -> dict[str, Any
 
 def _ensure_bundle(args: argparse.Namespace) -> dict[str, Any] | None:
     if args.refresh_from_hippo:
-        emit_progress("archi [1/3] refreshing Hippos bundle")
+        emit_progress(tr("cli.progress.refresh_bundle", "archi [1/3] refreshing Hippos bundle"))
         return refresh_bundle_from_hippo(args.path)
-    emit_progress("archi [1/3] validating existing Hippos bundle")
+    emit_progress(tr("cli.progress.validate_bundle", "archi [1/3] validating existing Hippos bundle"))
     status = inspect_bundle(args.path)
     if status.missing_files:
-        emit_progress("archi [1/3] Hippos bundle missing, refreshing via hippos")
+        emit_progress(
+            tr(
+                "cli.progress.bundle_missing_refresh",
+                "archi [1/3] Hippos bundle missing, refreshing via hippos",
+            )
+        )
         return refresh_bundle_from_hippo(args.path)
     if status.stale_reasons:
-        emit_progress("archi [1/3] Hippos bundle stale, refreshing via hippos")
+        emit_progress(
+            tr(
+                "cli.progress.bundle_stale_refresh",
+                "archi [1/3] Hippos bundle stale, refreshing via hippos",
+            )
+        )
         return refresh_bundle_from_hippo(args.path)
     return None
 
 
 def _checked_result(args: argparse.Namespace, checks: list[tuple[str, str]]) -> dict[str, Any]:
-    emit_progress("archi [3/3] preflight complete")
+    emit_progress(tr("cli.progress.preflight_complete", "archi [3/3] preflight complete"))
     return _preflight_result(args.path, checks)
 
 
 def _plan_review_result(args: argparse.Namespace) -> dict[str, Any]:
-    emit_progress("archi plan-review [1/1] reading plan")
+    emit_progress(tr("cli.progress.plan_review", "archi plan-review [1/1] reading plan"))
     return run_plan_review(
         args.plan,
         project_root=args.project_root,
@@ -544,7 +592,9 @@ def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
     risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
     advice_feedback_path = str(getattr(args, "advice_feedback", "") or "").strip()
     if since_ref:
-        emit_progress("archi code-review [3/3] running since code review")
+        emit_progress(
+            tr("cli.progress.code_review_since", "archi code-review [3/3] running since code review")
+        )
         kwargs: dict[str, Any] = {"ref": since_ref, "progress": emit_progress}
         if plan_review_path:
             kwargs["plan_review_path"] = plan_review_path
@@ -555,7 +605,9 @@ def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
             **kwargs,
         )
     if bool(args.diff):
-        emit_progress("archi code-review [3/3] running diff code review")
+        emit_progress(
+            tr("cli.progress.code_review_diff", "archi code-review [3/3] running diff code review")
+        )
         kwargs = {
             "base": str(args.base or "").strip(),
             "head": str(args.head or "").strip(),
@@ -569,7 +621,9 @@ def _code_review_result(args: argparse.Namespace) -> dict[str, Any]:
             args.path,
             **kwargs,
         )
-    emit_progress("archi code-review [3/3] running full code review")
+    emit_progress(
+        tr("cli.progress.code_review_full", "archi code-review [3/3] running full code review")
+    )
     kwargs = {"progress": emit_progress}
     if risk_context_path:
         kwargs["risk_context_path"] = risk_context_path
@@ -596,7 +650,9 @@ def _should_ensure_bundle(args: argparse.Namespace) -> bool:
 
 
 def _static_full_code_review_result(args: argparse.Namespace, reason: str) -> dict[str, Any]:
-    emit_progress("archi code-review [3/3] running static full code review")
+    emit_progress(
+        tr("cli.progress.static_full_review", "archi code-review [3/3] running static full code review")
+    )
     kwargs: dict[str, Any] = {
         "reason": reason,
         "progress": emit_progress,
@@ -613,7 +669,9 @@ def _static_full_code_review_result(args: argparse.Namespace, reason: str) -> di
 def _static_incremental_code_review_result(args: argparse.Namespace, reason: str) -> dict[str, Any]:
     since_ref = str(getattr(args, "since", "") or "").strip()
     if since_ref:
-        emit_progress("archi code-review [3/3] running static since code review")
+        emit_progress(
+            tr("cli.progress.static_since_review", "archi code-review [3/3] running static since code review")
+        )
         kwargs: dict[str, Any] = {
             "ref": since_ref,
             "reason": reason,
@@ -626,7 +684,9 @@ def _static_incremental_code_review_result(args: argparse.Namespace, reason: str
         if risk_context_path:
             kwargs["risk_context_path"] = risk_context_path
         return run_code_review_static_since(args.path, **kwargs)
-    emit_progress("archi code-review [3/3] running static diff code review")
+    emit_progress(
+        tr("cli.progress.static_diff_review", "archi code-review [3/3] running static diff code review")
+    )
     kwargs = {
         "base": str(getattr(args, "base", "") or "").strip(),
         "head": str(getattr(args, "head", "") or "").strip(),
@@ -661,14 +721,18 @@ def _availability_reason(prefix: str, exc: Exception) -> str:
 
 def _status_result(args: argparse.Namespace) -> dict[str, Any]:
     if bool(args.snapshot):
-        emit_progress("archi status [1/1] writing advisory status snapshot")
+        emit_progress(
+            tr("cli.progress.status_snapshot", "archi status [1/1] writing advisory status snapshot")
+        )
         return run_status_snapshot(args.path)
-    emit_progress("archi status [1/1] reading advisory status trend")
+    emit_progress(
+        tr("cli.progress.status_trend", "archi status [1/1] reading advisory status trend")
+    )
     return run_status_trend(args.path)
 
 
 def _fix_advice_result(args: argparse.Namespace) -> dict[str, Any]:
-    emit_progress("archi fix-advice [1/1] reading review")
+    emit_progress(tr("cli.progress.fix_advice", "archi fix-advice [1/1] reading review"))
     return run_fix_advice(
         args.review,
         focus_file=str(args.focus_file or "").strip(),
@@ -680,38 +744,38 @@ def _fix_advice_result(args: argparse.Namespace) -> dict[str, Any]:
 
 def _validate_args(args: argparse.Namespace) -> int | None:
     if bool(getattr(args, "full", False)) and bool(getattr(args, "diff", False)):
-        print('--full and --diff are mutually exclusive', file=sys.stderr)
+        print(tr("cli.full_and_diff", "--full and --diff are mutually exclusive"), file=sys.stderr)
         return 2
     if (args.base or args.head) and not args.diff:
-        print('--base/--head require --diff', file=sys.stderr)
+        print(tr("cli.base_head_require_diff", "--base/--head require --diff"), file=sys.stderr)
         return 2
     if getattr(args, "plan_review", "") and bool(args.check):
-        print('--plan-review cannot be used with --check', file=sys.stderr)
+        print(tr("cli.plan_review_with_check", "--plan-review cannot be used with --check"), file=sys.stderr)
         return 2
     if getattr(args, "plan_review", "") and bool(getattr(args, "full", False)):
-        print('--plan-review requires incremental review', file=sys.stderr)
+        print(tr("cli.plan_review_requires_incremental", "--plan-review requires incremental review"), file=sys.stderr)
         return 2
     if getattr(args, "risk_context", "") and bool(args.check):
-        print('--risk-context cannot be used with --check', file=sys.stderr)
+        print(tr("cli.risk_context_with_check", "--risk-context cannot be used with --check"), file=sys.stderr)
         return 2
     if getattr(args, "advice_feedback", "") and bool(args.check):
-        print('--advice-feedback cannot be used with --check', file=sys.stderr)
+        print(tr("cli.advice_feedback_with_check", "--advice-feedback cannot be used with --check"), file=sys.stderr)
         return 2
     if getattr(args, "advice_feedback", "") and not bool(getattr(args, "full", False)):
-        print('--advice-feedback currently requires --full', file=sys.stderr)
+        print(tr("cli.advice_feedback_requires_full", "--advice-feedback currently requires --full"), file=sys.stderr)
         return 2
     return None
 
 
 def _validate_code_review_args(args: argparse.Namespace) -> int | None:
     if (args.base or args.head) and not args.diff:
-        print('--base/--head require --diff', file=sys.stderr)
+        print(tr("cli.base_head_require_diff", "--base/--head require --diff"), file=sys.stderr)
         return 2
     if getattr(args, "plan_review", "") and bool(args.full):
-        print('--plan-review requires --diff or --since', file=sys.stderr)
+        print(tr("cli.plan_review_with_full", "--plan-review requires --diff or --since"), file=sys.stderr)
         return 2
     if getattr(args, "advice_feedback", "") and not bool(args.full):
-        print('--advice-feedback currently requires --full', file=sys.stderr)
+        print(tr("cli.advice_feedback_requires_full", "--advice-feedback currently requires --full"), file=sys.stderr)
         return 2
     return None
 
@@ -737,7 +801,12 @@ def _reject_removed_legacy_token(argv: list[str]) -> int | None:
     if replacement is None:
         return None
     print(
-        f"archi {argv[0]} command parser has been removed; use `{replacement}`.",
+        tr(
+            "cli.removed_command",
+            "archi {command} command parser has been removed; use `{replacement}`.",
+            command=argv[0],
+            replacement=replacement,
+        ),
         file=sys.stderr,
     )
     return 2
@@ -754,7 +823,9 @@ def _run_command(
     if args.check:
         return _checked_result(args, checks)
     if not bool(getattr(args, "full", False)):
-        emit_progress("archi [3/3] running incremental LLM code review")
+        emit_progress(
+            tr("cli.progress.incremental_llm", "archi [3/3] running incremental LLM code review")
+        )
         kwargs: dict[str, Any] = {
             "base": str(args.base or "").strip(),
             "head": str(args.head or "").strip(),
@@ -767,7 +838,7 @@ def _run_command(
         if risk_context_path:
             kwargs["risk_context_path"] = risk_context_path
         return run_code_review_incremental_llm(args.path, **kwargs)
-    emit_progress("archi [3/3] running full code review")
+    emit_progress(tr("cli.progress.code_review_full", "archi [3/3] running full code review"))
     kwargs = {"progress": emit_progress}
     risk_context_path = str(getattr(args, "risk_context", "") or "").strip()
     if risk_context_path:
@@ -836,12 +907,14 @@ def main() -> int:
                     raise
                 result = _static_full_code_review_result(
                     args,
-                    _availability_reason("Hippos bundle unavailable", exc),
+                    _availability_reason(tr("cli.hippos_bundle_unavailable", "Hippos bundle unavailable"), exc),
                 )
                 _emit_json(result, args.out or None)
                 return 0
             checks = _required_llm_checks(diff=bool(args.diff or args.since))
-            emit_progress("archi [2/3] checking backend LLM configuration")
+            emit_progress(
+                tr("cli.progress.check_llm", "archi [2/3] checking backend LLM configuration")
+            )
             try:
                 preflight_backend_llm(args.path, checks=checks)
             except ArchitectLLMUnavailableError as exc:
@@ -849,7 +922,7 @@ def main() -> int:
                     raise
                 result = _static_code_review_result(
                     args,
-                    _availability_reason("Backend LLM unavailable", exc),
+                    _availability_reason(tr("cli.llm_unavailable", "Backend LLM unavailable"), exc),
                 )
                 result = _with_refresh_result(
                     result,
@@ -865,7 +938,7 @@ def main() -> int:
                     raise
                 result = _static_code_review_result(
                     args,
-                    _availability_reason("Backend LLM unavailable", exc),
+                    _availability_reason(tr("cli.llm_unavailable", "Backend LLM unavailable"), exc),
                 )
                 result = _with_refresh_result(
                     result,
@@ -896,7 +969,7 @@ def main() -> int:
                     raise
                 result = _static_full_code_review_result(
                     args,
-                    _availability_reason("Hippos bundle unavailable", exc),
+                    _availability_reason(tr("cli.hippos_bundle_unavailable", "Hippos bundle unavailable"), exc),
                 )
                 _emit(
                     result,
@@ -910,7 +983,9 @@ def main() -> int:
             if bool(args.check) or bool(getattr(args, "full", False))
             else _incremental_llm_checks()
         )
-        emit_progress("archi [2/3] checking backend LLM configuration")
+        emit_progress(
+            tr("cli.progress.check_llm", "archi [2/3] checking backend LLM configuration")
+        )
         try:
             preflight_backend_llm(args.path, checks=checks)
         except ArchitectLLMUnavailableError as exc:
@@ -918,7 +993,7 @@ def main() -> int:
                 raise
             result = _static_code_review_result(
                 args,
-                _availability_reason("Backend LLM unavailable", exc),
+                _availability_reason(tr("cli.llm_unavailable", "Backend LLM unavailable"), exc),
             )
             result = _with_refresh_result(
                 result,
@@ -939,7 +1014,7 @@ def main() -> int:
                 raise
             result = _static_code_review_result(
                 args,
-                _availability_reason("Backend LLM unavailable", exc),
+                _availability_reason(tr("cli.llm_unavailable", "Backend LLM unavailable"), exc),
             )
             result = _with_refresh_result(
                 result,

@@ -109,6 +109,18 @@ def test_build_parser_help_mentions_self_manage_commands() -> None:
     assert "archi uninstall" in help_text
 
 
+def test_build_parser_help_uses_chinese_locale(monkeypatch) -> None:
+    monkeypatch.setenv("ARCHITEC_LANG", "zh")
+
+    help_text = cli.build_parser().format_help()
+
+    assert "Archi 架构分析 CLI" in help_text
+    assert "位置参数:" in help_text
+    assert "选项:" in help_text
+    assert "显示当前 CLI 版本和最新发布状态" in help_text
+    assert "显示此帮助信息并退出" in help_text
+
+
 def test_build_parser_rejects_removed_goal_flag(capsys) -> None:
     parser = cli.build_parser()
 
@@ -118,6 +130,18 @@ def test_build_parser_rejects_removed_goal_flag(capsys) -> None:
     assert exc.value.code == 2
     captured = capsys.readouterr()
     assert "unrecognized arguments: --goal" in captured.err
+
+
+def test_build_parser_error_uses_chinese_locale(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("ARCHITEC_LANG", "zh")
+    parser = cli.build_parser()
+
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["--goal", "review", "."])
+
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert "错误: 无法识别的参数：--goal" in captured.err
 
 
 def test_build_parser_help_omits_goal() -> None:
@@ -1463,6 +1487,53 @@ def test_emit_defaults_to_console_summary(capsys):
     assert "Scores: overall=88.5" in out
     assert "Top improvements:" in out
     assert '"summary"' not in out
+
+
+def test_emit_summary_uses_chinese_locale(monkeypatch, capsys):
+    monkeypatch.setenv("ARCHITEC_LANG", "zh")
+
+    cli._emit(
+        {
+            "summary": {
+                "headline": "",
+                "executive_summary": "结构正在改善。",
+                "top_takeaways": [],
+            },
+            "scores": {"overall": 88.5, "governance_overall": 90.0},
+            "cleanup": {"candidate_total": 2, "review_required_total": 1},
+            "artifacts": {"analysis_json": "/tmp/.architec/architec-analysis.json"},
+        },
+        None,
+        output_format="all",
+        check_mode=False,
+    )
+
+    out = capsys.readouterr().out
+    assert "Archi 分析完成" in out
+    assert "评分: 总体=88.5" in out
+    assert "摘要: 结构正在改善。" in out
+    assert "清理: 候选=2 | 需复核=1" in out
+    assert "产物：" in out
+
+
+def test_check_summary_uses_chinese_locale(monkeypatch) -> None:
+    monkeypatch.setenv("ARCHITEC_LANG", "zh")
+
+    lines = cli._summary_lines(
+        {
+            "checked_path": "/tmp/project",
+            "checks": [{"task": "architec_summary", "tier": "strong"}],
+            "refresh": {"ok": True},
+        },
+        check_mode=True,
+    )
+
+    assert lines == [
+        "Archi 预检通过",
+        "路径: /tmp/project",
+        "LLM 检查: architec_summary(strong)",
+        "Hippos bundle: 已刷新",
+    ]
 
 
 def test_emit_json_format_still_prints_summary_only(capsys):

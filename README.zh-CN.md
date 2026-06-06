@@ -116,6 +116,18 @@ python3 -m pip install --user architec
 
 运行时 import 名仍是 `llmgateway` 和 `hippos`，不需要额外配置 Python 包索引。
 
+## 输出语言
+
+Architec 默认输出英文；当系统 locale 是中文时，会自动把 CLI 状态、错误和维护命令输出切换为中文。
+检测顺序包括 `LC_ALL`、`LC_MESSAGES`、`LANGUAGE` 和 `LANG`，只要值以 `zh` 开头即可。
+
+脚本或测试中可以显式覆盖：
+
+```bash
+ARCHITEC_LANG=zh archi --version
+ARCHITEC_LANG=en archi --check .
+```
+
 本地开发安装：
 
 ```bash

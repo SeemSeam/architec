@@ -8,6 +8,7 @@ from architec.backend_llm.config import (
     load_tiered_llm_config,
     resolve_tier_candidates,
 )
+from architec.i18n import tr
 from architec.support.llm_guard import ArchitectLLMUnavailableError
 from architec.integration.resource_paths import resolve_architect_llm_config_file
 
@@ -84,9 +85,12 @@ def _candidate_problems(candidate: _CandidateView) -> list[str]:
     )
     problems: list[str] = []
     if not api_key:
-        problems.append(f"- {label}: missing api_key")
+        problems.append(f"- {label}: {tr('llm_preflight.missing_api_key', 'missing api_key')}")
     if api_style and not base_url:
-        problems.append(f"- {label}: missing base_url for api_style={api_style}")
+        problems.append(
+            f"- {label}: "
+            f"{tr('llm_preflight.missing_base_url', 'missing base_url for api_style={api_style}', api_style=api_style)}"
+        )
     return problems
 
 
@@ -111,7 +115,8 @@ def preflight_backend_llm(
         candidates = _collect_candidates(root, task=key[0], tier=key[1])
         if not candidates:
             problems.append(
-                f"- task={key[0]} tier={key[1]}: no backend LLM candidate configured"
+                f"- task={key[0]} tier={key[1]}: "
+                f"{tr('llm_preflight.no_candidate', 'no backend LLM candidate configured')}"
             )
             continue
 
@@ -120,9 +125,14 @@ def preflight_backend_llm(
 
     if problems:
         raise ArchitectLLMUnavailableError(
-            "Architec LLM preflight failed:\n"
+            tr("llm_preflight.failed", "Architec LLM preflight failed:")
+            + "\n"
             + "\n".join(problems)
-            + "\nHint: configure provider credentials plus strong_model and weak_model in "
-            "~/.llmgateway/config.yaml. Optional Architec task overrides may live in "
-            "~/.architec/config.yaml or project .architec/config.yaml."
+            + "\n"
+            + tr(
+                "llm_preflight.hint",
+                "Hint: configure provider credentials plus strong_model and weak_model in "
+                "~/.llmgateway/config.yaml. Optional Architec task overrides may live in "
+                "~/.architec/config.yaml or project .architec/config.yaml.",
+            )
         )
