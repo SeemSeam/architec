@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RUNS_DIR="${ARCHITEC_SMOKE_RUNS_DIR:-${ROOT_DIR}/release-flow-test/runs}"
 BASE_URL="${ARCHITEC_SMOKE_BASE_URL:-https://www.architec.top}"
-INSTALL_SCRIPT_URL="${ARCHITEC_SMOKE_INSTALL_SCRIPT_URL:-${BASE_URL}/downloads/latest/install_prod.sh}"
+INSTALL_SCRIPT_URL="${ARCHITEC_SMOKE_INSTALL_SCRIPT_URL:-https://github.com/SeemSeam/architec/releases/latest/download/install_prod.sh}"
 LOGIN_TIMEOUT="${ARCHITEC_SMOKE_LOGIN_TIMEOUT:-180}"
 
 EMAIL="${ARCHITEC_SMOKE_EMAIL:-}"
@@ -29,7 +29,7 @@ Run the live Architec browser-authorization smoke against the production site:
 
 Options:
   --base-url <url>            Override the website base URL. Default: https://www.architec.top
-  --install-script-url <url>  Override the installer URL. Default: <base-url>/downloads/latest/install_prod.sh
+  --install-script-url <url>  Override the installer URL. Default: GitHub latest install_prod.sh
   --run-dir <path>            Use an explicit run directory instead of creating one under release-flow-test/runs
   --timeout <seconds>         Browser callback wait timeout for `archi login`. Default: 180
   --email <email>             Reuse an existing website account instead of auto-registering a temporary one

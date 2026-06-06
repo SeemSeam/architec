@@ -116,6 +116,17 @@ python3 -m pip install --user architec
 
 运行时 import 名仍是 `llmgateway` 和 `hippos`，不需要额外配置 Python 包索引。
 
+GitHub standalone installer：
+
+```bash
+curl -fsSL https://github.com/SeemSeam/architec/releases/latest/download/install_prod.sh -o install_prod.sh
+bash install_prod.sh
+```
+
+安装器会从 `SeemSeam/architec` GitHub Releases 下载匹配当前平台的 standalone
+`archi` binary，并用 release checksum 校验。它只会在
+`~/.llmgateway/config.yaml` 缺失时创建模板，绝不会覆盖已有 provider 凭据。
+
 可选的 npm binary dispatcher 安装方式：
 
 ```bash

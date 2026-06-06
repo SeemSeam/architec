@@ -127,6 +127,18 @@ This installs:
 The runtime imports remain `llmgateway` and `hippos`; no separate package index
 setup is required.
 
+Standalone GitHub installer:
+
+```bash
+curl -fsSL https://github.com/SeemSeam/architec/releases/latest/download/install_prod.sh -o install_prod.sh
+bash install_prod.sh
+```
+
+The installer downloads the matching standalone `archi` binary from
+`SeemSeam/architec` GitHub Releases and verifies it against the release
+checksum file. It creates `~/.llmgateway/config.yaml` only when the file is
+missing and never overwrites existing provider credentials.
+
 Optional npm binary dispatcher install:
 
 ```bash

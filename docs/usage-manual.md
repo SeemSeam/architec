@@ -48,7 +48,7 @@ python3 --version
 普通用户请只使用发布安装器：
 
 ```bash
-curl -fsSL https://www.architec.top/downloads/latest/install_prod.sh -o install_prod.sh
+curl -fsSL https://github.com/SeemSeam/architec/releases/latest/download/install_prod.sh -o install_prod.sh
 bash install_prod.sh
 ```
 
@@ -60,60 +60,27 @@ bash install_prod.sh
 - Linux 和 macOS 用户都应优先使用同一条默认命令
 - 真正的前提不是“换一条安装命令”，而是当前 release 中已经包含对应平台的编译包
 - 例如：
-  - Linux x86_64: `archi-linux-x86_64.tar.gz`
-  - macOS arm64: `archi-macos-arm64.tar.gz`
+  - Linux x64: `archi-v<version>-linux-x64`
+  - macOS arm64: `archi-v<version>-darwin-arm64`
+  - Windows x64: `archi-v<version>-win32-x64.exe`
 
-当前发布安装器会先做一次本机环境检查，并尽量自动补齐这些系统依赖：
+当前发布安装器会先做一次本机环境检查，并下载 GitHub Release 中匹配当前平台的 standalone binary 和 checksum：
 
-- `python3` 和 `pip`
 - `curl`
-- `git`
-- `tar` 或 `unzip`
-
-如果脚本检测到系统里缺这些依赖，会优先尝试通过常见包管理器自动安装：
-
-- `apt-get`
-- `dnf`
-- `yum`
-- `pacman`
-- `apk`
-- `brew`
-
-如果自动安装失败，脚本会直接告诉用户下一步该手动安装什么。
-
-当前发布安装器会自动安装以下两个开源依赖，并在安装时明确提醒用户来源：
-
-- `seemseam-hippos`
-- `llmgateway`
-
-优先顺序是：
-
-- 先使用 release 中随安装器一起发布的 wheel
-- 如果 release 没带 wheel，则回退到公开 Git 源
+- `python3`
 
 发布安装完成后，安装器会继续处理用户级配置：
 
 - 初始化 `~/.architec/config.yaml`
 - 初始化 `~/.architec/rubric.json`
 - 初始化 `~/.architec/scoring-policy.json`
-- 引导用户配置 `~/.llmgateway/config.yaml`
-
-如果当前终端是交互式终端，安装器会询问是否现在配置 `llmgateway`，并提示输入：
-
-- `provider_type`
-- `api_style`
-- `base_url`
-- `api_key`
-- `strong_model`
-- `weak_model`
-
-如果用户暂时不想输入 API 信息，也可以直接跳过。此时安装器会创建一个可编辑的
-`~/.llmgateway/config.yaml` 模板，后续补齐配置即可。
+- 如果 `~/.llmgateway/config.yaml` 不存在，则创建一个可编辑的 starter template，后续补齐配置即可
+- 如果 `~/.llmgateway/config.yaml` 已存在，安装器永远不会覆盖已有 provider 凭据
 
 关于安装包体积，需要提前说明一点：
 
-- 当前发布包不是纯源码压缩包，而是独立可运行的编译分发包
-- 发布包内会同时包含 `archi` 可执行文件、嵌入式 Python 运行时，以及首启所需的原生动态库
+- 当前发布物不是纯源码压缩包，而是独立可运行的 standalone binary
+- binary 内会包含 Architec、bundled Hippos、llmgateway 运行时依赖和必要原生动态库
 - 因此发布包体积会明显大于普通脚本型 CLI，这是当前发布策略下的正常现象，不代表安装器异常
 - 这样做的目的，是尽量减少用户本机环境差异带来的问题，让首次安装和后续运行更稳定
 - 对普通用户来说，不需要手动准备一套完全匹配的 Python 运行时再去拼装 CLI
@@ -842,7 +809,7 @@ archi --refresh-from-hippos .
 
 处理方式：
 
-- 重新执行网站安装器，确保已安装发布版 `hippos`
+- 重新执行 GitHub Release 安装器，确保 standalone `archi` binary 内部 bundled Hippos 可用
 - 或确认当前 Python 环境里已安装 `seemseam-hippos`
 
 ## 12. 当前实现边界

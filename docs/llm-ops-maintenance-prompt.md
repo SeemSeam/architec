@@ -182,7 +182,7 @@
 当前产品链路事实：
 
 - 生产安装脚本会自动安装 `llmgateway` 和 `hippocampus`
-- 公开安装入口以网站 `/downloads/latest/install_prod.sh` 为主
+- 公开安装入口以 `SeemSeam/architec` GitHub Release 的 `install_prod.sh` 为主
 - 如网站镜像入口异常，可回退到 GitHub Releases，但验收结论仍应基于“已发布产物”
 
 ## 10. 当前最重要的命令
@@ -190,7 +190,7 @@
 ### 10.1 本机真实安装 / 重装
 
 ```bash
-curl -fsSL https://www.architec.top/downloads/latest/install_prod.sh -o install_prod.sh
+curl -fsSL https://github.com/SeemSeam/architec/releases/latest/download/install_prod.sh -o install_prod.sh
 bash install_prod.sh
 ```
 

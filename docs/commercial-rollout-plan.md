@@ -12,10 +12,10 @@
 - `architec-cloud/` 已提供注册、登录、账户页、下载页、设备页、管理页与 CLI 授权 API 原型
 - 下载分发已切换到主仓库 GitHub Releases：`SeemSeam/architec`
 - 已产出并验证 Linux / macOS / Windows standalone `archi` binaries
-- 已提供公开安装脚本：`https://www.architec.top/downloads/latest/install_prod.sh`
+- 已提供公开安装脚本：`https://github.com/SeemSeam/architec/releases/latest/download/install_prod.sh`
 - 网站当前角色是“控制面”，不承担安装包托管职责
 - 本地验证已通过 `pnpm build` 与 `pnpm test:e2e`
-- 当前还补了一条真实安装回归命令：`bash ../architec-release/tools/release_install_smoke.sh`
+- 当前还补了一条安装器回归命令：`bash tools/smoke_install_prod.sh`
 - 当前本地联调还支持由 `architec-cloud` 直接托管 `/downloads/latest/*`，避免本地测试时打 GitHub API rate limit
 
 ## 1. 当前状态与目标
@@ -26,7 +26,7 @@
 
 - 本地安装 Python 包
 - 通过 `archi` 命令运行分析
-- 通过网站安装器初始化用户级配置并同步 Codex / Claude skills
+- 通过 GitHub Release 安装器初始化用户级配置
 - 主要入口在 `src/architec/cli.py`
 - 当前对外分发方式仍偏开发态，核心代码以 Python 源码形式暴露
 

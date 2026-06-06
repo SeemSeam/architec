@@ -45,6 +45,10 @@ jobs:
           python -m pip install pyinstaller
           python -m pip install "architec==${{ inputs.version }}"
 
+      - name: Smoke test GitHub installer script
+        if: matrix.triplet == 'linux-x64'
+        run: bash tools/smoke_install_prod.sh
+
       - name: Build standalone binary
         run: python scripts/build-standalone-archi.py
         env:
@@ -133,6 +137,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
@@ -153,4 +159,6 @@ jobs:
           gh release upload "v${{ inputs.version }}" --repo "$GITHUB_REPOSITORY" \
             release-assets/*/archi-v${{ inputs.version }}-* \
             "archi-v${{ inputs.version }}-checksums.txt" \
+            tools/install_prod.sh \
+            tools/install_prod.ps1 \
             --clobber

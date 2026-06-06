@@ -10,8 +10,13 @@ from architec import self_manage
 
 def test_default_release_metadata_url_uses_primary_repository() -> None:
     assert self_manage.DEFAULT_RELEASE_METADATA_URL == "https://api.github.com/repos/SeemSeam/architec/releases/latest"
+    assert self_manage.DEFAULT_INSTALL_SCRIPT_URL == (
+        "https://github.com/SeemSeam/architec/releases/latest/download/install_prod.sh"
+    )
     assert "bfly123" not in self_manage.DEFAULT_RELEASE_METADATA_URL
+    assert "bfly123" not in self_manage.DEFAULT_INSTALL_SCRIPT_URL
     assert "architec-releases" not in self_manage.DEFAULT_RELEASE_METADATA_URL
+    assert "architec-releases" not in self_manage.DEFAULT_INSTALL_SCRIPT_URL
 
 
 def test_handle_self_manage_command_returns_none_for_normal_args() -> None:
