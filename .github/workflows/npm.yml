@@ -51,4 +51,7 @@ jobs:
         run: npm pack --dry-run --json
 
       - name: Publish to npm with trusted publishing
-        run: npm publish --access public
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken --userconfig "$NPM_CONFIG_USERCONFIG" || true
+          unset NODE_AUTH_TOKEN
+          npm publish --access public --registry https://registry.npmjs.org/
