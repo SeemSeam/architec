@@ -138,12 +138,12 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
         for name in self_manage.MANAGED_SKILL_NAMES:
             assert not (root / name).exists()
     out = capsys.readouterr().out
-    assert "Config purge: enabled" in out
+    assert "Config purge: disabled" in out
     assert "Managed Python dependency environment purge: enabled" in out
     assert "Architec uninstall complete." in out
 
 
-def test_uninstall_removes_config_and_deps_by_default(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_uninstall_keeps_config_by_default(monkeypatch, tmp_path: Path, capsys) -> None:
     home = tmp_path / "home"
     (home / ".architec").mkdir(parents=True)
     (home / ".hippos").mkdir(parents=True)
@@ -154,13 +154,32 @@ def test_uninstall_removes_config_and_deps_by_default(monkeypatch, tmp_path: Pat
     result = self_manage.handle_self_manage_command(["uninstall", "--yes"])
 
     assert result == 0
+    assert (home / ".architec").exists()
+    assert (home / ".hippos").exists()
+    assert (home / ".hippocampus").exists()
+    assert (home / ".llmgateway").exists()
+    out = capsys.readouterr().out
+    assert "Config purge: disabled" in out
+    assert "Managed Python dependency environment purge: enabled" in out
+
+
+def test_uninstall_purge_config_removes_config(monkeypatch, tmp_path: Path, capsys) -> None:
+    home = tmp_path / "home"
+    (home / ".architec").mkdir(parents=True)
+    (home / ".hippos").mkdir(parents=True)
+    (home / ".hippocampus").mkdir(parents=True)
+    (home / ".llmgateway").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+
+    result = self_manage.handle_self_manage_command(["uninstall", "--yes", "--purge-config"])
+
+    assert result == 0
     assert not (home / ".architec").exists()
     assert not (home / ".hippos").exists()
     assert not (home / ".hippocampus").exists()
     assert not (home / ".llmgateway").exists()
     out = capsys.readouterr().out
     assert "Config purge: enabled" in out
-    assert "Managed Python dependency environment purge: enabled" in out
 
 
 def test_cli_main_dispatches_self_manage_before_auth(monkeypatch) -> None:

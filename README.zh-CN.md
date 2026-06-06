@@ -156,18 +156,29 @@ Architec 的 LLM 调用全部通过 **llmgateway**。请在下面的文件中配
 ~/.llmgateway/config.yaml
 ```
 
+公开安装器只会在该文件缺失时创建 starter template；已有
+`~/.llmgateway/config.yaml` 永远不会被安装或更新流程覆盖，包括 provider
+凭据。自动生成模板包含主 provider 字段、模型 tier 设置和注释形式的备用
+provider 示例。备用 API 源是否生效取决于已安装的 llmgateway schema；当前
+llmgateway 支持 `providers` 有序链。
+
 最小示例：
 
 ```yaml
 version: 1
-provider:
-  provider_type: openai
-  api_style: openai_responses
-  base_url: https://your-llm-endpoint/v1
-  api_key: sk-...
+providers:
+  - provider_type: openai
+    api_style: openai_chat
+    base_url: https://your-llm-endpoint/v1
+    api_key: sk-...
+    headers: {}
+    model_map: {}
 settings:
+  fallback_model: your-fast-model
   strong_model: your-strong-model
   weak_model: your-fast-model
+  strong_reasoning_effort: high
+  weak_reasoning_effort: low
 ```
 
 检查安装和 LLM 路由：

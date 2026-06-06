@@ -60,7 +60,7 @@ def _build_self_manage_parser() -> argparse.ArgumentParser:
         "uninstall",
         help=tr(
             "self_manage.help.uninstall",
-            "deep-remove the installed Architec launcher, assets, configs, and managed deps",
+            "remove the installed Architec launcher and managed assets",
         ),
     )
     localize_argparse_parser(uninstall)
@@ -68,6 +68,16 @@ def _build_self_manage_parser() -> argparse.ArgumentParser:
         "--purge",
         action="store_true",
         help=argparse.SUPPRESS,
+        dest="purge_config",
+    )
+    uninstall.add_argument(
+        "--purge-config",
+        action="store_true",
+        help=tr(
+            "self_manage.help.purge_config",
+            "also remove Architec/Hippos/llmgateway config directories",
+        ),
+        dest="purge_config",
     )
     uninstall.add_argument(
         "--remove-deps",
@@ -300,10 +310,11 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     _remove_managed_skills(paths["codex_skills"], removed)
     _remove_managed_skills(paths["claude_skills"], removed)
 
-    _remove_path(paths["architec_config"], removed)
-    _remove_path(paths["hippos_config"], removed)
-    _remove_path(paths["hippocampus_config"], removed)
-    _remove_path(paths["llmgateway_config"], removed)
+    if bool(getattr(args, "purge_config", False)):
+        _remove_path(paths["architec_config"], removed)
+        _remove_path(paths["hippos_config"], removed)
+        _remove_path(paths["hippocampus_config"], removed)
+        _remove_path(paths["llmgateway_config"], removed)
 
     if removed:
         print(tr("self_manage.removed", "Removed:"))
@@ -312,7 +323,15 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     else:
         print(tr("self_manage.no_artifacts", "No Architec install artifacts were found."))
 
-    print(tr("self_manage.config_purge", "Config purge: enabled"))
+    if bool(getattr(args, "purge_config", False)):
+        print(tr("self_manage.config_purge", "Config purge: enabled"))
+    else:
+        print(
+            tr(
+                "self_manage.config_purge_disabled",
+                "Config purge: disabled; kept ~/.architec, ~/.hippos, ~/.hippocampus, and ~/.llmgateway.",
+            )
+        )
     print(tr("self_manage.python_deps_purge", "Managed Python dependency environment purge: enabled"))
     print(tr("self_manage.uninstall_complete", "Architec uninstall complete."))
     return 0

@@ -148,17 +148,24 @@ archi update
 archi uninstall
 ```
 
-`archi uninstall` 当前默认就是深度卸载，会同时：
+`archi uninstall` 默认只移除安装物，会：
 
 - 删除 `archi` launcher 和安装目录
 - 删除自动同步的 Architec skills
-- 删除本地 `~/.architec`、`~/.hippos`、`~/.llmgateway` 配置目录
-- 尝试从当前 Python 环境卸载 `seemseam-hippos` 和 `llmgateway`
+
+默认不会删除本地 `~/.architec`、`~/.hippos`、`~/.hippocampus` 或
+`~/.llmgateway` 配置目录，避免误删 llmgateway provider 凭据。
 
 如果你是在非交互脚本里调用，再加：
 
 ```bash
 archi uninstall --yes
+```
+
+只有确认要清理本机配置时才使用：
+
+```bash
+archi uninstall --yes --purge-config
 ```
 
 ## 3.1 Skills
@@ -286,6 +293,8 @@ archi uninstall --yes
 - `~/.architec/config.yaml`
 
 前者负责 provider / api_key / base_url / max_concurrent，以及 strong / weak 两档具体模型和推理强度；后者只负责 Architec 各任务映射到 `strong` 或 `weak` tier。
+
+安装器只会在 `~/.llmgateway/config.yaml` 缺失时创建 starter template；已有文件不会被 install/update 覆盖，即使传入了环境变量或 `--configure-llm`。starter template 包含主 provider、headers / model_map 示例、strong / weak / fallback 模型、并发和超时设置，以及注释形式的备用 provider 示例。备用 API 源是否实际生效取决于 llmgateway 当前 schema；当前 llmgateway 支持 `providers` 有序链，未取消注释的示例不会参与运行。
 
 如果你希望临时改目录，可以使用 `ARCHITEC_USER_CONFIG_DIR`。
 

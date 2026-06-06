@@ -169,18 +169,30 @@ credentials and model tiers in:
 ~/.llmgateway/config.yaml
 ```
 
+The public installer creates this file only when it is missing. It never
+overwrites an existing `~/.llmgateway/config.yaml`, including provider
+credentials. The starter template includes primary provider fields, model tier
+settings, and commented fallback-provider examples. Fallback behavior depends on
+the installed llmgateway schema; current llmgateway supports an ordered
+`providers` chain.
+
 Minimal example:
 
 ```yaml
 version: 1
-provider:
-  provider_type: openai
-  api_style: openai_responses
-  base_url: https://your-llm-endpoint/v1
-  api_key: sk-...
+providers:
+  - provider_type: openai
+    api_style: openai_chat
+    base_url: https://your-llm-endpoint/v1
+    api_key: sk-...
+    headers: {}
+    model_map: {}
 settings:
+  fallback_model: your-fast-model
   strong_model: your-strong-model
   weak_model: your-fast-model
+  strong_reasoning_effort: high
+  weak_reasoning_effort: low
 ```
 
 Architec consumes the configured `strong_model` and `weak_model` tiers. It does
