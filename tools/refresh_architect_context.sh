@@ -12,5 +12,5 @@ python3 "$ROOT/architec/tools/build_architect_prompt.py" \
   --root "$ROOT"
 
 echo "Architect context refreshed:"
-echo "- $ROOT/.hippocampus/architect-metrics.json"
-echo "- $ROOT/.hippocampus/architect-prompt.md"
+echo "- $ROOT/.hippos/architect-metrics.json"
+echo "- $ROOT/.hippos/architect-prompt.md"

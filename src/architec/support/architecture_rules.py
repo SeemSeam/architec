@@ -216,6 +216,20 @@ def _merge_lists(shared: tuple[str, ...], specific: tuple[str, ...]) -> tuple[st
     return tuple(merged)
 
 
+def _merge_rule_sections(base: ArchitectureRules, override: ArchitectureRules) -> ArchitectureRules:
+    return ArchitectureRules(
+        ignore_paths=_merge_lists(base.ignore_paths, override.ignore_paths),
+        ignore_globs=_merge_lists(base.ignore_globs, override.ignore_globs),
+        ignore_extensions=_merge_lists(base.ignore_extensions, override.ignore_extensions),
+        cleanup_extra_kinds=_merge_lists(base.cleanup_extra_kinds, override.cleanup_extra_kinds),
+        cleanup_metadata_rules=(*base.cleanup_metadata_rules, *override.cleanup_metadata_rules),
+        architecture_contract_rules=(
+            *base.architecture_contract_rules,
+            *override.architecture_contract_rules,
+        ),
+    )
+
+
 def _defaults_for_tool(tool_name: str) -> tuple[str, ...]:
     if tool_name == "archi":
         return ("doc", "config", "prompt", "script")
@@ -235,18 +249,13 @@ def load_architecture_rules(project_root: str | Path, *, tool_name: str) -> Arch
     if not isinstance(raw, dict):
         return ArchitectureRules(cleanup_extra_kinds=default_cleanup)
     shared = _section_rules(raw.get("shared", {}))
-    specific = _section_rules(raw.get(tool_name, {}), default_cleanup_extra_kinds=default_cleanup)
-    return ArchitectureRules(
-        ignore_paths=_merge_lists(shared.ignore_paths, specific.ignore_paths),
-        ignore_globs=_merge_lists(shared.ignore_globs, specific.ignore_globs),
-        ignore_extensions=_merge_lists(shared.ignore_extensions, specific.ignore_extensions),
-        cleanup_extra_kinds=_merge_lists(shared.cleanup_extra_kinds, specific.cleanup_extra_kinds),
-        cleanup_metadata_rules=(*shared.cleanup_metadata_rules, *specific.cleanup_metadata_rules),
-        architecture_contract_rules=(
-            *shared.architecture_contract_rules,
-            *specific.architecture_contract_rules,
-        ),
-    )
+    if tool_name == "hippos":
+        legacy = _section_rules(raw.get("hippo", {}), default_cleanup_extra_kinds=default_cleanup)
+        current = _section_rules(raw.get("hippos", {}), default_cleanup_extra_kinds=default_cleanup)
+        specific = _merge_rule_sections(legacy, current)
+    else:
+        specific = _section_rules(raw.get(tool_name, {}), default_cleanup_extra_kinds=default_cleanup)
+    return _merge_rule_sections(shared, specific)
 
 
 def load_archi_rules(project_root: str | Path) -> ArchitectureRules:

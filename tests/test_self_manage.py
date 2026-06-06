@@ -79,8 +79,10 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
     install_base = home / ".local" / "architec"
     bin_dir = home / ".local" / "bin"
     archi_bin = bin_dir / "archi"
+    hippos_bin = bin_dir / "hippos"
     hippo_bin = bin_dir / "hippo"
     repomix_bin = bin_dir / "repomix"
+    hippos_target = install_base / "python-tools" / "venv" / "bin" / "hippos"
     hippo_target = install_base / "python-tools" / "venv" / "bin" / "hippo"
     repomix_target = install_base / "node-tools" / "repomix" / "node_modules" / ".bin" / "repomix"
     codex_skills = home / ".codex" / "skills"
@@ -91,8 +93,10 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
     install_base.mkdir(parents=True, exist_ok=True)
     bin_dir.mkdir(parents=True, exist_ok=True)
     archi_bin.write_text("", encoding="utf-8")
+    hippos_target.write_text("", encoding="utf-8")
     hippo_target.write_text("", encoding="utf-8")
     repomix_target.write_text("", encoding="utf-8")
+    hippos_bin.symlink_to(hippos_target)
     hippo_bin.symlink_to(hippo_target)
     repomix_bin.symlink_to(repomix_target)
     for root in (codex_skills, claude_skills):
@@ -106,6 +110,7 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
     assert result == 0
     assert not install_base.exists()
     assert not archi_bin.exists()
+    assert not hippos_bin.exists()
     assert not hippo_bin.exists()
     assert not repomix_bin.exists()
     for root in (codex_skills, claude_skills):
@@ -120,6 +125,7 @@ def test_uninstall_removes_install_and_managed_skills(tmp_path: Path, monkeypatc
 def test_uninstall_removes_config_and_deps_by_default(monkeypatch, tmp_path: Path, capsys) -> None:
     home = tmp_path / "home"
     (home / ".architec").mkdir(parents=True)
+    (home / ".hippos").mkdir(parents=True)
     (home / ".hippocampus").mkdir(parents=True)
     (home / ".llmgateway").mkdir(parents=True)
     monkeypatch.setattr(Path, "home", lambda: home)
@@ -128,6 +134,7 @@ def test_uninstall_removes_config_and_deps_by_default(monkeypatch, tmp_path: Pat
 
     assert result == 0
     assert not (home / ".architec").exists()
+    assert not (home / ".hippos").exists()
     assert not (home / ".hippocampus").exists()
     assert not (home / ".llmgateway").exists()
     out = capsys.readouterr().out

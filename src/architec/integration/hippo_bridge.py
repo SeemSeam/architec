@@ -12,14 +12,19 @@ from architec.integration.resource_paths import resolve_config_file, tool_script
 
 
 def _hippo_base_command(project_root: Path) -> list[str]:
+    hippos_cmd = shutil.which("hippos")
+    if hippos_cmd:
+        return [hippos_cmd]
+    if importlib.util.find_spec("hippos.cli") is not None:
+        return [sys.executable, "-m", "hippos.cli"]
     hippo_cmd = shutil.which("hippo")
     if hippo_cmd:
         return [hippo_cmd]
     if importlib.util.find_spec("hippocampus.cli") is not None:
         return [sys.executable, "-m", "hippocampus.cli"]
     raise FileNotFoundError(
-        "Hippo CLI not found. Reinstall from the published Architec installer, "
-        "or ensure `hippo` / installed `hippocampus` is available in the active Python environment."
+        "Hippos CLI not found. Reinstall from the published Architec installer, "
+        "or ensure `hippos` / installed `seemseam-hippos` is available in the active Python environment."
     )
 
 

@@ -49,6 +49,7 @@ _CODE_SUFFIXES = {
 }
 _EXCLUDED_SEGMENTS = {
     ".git",
+    ".hippos",
     ".hippocampus",
     ".architec",
     ".ccb",

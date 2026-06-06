@@ -118,7 +118,7 @@ def _summary_lines(result: dict[str, Any], *, check_mode: bool) -> list[str]:
                 lines.append(f"LLM checks: {', '.join(rendered)}")
         refresh = result.get("refresh")
         if isinstance(refresh, dict) and refresh:
-            lines.append("Hippo bundle: refreshed")
+            lines.append("Hippos bundle: refreshed")
         return lines
 
     summary = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
@@ -344,8 +344,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_argument(
         parser,
         '--refresh-from-hippo',
+        dest='refresh_from_hippo',
         action='store_true',
-        help='force-refresh Hippo bundle before analysis',
+        help=argparse.SUPPRESS,
+    )
+    _add_argument(
+        parser,
+        '--refresh-from-hippos',
+        dest='refresh_from_hippo',
+        action='store_true',
+        help='force-refresh Hippos bundle before analysis',
     )
     _add_argument(
         parser,
@@ -446,8 +454,16 @@ def build_code_review_parser() -> argparse.ArgumentParser:
     _add_argument(
         parser,
         '--refresh-from-hippo',
+        dest='refresh_from_hippo',
         action='store_true',
-        help='force-refresh Hippo bundle before code review',
+        help=argparse.SUPPRESS,
+    )
+    _add_argument(
+        parser,
+        '--refresh-from-hippos',
+        dest='refresh_from_hippo',
+        action='store_true',
+        help='force-refresh Hippos bundle before code review',
     )
     _add_argument(
         parser,
@@ -496,15 +512,15 @@ def _preflight_result(path: str, checks: list[tuple[str, str]]) -> dict[str, Any
 
 def _ensure_bundle(args: argparse.Namespace) -> dict[str, Any] | None:
     if args.refresh_from_hippo:
-        emit_progress("archi [1/3] refreshing Hippo bundle")
+        emit_progress("archi [1/3] refreshing Hippos bundle")
         return refresh_bundle_from_hippo(args.path)
-    emit_progress("archi [1/3] validating existing Hippo bundle")
+    emit_progress("archi [1/3] validating existing Hippos bundle")
     status = inspect_bundle(args.path)
     if status.missing_files:
-        emit_progress("archi [1/3] Hippo bundle missing, refreshing via hippo")
+        emit_progress("archi [1/3] Hippos bundle missing, refreshing via hippos")
         return refresh_bundle_from_hippo(args.path)
     if status.stale_reasons:
-        emit_progress("archi [1/3] Hippo bundle stale, refreshing via hippo")
+        emit_progress("archi [1/3] Hippos bundle stale, refreshing via hippos")
         return refresh_bundle_from_hippo(args.path)
     return None
 
@@ -820,7 +836,7 @@ def main() -> int:
                     raise
                 result = _static_full_code_review_result(
                     args,
-                    _availability_reason("Hippo bundle unavailable", exc),
+                    _availability_reason("Hippos bundle unavailable", exc),
                 )
                 _emit_json(result, args.out or None)
                 return 0
@@ -880,7 +896,7 @@ def main() -> int:
                     raise
                 result = _static_full_code_review_result(
                     args,
-                    _availability_reason("Hippo bundle unavailable", exc),
+                    _availability_reason("Hippos bundle unavailable", exc),
                 )
                 _emit(
                     result,

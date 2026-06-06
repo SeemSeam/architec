@@ -287,7 +287,7 @@ def test_orchestrate_emits_minimal_hotspot_artifact(
                 "confidence": 0.88,
                 "dependency_neighbors": [
                     {"target_component": "llm-proxy:gateway"},
-                    {"target_component": "hippocampus:nav"},
+                    {"target_component": "hippos:nav"},
                 ],
                 "files": [
                     "llm-proxy/src/llm_proxy/ops/context/lifecycle.py",

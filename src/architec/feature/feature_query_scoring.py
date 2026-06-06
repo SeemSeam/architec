@@ -8,10 +8,10 @@ WEAK_HINT_TERMS = {
     "llm-proxy:gateway": ["gateway", "provider", "model", "网关", "模型"],
     "llm-proxy:ops/context": ["context", "topic", "nav", "上下文", "话题", "导航"],
     "llm-proxy:project_router": ["session", "isolation", "会话", "隔离"],
-    "hippocampus:nav": ["navigate", "focus", "snippet", "焦点", "片段"],
-    "hippocampus:tools": ["index", "map", "structure", "indexing", "索引", "地图", "结构"],
-    "hippocampus:memory": ["memory", "summary", "store", "记忆", "摘要", "存储"],
-    "hippocampus:mcp": ["mcp", "tool", "tools", "server", "工具", "服务"],
+    "hippos:nav": ["navigate", "focus", "snippet", "焦点", "片段"],
+    "hippos:tools": ["index", "map", "structure", "indexing", "索引", "地图", "结构"],
+    "hippos:memory": ["memory", "summary", "store", "记忆", "摘要", "存储"],
+    "hippos:mcp": ["mcp", "tool", "tools", "server", "工具", "服务"],
 }
 
 STRONG_HINT_TERMS = {
@@ -27,8 +27,8 @@ STRONG_HINT_TERMS = {
         "连续性",
     ],
     "llm-proxy:project_router": ["project_router", "route isolation"],
-    "hippocampus:nav": ["repomap", "navigate.py"],
-    "hippocampus:tools": ["architect tool", "reviewer tool"],
+    "hippos:nav": ["repomap", "navigate.py"],
+    "hippos:tools": ["architect tool", "reviewer tool"],
 }
 
 

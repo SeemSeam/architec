@@ -54,6 +54,11 @@ LANG_BY_EXT = {
     ".toml": "toml",
 }
 _BUNDLE_FINGERPRINT_FILES = (
+    "hippos-index.json",
+    "code-signatures.json",
+    "file-manifest.json",
+)
+_LEGACY_BUNDLE_FINGERPRINT_FILES = (
     "hippocampus-index.json",
     "code-signatures.json",
     "file-manifest.json",
@@ -79,9 +84,13 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _bundle_fingerprint(root: Path) -> str:
     hasher = hashlib.sha256()
     included = 0
-    hippo_dir = root / ".hippocampus"
-    for name in _BUNDLE_FINGERPRINT_FILES:
-        path = hippo_dir / name
+    bundle_dir = root / ".hippos"
+    names = _BUNDLE_FINGERPRINT_FILES
+    if not bundle_dir.exists() and (root / ".hippocampus").exists():
+        bundle_dir = root / ".hippocampus"
+        names = _LEGACY_BUNDLE_FINGERPRINT_FILES
+    for name in names:
+        path = bundle_dir / name
         if not path.exists() or not path.is_file():
             continue
         hasher.update(name.encode("utf-8"))
@@ -257,7 +266,7 @@ def main() -> int:
     rubric_path = Path(args.rubric).resolve()
     rubric = _load_json(rubric_path)
 
-    out_path = Path(args.out).resolve() if args.out else root / ".hippocampus" / "architect-metrics.json"
+    out_path = Path(args.out).resolve() if args.out else root / ".hippos" / "architect-metrics.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     result = collect_metrics(root, rubric)

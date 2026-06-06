@@ -41,21 +41,21 @@ AI 辅助开发会显著加快编码速度，但也容易带来架构漂移：
 Architec 会把这些信号整理成结构化审查结果，帮助人类 reviewer 或 coding agent
 更快判断哪些建议值得进一步检查。
 
-## Architec、Hippo 和 llmgateway
+## Architec、Hippos 和 llmgateway
 
 Architec 本身是架构审查层，依赖两个运行时组件：
 
 | 组件 | 命令 / 包 | 作用 |
 | --- | --- | --- |
 | **Architec** | `archi` / `architec` | 执行架构审查，通过 llmgateway 调用 LLM，并把结果写入 `.architec/`。 |
-| **Hippo** | `hippo` / `hippocampus` | 生成 `.hippocampus/` 结构快照，包括文件清单、代码签名、仓库索引、结构 prompt 和指标。 |
+| **Hippos** | `hippos` / `seemseam-hippos` | 生成 `.hippos/` 结构快照，包括文件清单、代码签名、仓库索引、结构 prompt 和指标。 |
 | **llmgateway** | `llmgateway` | 管理 provider 凭据、base URL、API 风格、模型名，以及 strong/weak 模型路由。 |
 
 ```text
 源码树 + git 变更
         |
         v
-Hippo 结构快照       ->  .hippocampus/
+Hippos 结构快照       ->  .hippos/
         |
         v
 Architec 证据构建    ->  增量范围或全项目上下文
@@ -67,11 +67,11 @@ llmgateway LLM 调用  ->  strong / weak 模型
 Architec 审查输出    ->  .architec/
 ```
 
-日常 `archi` 仍然会使用 LLM，但不会默认刷新完整 Hippo 快照。`archi --full`
-更依赖 Hippo 的全项目结构信息；如果要先刷新结构快照，可以运行：
+日常 `archi` 仍然会使用 LLM，但不会默认刷新完整 Hippos 快照。`archi --full`
+更依赖 Hippos 的全项目结构信息；如果要先刷新结构快照，可以运行：
 
 ```bash
-archi --refresh-from-hippo --full
+archi --refresh-from-hippos --full
 ```
 
 ## 工作原理
@@ -83,7 +83,7 @@ Architec 结合确定性代码信号和 LLM 解释：
    - `archi --full` 审查整个项目。
 
 2. **读取结构上下文**
-   - Hippo 生成 `.hippocampus/` 快照。
+   - Hippos 生成 `.hippos/` 快照。
    - Architec 判断快照是否存在、是否陈旧、是否无法判断 freshness。
 
 3. **构建架构证据**
@@ -102,20 +102,19 @@ Architec 结合确定性代码信号和 LLM 解释：
 
 需要 Python 3.11+。
 
-推荐从 GitHub 安装：
+推荐从 PyPI 安装：
 
 ```bash
-python3 -m pip install --user "architec @ git+https://github.com/SeemSeam/architec.git"
+python3 -m pip install --user architec
 ```
 
 这会安装：
 
 - `archi`：Architec CLI；
-- `llmgateway`：LLM provider 网关；
-- `hippocampus`：提供 Hippo 结构快照能力的包。
+- `seemseam-llmgateway`：提供 LLM provider 网关能力的包；
+- `seemseam-hippos`：提供 Hippos 结构快照能力的包。
 
-`llmgateway` 和 `hippocampus` 会从 SeemSeam GitHub 仓库安装，不需要额外配置
-Python 包索引。
+运行时 import 名仍是 `llmgateway` 和 `hippos`，不需要额外配置 Python 包索引。
 
 本地开发安装：
 
@@ -173,10 +172,10 @@ archi --out review.json
 archi --full --out full-review.json
 ```
 
-刷新 Hippo 快照后再全量审查：
+刷新 Hippos 快照后再全量审查：
 
 ```bash
-archi --refresh-from-hippo --full
+archi --refresh-from-hippos --full
 ```
 
 ## 命令速查
@@ -187,8 +186,8 @@ archi --refresh-from-hippo --full
 | `archi --full` | 对整个项目进行 LLM 架构审查。 |
 | `archi --out review.json` | 保存增量审查 JSON。 |
 | `archi --full --out full-review.json` | 保存全量审查 JSON。 |
-| `archi --refresh-from-hippo --full` | 刷新 Hippo 结构输入后运行全量审查。 |
-| `archi --check .` | 检查 Hippo bundle 状态和 llmgateway 配置。 |
+| `archi --refresh-from-hippos --full` | 刷新 Hippos 结构输入后运行全量审查。 |
+| `archi --check .` | 检查 Hippos bundle 状态和 llmgateway 配置。 |
 
 ## 输出
 
@@ -205,7 +204,7 @@ Architec 写入 `.architec/`：
   cache/
 ```
 
-Hippo 写入 `.hippocampus/`。
+Hippos 写入 `.hippos/`。
 
 建议先读 `.architec/architec-summary.md`，需要精确字段时再看
 `.architec/architec-analysis.json`。

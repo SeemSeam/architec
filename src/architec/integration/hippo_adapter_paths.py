@@ -6,10 +6,14 @@ from architec.support.io_utils import normalize_relpath
 
 
 EXCLUDED_FINDING_PREFIXES = (
+    "hippos/vendor/",
+    "hippos/docs/",
+    "hippos/tmp/",
     "hippocampus/vendor/",
     "llm-proxy/docs/",
     "hippocampus/docs/",
     "hippocampus/tmp/",
+    ".hippos/",
     ".hippocampus/",
 )
 GENERIC_SRC_MARKERS = {"src", "lib", "app", "pkg"}
@@ -98,7 +102,11 @@ def _architec_prefixed_component(path: str, parts: list[str]) -> str:
 
 
 def _hippocampus_component(path: str, parts: list[str]) -> str:
-    if not path.startswith("hippocampus/src/hippocampus/") or len(parts) < 4:
+    if path.startswith("hippos/src/hippos/"):
+        prefix = "hippos"
+    elif path.startswith("hippocampus/src/hippocampus/"):
+        prefix = "hippos"
+    else:
         return ""
     if len(parts) >= 5 and parts[3] in {
         "tools",
@@ -109,15 +117,17 @@ def _hippocampus_component(path: str, parts: list[str]) -> str:
         "llm",
         "parsers",
     }:
-        return f"hippocampus:{parts[3]}"
-    return f"hippocampus:{component_token(parts[3])}"
+        return f"{prefix}:{parts[3]}"
+    return f"{prefix}:{component_token(parts[3])}"
 
 
 def _test_suite_component(path: str, _parts: list[str]) -> str:
     if path.startswith("llm-proxy/tests/"):
         return "llm-proxy:tests"
+    if path.startswith("hippos/tests/"):
+        return "hippos:tests"
     if path.startswith("hippocampus/tests/"):
-        return "hippocampus:tests"
+        return "hippos:tests"
     return ""
 
 

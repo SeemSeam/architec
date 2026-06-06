@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from architec.support.architecture_rules import cleanup_metadata_for_candidate, load_archi_rules
+from architec.support.architecture_rules import (
+    cleanup_metadata_for_candidate,
+    load_archi_rules,
+    load_architecture_rules,
+)
 
 
 def test_load_archi_rules_merges_cleanup_metadata_rules_and_resolves_candidate_metadata(tmp_path) -> None:
@@ -87,3 +91,23 @@ def test_load_archi_rules_reads_architecture_contract_rules(tmp_path) -> None:
     assert api_rule.owner == "api"
     assert api_rule.restricted_imports == ("app.storage", "app.storage.*")
     assert api_rule.note == "Use the service facade."
+
+
+def test_load_hippos_rules_merges_legacy_hippo_section(tmp_path) -> None:
+    (tmp_path / ".architecture-rules.toml").write_text(
+        "\n".join(
+            [
+                "[hippo]",
+                'ignore_paths = ["legacy-generated"]',
+                "",
+                "[hippos]",
+                'ignore_paths = ["current-generated"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rules = load_architecture_rules(tmp_path, tool_name="hippos")
+
+    assert rules.ignore_paths == ("legacy-generated", "current-generated")

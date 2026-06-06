@@ -63,19 +63,45 @@ def test_module_size_and_line_length_helpers() -> None:
 def test_iter_files_skips_generated_state_dirs(tmp_path: Path) -> None:
     included = tmp_path / "src" / "keep.py"
     generated = tmp_path / ".architec" / "generated.json"
+    hippos_bundle = tmp_path / ".hippos" / "architect-metrics.json"
     bundled = tmp_path / ".hippocampus" / "architect-metrics.json"
     included.parent.mkdir(parents=True, exist_ok=True)
     generated.parent.mkdir(parents=True, exist_ok=True)
+    hippos_bundle.parent.mkdir(parents=True, exist_ok=True)
     bundled.parent.mkdir(parents=True, exist_ok=True)
     included.write_text("print('ok')\n", encoding="utf-8")
     generated.write_text("{}\n", encoding="utf-8")
+    hippos_bundle.write_text("{}\n", encoding="utf-8")
     bundled.write_text("{}\n", encoding="utf-8")
 
     files = iter_files(tmp_path, exclude_dirs=set(), exclude_suffixes=set())
 
     assert included in files
     assert generated not in files
+    assert hippos_bundle not in files
     assert bundled not in files
+
+
+def test_collect_metrics_includes_canonical_hippos_bundle_fingerprint(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    hippos = root / ".hippos"
+    hippos.mkdir(parents=True, exist_ok=True)
+    (hippos / "hippos-index.json").write_text('{"files":{"src/app.py":{}}}\n', encoding="utf-8")
+    (hippos / "code-signatures.json").write_text(
+        '{"files":{"src/app.py":{"signatures":[]}}}\n',
+        encoding="utf-8",
+    )
+    (hippos / "file-manifest.json").write_text(
+        json.dumps({"files": {"src/app.py": {"kind": "source"}}}) + "\n",
+        encoding="utf-8",
+    )
+
+    result = collect_metrics(root, {"exclude_dirs": [], "exclude_suffixes": [], "weights": {}})
+
+    assert result["bundle_fingerprint"]
+    assert result["bundle_fingerprint"] == compute_bundle_fingerprint(root)
 
 
 def test_collect_metrics_includes_bundle_fingerprint(tmp_path: Path) -> None:

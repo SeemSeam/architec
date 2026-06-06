@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import os
+import site
 import sys
+import sysconfig
 from pathlib import Path
 
 
 ARCHITECT_LLM_CONFIG_NAME = "config.yaml"
+
+
+def _has_packaged_resources(candidate: Path) -> bool:
+    return (candidate / "config").exists() or (candidate / "prompts").exists()
 
 
 def package_root() -> Path:
@@ -21,13 +27,30 @@ def package_root() -> Path:
         if candidate not in executable_candidates:
             executable_candidates.append(candidate)
     for candidate in executable_candidates:
-        if (candidate / "config").exists() or (candidate / "prompts").exists():
+        if _has_packaged_resources(candidate):
             return candidate
 
     current = Path(__file__).resolve()
     for parent in current.parents:
         if (parent / "pyproject.toml").exists():
             return parent
+
+    install_roots = []
+    for raw in (
+        sysconfig.get_path("data"),
+        sys.prefix,
+        getattr(sys, "base_prefix", ""),
+        site.getuserbase(),
+    ):
+        if not raw:
+            continue
+        candidate = Path(raw).expanduser().resolve() / "architec"
+        if candidate not in install_roots:
+            install_roots.append(candidate)
+    for candidate in install_roots:
+        if _has_packaged_resources(candidate):
+            return candidate
+
     return current.parents[3]
 
 

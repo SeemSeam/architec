@@ -109,7 +109,7 @@ def test_incremental_score_blocks_when_component_blocked() -> None:
             "churn": {"added": 40, "deleted": 20, "total": 60},
         },
         {
-            "component": "hippocampus:nav",
+            "component": "hippos:nav",
             "score": 88.0,
             "recommendation": "approve",
             "findings": {"critical": 0, "warning": 1, "info": 0},

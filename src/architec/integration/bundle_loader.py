@@ -10,15 +10,21 @@ from architec.support.io_utils import normalize_relpath, read_json
 from architec.support.path_policy import path_kind
 
 
+CANONICAL_BUNDLE_DIR_NAME = ".hippos"
+LEGACY_BUNDLE_DIR_NAME = ".hippocampus"
+BUNDLE_DIR_NAMES = (CANONICAL_BUNDLE_DIR_NAME, LEGACY_BUNDLE_DIR_NAME)
+BUNDLE_INDEX_NAMES = {
+    CANONICAL_BUNDLE_DIR_NAME: "hippos-index.json",
+    LEGACY_BUNDLE_DIR_NAME: "hippocampus-index.json",
+}
 REQUIRED_BUNDLE_FILES = (
-    ".hippocampus/architect-metrics.json",
-    ".hippocampus/hippocampus-index.json",
-    ".hippocampus/code-signatures.json",
-    ".hippocampus/structure-prompt.md",
+    f"{CANONICAL_BUNDLE_DIR_NAME}/architect-metrics.json",
+    f"{CANONICAL_BUNDLE_DIR_NAME}/{BUNDLE_INDEX_NAMES[CANONICAL_BUNDLE_DIR_NAME]}",
+    f"{CANONICAL_BUNDLE_DIR_NAME}/code-signatures.json",
+    f"{CANONICAL_BUNDLE_DIR_NAME}/structure-prompt.md",
 )
-_BUNDLE_STATE_FILE = ".hippocampus/bundle-state.json"
-_FINGERPRINT_BUNDLE_FILES = (
-    "hippocampus-index.json",
+_FINGERPRINT_BUNDLE_NAMES = (
+    "index",
     "code-signatures.json",
     "file-manifest.json",
 )
@@ -43,7 +49,7 @@ class BundleStatus:
 
 
 def _manifest_architecture_paths(project_root: Path) -> tuple[bool, set[str]]:
-    manifest_path = project_root / ".hippocampus" / "file-manifest.json"
+    manifest_path = bundle_file(project_root, "file-manifest.json")
     if not manifest_path.is_file():
         return False, set()
     manifest = read_json(manifest_path, default={})
@@ -89,7 +95,7 @@ def _current_architecture_source_mtimes(
     *,
     manifest_source_paths: set[str] | None = None,
 ) -> dict[str, int]:
-    rules = load_architecture_rules(project_root, tool_name="hippo")
+    rules = load_architecture_rules(project_root, tool_name="hippos")
     manifest_source_paths = manifest_source_paths or set()
     out: dict[str, int] = {}
     for path in project_root.rglob("*"):
@@ -137,16 +143,53 @@ def _source_tree_stale_reasons(project_root: Path, *, reference_generated_at: st
     return reasons
 
 
+def bundle_dir(project_root: str | Path) -> Path:
+    root = Path(project_root).resolve()
+    for name in BUNDLE_DIR_NAMES:
+        candidate = root / name
+        if candidate.exists():
+            return candidate
+    return root / CANONICAL_BUNDLE_DIR_NAME
+
+
+def bundle_index_name(bundle_path: str | Path) -> str:
+    name = Path(bundle_path).name
+    return BUNDLE_INDEX_NAMES.get(name, BUNDLE_INDEX_NAMES[CANONICAL_BUNDLE_DIR_NAME])
+
+
+def bundle_relpath(project_root: str | Path, name: str) -> str:
+    path = bundle_file(project_root, name)
+    try:
+        return path.relative_to(Path(project_root).resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def bundle_file(project_root: str | Path, name: str) -> Path:
+    directory = bundle_dir(project_root)
+    filename = bundle_index_name(directory) if name == "index" else name
+    return directory / filename
+
+
+def required_bundle_files(project_root: str | Path) -> tuple[str, ...]:
+    return (
+        bundle_relpath(project_root, "architect-metrics.json"),
+        bundle_relpath(project_root, "index"),
+        bundle_relpath(project_root, "code-signatures.json"),
+        bundle_relpath(project_root, "structure-prompt.md"),
+    )
+
+
 def compute_bundle_fingerprint(project_root: str | Path) -> str:
     root = Path(project_root).resolve()
-    hippo_dir = root / ".hippocampus"
+    bundle_path = bundle_dir(root)
     hasher = hashlib.sha256()
     included = 0
-    for name in _FINGERPRINT_BUNDLE_FILES:
-        path = hippo_dir / name
+    for name in _FINGERPRINT_BUNDLE_NAMES:
+        path = bundle_file(root, name)
         if not path.exists() or not path.is_file():
             continue
-        hasher.update(name.encode("utf-8"))
+        hasher.update(path.name.encode("utf-8"))
         hasher.update(b"\0")
         hasher.update(path.read_bytes())
         hasher.update(b"\0")
@@ -160,7 +203,7 @@ def inspect_bundle(project_root: str | Path) -> BundleStatus:
     root = Path(project_root).resolve()
     present: list[str] = []
     missing: list[str] = []
-    for rel in REQUIRED_BUNDLE_FILES:
+    for rel in required_bundle_files(root):
         path = root / rel
         if path.exists():
             present.append(rel)
@@ -173,12 +216,13 @@ def inspect_bundle(project_root: str | Path) -> BundleStatus:
             missing_files=missing,
             stale_reasons=[],
         )
-    bundle_state_path = root / _BUNDLE_STATE_FILE
+    bundle_state_path = bundle_file(root, "bundle-state.json")
+    bundle_state_relpath = bundle_relpath(root, "bundle-state.json")
     bundle_state_present = bundle_state_path.exists()
     if bundle_state_present:
-        present.append(_BUNDLE_STATE_FILE)
+        present.append(bundle_state_relpath)
 
-    metrics = read_json(root / ".hippocampus" / "architect-metrics.json", default={})
+    metrics = read_json(bundle_file(root, "architect-metrics.json"), default={})
     computed_bundle_fingerprint = compute_bundle_fingerprint(root)
     bundle_fingerprint = computed_bundle_fingerprint
     bundle_state_fingerprint = ""
@@ -195,7 +239,7 @@ def inspect_bundle(project_root: str | Path) -> BundleStatus:
         if not bundle_state_fingerprint:
             stale_reasons.append("bundle-state.json missing bundle_fingerprint")
         elif computed_bundle_fingerprint and bundle_state_fingerprint != computed_bundle_fingerprint:
-            stale_reasons.append("bundle-state.json does not match current Hippo bundle")
+            stale_reasons.append("bundle-state.json does not match current Hippos bundle")
     if isinstance(metrics, dict):
         metrics_fingerprint = str(metrics.get("bundle_fingerprint", "") or "").strip()
         metrics_generated_at = str(metrics.get("generated_at", "") or "").strip()
@@ -205,7 +249,7 @@ def inspect_bundle(project_root: str | Path) -> BundleStatus:
         if bundle_state_present:
             stale_reasons.append("architect-metrics.json does not match bundle-state.json")
         else:
-            stale_reasons.append("architect-metrics.json does not match current Hippo bundle")
+            stale_reasons.append("architect-metrics.json does not match current Hippos bundle")
     source_tree_reference = bundle_state_generated_at or metrics_generated_at
     stale_reasons.extend(
         _source_tree_stale_reasons(
@@ -232,7 +276,7 @@ def require_bundle(project_root: str | Path) -> BundleStatus:
     status = inspect_bundle(project_root)
     if status.missing_files:
         raise FileNotFoundError(
-            f"Architec bundle missing required Hippo artifacts under {status.project_root}: "
+            f"Architec bundle missing required Hippos artifacts under {status.project_root}: "
             + ", ".join(status.missing_files)
         )
     if status.stale_reasons:

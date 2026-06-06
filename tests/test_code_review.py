@@ -1886,7 +1886,7 @@ def test_run_code_review_incremental_llm_reports_missing_snapshot_without_refres
     assert signal["metrics"]["hippo_bundle_present"] is False
     assert signal["metrics"]["hippo_bundle_stale"] is False
     assert signal["metrics"]["missing_file_total"] > 0
-    assert "without a Hippo structure snapshot" in signal["summary"]
+    assert "without a Hippos structure snapshot" in signal["summary"]
 
 
 def test_run_code_review_incremental_llm_snapshot_context_is_selected_file_scoped(

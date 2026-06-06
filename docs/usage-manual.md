@@ -6,11 +6,11 @@
 
 `architec` 是一个只做分析、不做自动修复的架构评审 CLI。
 
-它依赖 Hippo 先产出项目快照，再基于这些输入执行架构分析，并把结果写到项目根目录下的 `.architec/`。
+它依赖 Hippos 先产出项目快照，再基于这些输入执行架构分析，并把结果写到项目根目录下的 `.architec/`。
 
 输入目录：
 
-- `.hippocampus/`
+- `.hippos/`
 
 输出目录：
 
@@ -34,14 +34,14 @@ python3 --version
 
 - `python3`
 - `pip`
-- Hippo 产物，或者可执行的 `hippo` 命令
+- Hippos 产物，或者可执行的 `hippos` 命令
 
-如果你要使用 `--refresh-from-hippo`，则必须满足以下任一条件：
+如果你要使用 `--refresh-from-hippos`，则必须满足以下任一条件：
 
-- `hippo` 已在 `PATH` 中
-- 当前激活的 Python 环境里已经安装 `hippocampus`，可通过 `python -m hippocampus.cli` 调用
+- `hippos` 已在 `PATH` 中
+- 当前激活的 Python 环境里已经安装 `seemseam-hippos`，可通过 `python -m hippos.cli` 调用
 
-不再支持把项目内或同级目录中的 `hippocampus/src` 当作运行时回退来源。真实安装和验收必须基于已发布安装物。
+不再支持把项目内或同级目录中的 `hippos/src` 当作运行时回退来源。真实安装和验收必须基于已发布安装物。
 
 ## 3. 安装
 
@@ -83,7 +83,7 @@ bash install_prod.sh
 
 当前发布安装器会自动安装以下两个开源依赖，并在安装时明确提醒用户来源：
 
-- `hippocampus`
+- `seemseam-hippos`
 - `llmgateway`
 
 优先顺序是：
@@ -152,8 +152,8 @@ archi uninstall
 
 - 删除 `archi` launcher 和安装目录
 - 删除自动同步的 Architec skills
-- 删除本地 `~/.architec`、`~/.hippocampus`、`~/.llmgateway` 配置目录
-- 尝试从当前 Python 环境卸载 `hippocampus` 和 `llmgateway`
+- 删除本地 `~/.architec`、`~/.hippos`、`~/.llmgateway` 配置目录
+- 尝试从当前 Python 环境卸载 `seemseam-hippos` 和 `llmgateway`
 
 如果你是在非交互脚本里调用，再加：
 
@@ -350,36 +350,36 @@ archi --check .
 
 注意：
 
-- 这条命令仍然要求当前项目已经具备 `.hippocampus/` 输入
+- 这条命令仍然要求当前项目已经具备 `.hippos/` 输入
 - 如果你只是想验证 LLM 配置，重新执行网站安装命令即可，安装流程内部已经包含独立的 LLM 预检查
 
-如果还想顺便刷新 Hippo 输入后再检查：
+如果还想顺便刷新 Hippos 输入后再检查：
 
 ```bash
-archi --refresh-from-hippo --check .
+archi --refresh-from-hippos --check .
 ```
 
-## 5. Hippo 输入要求
+## 5. Hippos 输入要求
 
-如果不使用 `--refresh-from-hippo`，项目根目录下必须已经存在以下文件：
+如果不使用 `--refresh-from-hippos`，项目根目录下必须已经存在以下文件：
 
-- `.hippocampus/architect-metrics.json`
-- `.hippocampus/hippocampus-index.json`
-- `.hippocampus/code-signatures.json`
-- `.hippocampus/structure-prompt.md`
+- `.hippos/architect-metrics.json`
+- `.hippos/hippos-index.json`
+- `.hippos/code-signatures.json`
+- `.hippos/structure-prompt.md`
 
 缺少任何一个，`archi` 都会直接报错退出。
 
-标准 Hippo bundle 现在还会额外包含：
+标准 Hippos bundle 现在还会额外包含：
 
-- `.hippocampus/file-manifest.json`
-- `.hippocampus/bundle-state.json`
+- `.hippos/file-manifest.json`
+- `.hippos/bundle-state.json`
 
-其中 `.hippocampus/bundle-state.json` 是 freshness 标准元数据；如果它存在，`archi` 会优先用它判断 `architect-metrics.json` 是否 stale。
+其中 `.hippos/bundle-state.json` 是 freshness 标准元数据；如果它存在，`archi` 会优先用它判断 `architect-metrics.json` 是否 stale。
 当前 `archi .` 还会做两层轻量动态感知：
 
-- 把工作区里的当前源码文件集合与 `.hippocampus/file-manifest.json` 对比；如果检测到源码文件新增或删除导致两边不一致，会自动触发 `refresh-from-hippo`
-- 检查当前源码文件的 `mtime` 是否晚于 bundle 生成时间；如果检测到已有源码文件被更新，也会自动触发 `refresh-from-hippo`
+- 把工作区里的当前源码文件集合与 `.hippos/file-manifest.json` 对比；如果检测到源码文件新增或删除导致两边不一致，会自动触发 `refresh-from-hippos`
+- 检查当前源码文件的 `mtime` 是否晚于 bundle 生成时间；如果检测到已有源码文件被更新，也会自动触发 `refresh-from-hippos`
 
 ## 6. 基本命令
 
@@ -423,7 +423,7 @@ archi code-review --full .
 说明：
 
 - 默认顶层模式就是全量 code-review
-- 会要求 Hippo 输入齐全
+- 会要求 Hippos 输入齐全
 - 会执行后端 LLM 预检查
 - 如果使用 `--out <path>`，写出的 JSON 是 CodeReviewResult，不再是旧 analysis result
 
@@ -589,21 +589,21 @@ archi code-review --diff . --out review.json
 
 Historical note: 旧版本曾读取 `.architec/architec-baseline.json`，并写出 `.architec/architec-gate.json` / `.architec/architec-gate-summary.md`。该 CLI 工作流已下线；`run_gate` root public API 也已退役。
 
-### 6.9 刷新 Hippo 输入后分析
+### 6.9 刷新 Hippos 输入后分析
 
-如果你希望先重新生成 Hippo 输入，再执行分析：
+如果你希望先重新生成 Hippos 输入，再执行分析：
 
 ```bash
-archi --refresh-from-hippo .
+archi --refresh-from-hippos .
 ```
 
 这个流程会按顺序执行：
 
 ```bash
-hippo init --target <root>
-hippo sig-extract --target <root>
-hippo index --target <root> --no-llm
-hippo structure-prompt --target <root> --profile map --no-llm-enhance
+hippos init --target <root>
+hippos sig-extract --target <root>
+hippos index --target <root> --no-llm
+hippos structure-prompt --target <root> --profile map --no-llm-enhance
 python collect_repo_metrics.py --root <root> --rubric <rubric>
 ```
 
@@ -612,13 +612,13 @@ python collect_repo_metrics.py --root <root> --rubric <rubric>
 ### 7.1 刷新输入并校验配置
 
 ```bash
-archi --refresh-from-hippo --check .
+archi --refresh-from-hippos --check .
 ```
 
 ### 7.2 刷新输入并做全量代码审查
 
 ```bash
-archi --refresh-from-hippo .
+archi --refresh-from-hippos .
 ```
 
 ### 7.3 先审查方案，再审查差异
@@ -680,7 +680,7 @@ archi code-review --diff . --out review.json
 | `--plan-review` | saved plan-review JSON；仅用于 diff/since 的路径和结构化 import expectation 一致性观察 |
 | `--component` | 预留参数，当前未参与核心分析流程 |
 | `--format` | 输出格式偏好，当前接受 `json/md/html/all`，但核心流程仍会统一生成主输出文件 |
-| `--refresh-from-hippo` | 先刷新 Hippo 输入，再继续后续流程 |
+| `--refresh-from-hippos` | 先刷新 Hippos 输入，再继续后续流程 |
 | `--open-browser` | 预留参数，当前不会自动打开浏览器 |
 | `--check` | 只做后端 LLM 配置检查，不执行分析 |
 | `--out` | 额外把 JSON 结果写到指定路径 |
@@ -759,7 +759,7 @@ Historical / legacy compatibility artifacts may still exist from older runs, but
 旧 analysis result 仍可能出现在内部分析链路或历史产物中，主要包含这些部分：
 
 - `meta`: 本次分析的模式、时间、路径、diff 范围
-- `bundle`: Hippo 输入是否成功加载
+- `bundle`: Hippos 输入是否成功加载
 - `summary`: LLM 生成的摘要与结论
 - `scores`: 结构分、总体分、全量分、增量分
 - `hotspots`: 风险热点文件或区域
@@ -777,24 +777,24 @@ Historical / legacy compatibility artifacts may still exist from older runs, but
 
 ## 11. 常见问题
 
-### 11.1 报错：bundle missing required Hippo artifacts
+### 11.1 报错：bundle missing required Hippos artifacts
 
 原因：
 
-- `.hippocampus/` 输入不完整
+- `.hippos/` 输入不完整
 
 处理方式：
 
 ```bash
-archi --refresh-from-hippo .
+archi --refresh-from-hippos .
 ```
 
-或者手动补齐这些 Hippo 文件：
+或者手动补齐这些 Hippos 文件：
 
-- `.hippocampus/architect-metrics.json`
-- `.hippocampus/hippocampus-index.json`
-- `.hippocampus/code-signatures.json`
-- `.hippocampus/structure-prompt.md`
+- `.hippos/architect-metrics.json`
+- `.hippos/hippos-index.json`
+- `.hippos/code-signatures.json`
+- `.hippos/structure-prompt.md`
 
 ### 11.2 报错：no backend LLM candidate configured
 
@@ -825,16 +825,16 @@ archi --refresh-from-hippo .
 - 补齐环境变量
 - 或补齐 `~/.llmgateway/config.yaml` 中 provider 的 `api_key` 和 `base_url`
 
-### 11.4 报错：Hippo CLI not found
+### 11.4 报错：Hippos CLI not found
 
 原因：
 
-- 执行了 `--refresh-from-hippo`，但系统找不到 `hippo`
+- 执行了 `--refresh-from-hippos`，但系统找不到 `hippos`
 
 处理方式：
 
-- 重新执行网站安装器，确保已安装发布版 `hippo`
-- 或确认当前 Python 环境里已安装 `hippocampus`
+- 重新执行网站安装器，确保已安装发布版 `hippos`
+- 或确认当前 Python 环境里已安装 `seemseam-hippos`
 
 ## 12. 当前实现边界
 
@@ -853,5 +853,5 @@ archi code-review --full .
 archi code-review --diff .
 archi plan-review plan.md
 archi --diff .
-archi --refresh-from-hippo .
+archi --refresh-from-hippos .
 ```

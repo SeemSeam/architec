@@ -7,6 +7,7 @@ from typing import Any
 
 
 _RELEVANT_PREFIXES = (
+    "hippos/",
     "hippocampus/",
     "llm-proxy/",
 )

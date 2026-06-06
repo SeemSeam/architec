@@ -8,6 +8,7 @@ from collect_repo_metrics_rules import ArchitectureRules, path_is_ignored
 
 DEFAULT_EXCLUDE_DIRS = {
     ".architec",
+    ".hippos",
     ".hippocampus",
     ".git",
     "__pycache__",
