@@ -1,7 +1,7 @@
 {
-  "name": "@seemseam/architec",
+  "name": "@seemseam/archi",
   "version": "0.2.12",
-  "description": "Binary dispatcher for the Architec architecture-review CLI.",
+  "description": "Binary dispatcher for the Archi architecture-review CLI.",
   "keywords": [
     "architecture",
     "architecture-review",
@@ -37,8 +37,9 @@
     "access": "public"
   },
   "scripts": {
-    "test": "node --check bin/archi.js && node --check lib/archi-dispatcher.js && node scripts/smoke-dispatcher.js",
+    "test": "node --check bin/archi.js && node --check lib/archi-dispatcher.js && node scripts/smoke-dispatcher.js && npm --prefix npm/architec-shim test",
     "pack:dry-run": "npm pack --dry-run --json",
+    "pack:shim:dry-run": "npm --prefix npm/architec-shim run pack:dry-run",
     "release-assets:check": "node scripts/check-release-assets.js"
   }
 }

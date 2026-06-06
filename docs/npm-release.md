@@ -1,12 +1,13 @@
 # npm Release Notes
 
-`@seemseam/architec` is a binary dispatcher for the Architec CLI. It is not a
+`@seemseam/archi` is the primary binary dispatcher for the Architec CLI. It is not a
 Node.js rewrite and it must not bundle the Python source trees for `architec`,
 `seemseam_hippos`, or `seemseam_llmgateway`.
 
 ## Package Identity
 
-- npm package: `@seemseam/architec`
+- primary npm package: `@seemseam/archi`
+- compatibility npm package: `@seemseam/architec`
 - CLI command: `archi`
 - npm version: must match the released Architec version on PyPI and the
   GitHub tag, for example `<version>` and `v<version>`
@@ -14,6 +15,15 @@ Node.js rewrite and it must not bundle the Python source trees for `architec`,
 - binary source: GitHub Release standalone `archi` assets
 
 The unscoped npm package `architec` is owned by someone else and is not used.
+The scoped package syntax is `@seemseam/archi`; `seemseam@archi` is not a valid
+npm package name for this project.
+
+`@seemseam/architec` remains available only as a compatibility shim. New users
+should install:
+
+```bash
+npm install -g @seemseam/archi
+```
 
 ## Dispatcher Strategy
 
@@ -71,6 +81,12 @@ Environment name: <blank>
 Allowed actions: npm publish
 ```
 
+Configure the same Trusted Publisher fields for both `@seemseam/archi` and
+`@seemseam/architec`. The workflow input selects which package is published:
+
+- `package=archi` publishes the primary root package.
+- `package=architec-shim` publishes `npm/architec-shim`.
+
 The workflow must exist at `.github/workflows/npm.yml`, use a GitHub-hosted
 runner, use Node 24 with npm 11.5.1 or newer, set `permissions:
 id-token: write`, and publish without `NODE_AUTH_TOKEN`.
@@ -82,4 +98,8 @@ id-token: write`, and publish without `NODE_AUTH_TOKEN`.
 3. Upload binaries and `archi-v<version>-checksums.txt` to the matching GitHub
    Release.
 4. Verify `npm test`, `npm pack --dry-run`, and `release-assets:check`.
-5. Publish `@seemseam/architec@<version>` through npm Trusted Publishing.
+5. Publish `@seemseam/archi@<version>` through npm Trusted Publishing.
+6. Publish `@seemseam/architec@<version>` as a compatibility shim after
+   `@seemseam/archi@<version>` is visible on npm.
+7. Deprecate old `@seemseam/architec` versions with a migration message after
+   the shim is verified.

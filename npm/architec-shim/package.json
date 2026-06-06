@@ -1,0 +1,37 @@
+{
+  "name": "@seemseam/architec",
+  "version": "0.2.12",
+  "description": "Compatibility shim for the renamed @seemseam/archi package.",
+  "homepage": "https://github.com/SeemSeam/architec#readme",
+  "author": "SeemSeam",
+  "bugs": {
+    "url": "https://github.com/SeemSeam/architec/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SeemSeam/architec",
+    "directory": "npm/architec-shim"
+  },
+  "license": "MIT",
+  "bin": {
+    "archi": "bin/archi.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@seemseam/archi": "0.2.12"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --check bin/archi.js",
+    "pack:dry-run": "npm pack --dry-run --json"
+  }
+}

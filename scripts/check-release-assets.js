@@ -19,7 +19,10 @@ const DEFAULT_REQUIRED_TRIPLETS = [
 ];
 
 function requiredTriplets() {
-  const raw = process.env.ARCHITEC_NPM_REQUIRED_TRIPLETS || "";
+  const raw =
+    process.env.ARCHI_NPM_REQUIRED_TRIPLETS ||
+    process.env.ARCHITEC_NPM_REQUIRED_TRIPLETS ||
+    "";
   if (!raw.trim()) {
     return DEFAULT_REQUIRED_TRIPLETS;
   }
@@ -34,7 +37,7 @@ function request(url) {
   return new Promise((resolve, reject) => {
     const headers = {
       Accept: "application/vnd.github+json",
-      "User-Agent": `@seemseam/architec/${VERSION}`,
+      "User-Agent": `@seemseam/archi/${VERSION}`,
     };
     if (process.env.GITHUB_TOKEN) {
       headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;

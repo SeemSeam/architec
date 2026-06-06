@@ -54,8 +54,8 @@ try {
       encoding: "utf8",
       env: {
         ...process.env,
-        ARCHITEC_NPM_CACHE_DIR: path.join(tmp, "cache"),
-        ARCHITEC_NPM_RELEASE_BASE_URL: pathToFileURL(`${releaseDir}${path.sep}`).href,
+        ARCHI_NPM_CACHE_DIR: path.join(tmp, "cache"),
+        ARCHI_NPM_RELEASE_BASE_URL: pathToFileURL(`${releaseDir}${path.sep}`).href,
       },
     },
   );

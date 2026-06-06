@@ -116,6 +116,14 @@ python3 -m pip install --user architec
 
 运行时 import 名仍是 `llmgateway` 和 `hippos`，不需要额外配置 Python 包索引。
 
+可选的 npm binary dispatcher 安装方式：
+
+```bash
+npm install -g @seemseam/archi
+```
+
+历史 npm 包 `@seemseam/architec` 仅作为兼容 shim 保留。
+
 ## 输出语言
 
 Architec 默认输出英文；当系统 locale 是中文时，会自动把 CLI 状态、错误和维护命令输出切换为中文。

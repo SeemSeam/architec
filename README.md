@@ -127,6 +127,15 @@ This installs:
 The runtime imports remain `llmgateway` and `hippos`; no separate package index
 setup is required.
 
+Optional npm binary dispatcher install:
+
+```bash
+npm install -g @seemseam/archi
+```
+
+The historical `@seemseam/architec` npm package is kept only as a compatibility
+shim for existing users.
+
 ## Output Language
 
 Architec prints English by default, and automatically switches CLI status,
