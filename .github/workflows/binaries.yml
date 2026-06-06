@@ -6,7 +6,7 @@ on:
       version:
         description: "Architec version to build from PyPI"
         required: true
-        default: "0.2.14"
+        default: "0.2.15"
       upload_release:
         description: "Upload assets to the matching GitHub Release"
         required: true

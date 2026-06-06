@@ -1,6 +1,6 @@
 {
   "name": "@seemseam/architec",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "description": "Compatibility shim for the renamed @seemseam/archi package.",
   "homepage": "https://github.com/SeemSeam/architec#readme",
   "author": "SeemSeam",
@@ -22,7 +22,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@seemseam/archi": "0.2.14"
+    "@seemseam/archi": "0.2.15"
   },
   "engines": {
     "node": ">=18"
