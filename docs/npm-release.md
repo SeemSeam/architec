@@ -9,7 +9,7 @@ Node.js rewrite and it must not bundle the Python source trees for `architec`,
 - npm package: `@seemseam/architec`
 - CLI command: `archi`
 - npm version: must match the released Architec version on PyPI and the
-  GitHub tag, for example `0.2.11` and `v0.2.11`
+  GitHub tag, for example `<version>` and `v<version>`
 - source package: PyPI `architec`
 - binary source: GitHub Release standalone `archi` assets
 
@@ -35,11 +35,11 @@ The first npm release gate requires these assets for the selected platform
 matrix:
 
 ```text
-archi-v0.2.11-linux-x64
-archi-v0.2.11-darwin-x64
-archi-v0.2.11-darwin-arm64
-archi-v0.2.11-win32-x64.exe
-archi-v0.2.11-checksums.txt
+archi-v<version>-linux-x64
+archi-v<version>-darwin-x64
+archi-v<version>-darwin-arm64
+archi-v<version>-win32-x64.exe
+archi-v<version>-checksums.txt
 ```
 
 `linux-arm64` is supported by the dispatcher if an asset exists, but it is not

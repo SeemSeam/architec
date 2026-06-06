@@ -17,7 +17,7 @@ from .version import current_cli_version
 
 SELF_MANAGE_COMMANDS = {"update", "uninstall"}
 DEFAULT_INSTALL_SCRIPT_URL = "https://www.architec.top/downloads/latest/install_prod.sh"
-DEFAULT_RELEASE_METADATA_URL = "https://api.github.com/repos/bfly123/architec-releases/releases/latest"
+DEFAULT_RELEASE_METADATA_URL = "https://api.github.com/repos/SeemSeam/architec/releases/latest"
 MANAGED_SKILL_NAMES = ("archi-full", "archi-diff", "archi-goal", "archi-advice")
 
 

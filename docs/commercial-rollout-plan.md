@@ -10,8 +10,8 @@
 基于当前工作区，已有一套本地可运行的首版实现：
 
 - `architec-cloud/` 已提供注册、登录、账户页、下载页、设备页、管理页与 CLI 授权 API 原型
-- 下载分发已切换到独立 GitHub Releases 仓库：`bfly123/architec-releases`
-- 已产出并验证 Linux 编译包：`archi-linux-x86_64.tar.gz`
+- 下载分发已切换到主仓库 GitHub Releases：`SeemSeam/architec`
+- 已产出并验证 Linux / macOS / Windows standalone `archi` binaries
 - 已提供公开安装脚本：`https://www.architec.top/downloads/latest/install_prod.sh`
 - 网站当前角色是“控制面”，不承担安装包托管职责
 - 本地验证已通过 `pnpm build` 与 `pnpm test:e2e`
