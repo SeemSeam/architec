@@ -106,10 +106,6 @@ jobs:
               stderr=subprocess.PIPE,
               env=env,
           )
-          if result.returncode != 0:
-              print(result.stdout)
-              print(result.stderr, file=sys.stderr)
-              raise SystemExit(result.returncode)
           required = [
               project / ".hippos" / "architect-metrics.json",
               project / ".hippos" / "hippos-index.json",
@@ -122,6 +118,14 @@ jobs:
               print(result.stderr, file=sys.stderr)
               print("Missing bundled Hippos refresh artifacts: " + ", ".join(missing), file=sys.stderr)
               raise SystemExit(1)
+          output = result.stdout + result.stderr
+          if result.returncode == 0:
+              raise SystemExit(0)
+          if result.returncode == 2 and "LLM preflight failed" in output and "no backend LLM candidate configured" in output:
+              raise SystemExit(0)
+          print(result.stdout)
+          print(result.stderr, file=sys.stderr)
+          raise SystemExit(result.returncode)
 
       - uses: actions/upload-artifact@v4
         with:
