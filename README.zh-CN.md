@@ -122,6 +122,11 @@ python3 -m pip install --user architec
 npm install -g @seemseam/archi
 ```
 
+npm 包只暴露 `archi` 命令。standalone binary 会为 Architec refresh 内部
+打包 Hippos，并把 llmgateway 作为库依赖使用；普通 npm 用户不需要额外的
+`hippos` 或 `llmgateway` 命令。只有需要直接使用 Hippos CLI 时，才需要单独安装
+`seemseam-hippos`。
+
 历史 npm 包 `@seemseam/architec` 仅作为兼容 shim 保留。
 
 ## 输出语言

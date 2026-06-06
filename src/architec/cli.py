@@ -21,6 +21,7 @@ from .code_review.public import (
 from .fix_advice.public import run_fix_advice
 from .integration.bundle_loader import inspect_bundle
 from .integration.hippo_bridge import refresh_bundle_from_hippo
+from .integration.internal_dispatch import dispatch_internal_command
 from .i18n import localize_argparse_error, localize_argparse_parser, tr
 from .plan_review.public import run_plan_review
 from .project_status.public import run_status_snapshot, run_status_trend
@@ -865,6 +866,9 @@ def _with_refresh_result(
 def main() -> int:
     try:
         argv = sys.argv[1:]
+        internal_result = dispatch_internal_command(argv)
+        if internal_result is not None:
+            return internal_result
         self_manage_result = handle_self_manage_command(argv)
         if self_manage_result is not None:
             return self_manage_result

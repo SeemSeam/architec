@@ -64,6 +64,61 @@ jobs:
           result = subprocess.run([str(artifact), "--version"], text=True)
           sys.exit(result.returncode)
 
+      - name: Smoke test bundled Hippos refresh
+        shell: python
+        run: |
+          import os
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          suffix = ".exe" if os.name == "nt" else ""
+          artifact = (Path("build") / "standalone" / f"archi-v${{ inputs.version }}-${{ matrix.triplet }}{suffix}").resolve()
+          project = Path(tempfile.mkdtemp(prefix="archi-bundled-hippos-"))
+          (project / "src").mkdir()
+          (project / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+          empty_path = project / "empty-path"
+          empty_path.mkdir()
+          env = os.environ.copy()
+          env["PATH"] = str(empty_path)
+          env["HOME"] = str(project / "home")
+          env["ARCHITEC_USER_CONFIG_DIR"] = str(project / "home" / ".architec")
+          env["HIPPOS_USER_CONFIG_DIR"] = str(project / "home" / ".hippos")
+          env["HIPPOCAMPUS_USER_CONFIG_DIR"] = str(project / "home" / ".hippocampus")
+          result = subprocess.run(
+              [
+                  str(artifact),
+                  "--refresh-from-hippos",
+                  "--full",
+                  "--format",
+                  "json",
+                  "--out",
+                  str(project / "archi-result.json"),
+                  str(project),
+              ],
+              text=True,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              env=env,
+          )
+          if result.returncode != 0:
+              print(result.stdout)
+              print(result.stderr, file=sys.stderr)
+              raise SystemExit(result.returncode)
+          required = [
+              project / ".hippos" / "architect-metrics.json",
+              project / ".hippos" / "hippos-index.json",
+              project / ".hippos" / "code-signatures.json",
+              project / ".hippos" / "structure-prompt.md",
+          ]
+          missing = [str(path) for path in required if not path.is_file()]
+          if missing:
+              print(result.stdout)
+              print(result.stderr, file=sys.stderr)
+              print("Missing bundled Hippos refresh artifacts: " + ", ".join(missing), file=sys.stderr)
+              raise SystemExit(1)
+
       - uses: actions/upload-artifact@v4
         with:
           name: archi-${{ matrix.triplet }}

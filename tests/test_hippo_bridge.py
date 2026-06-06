@@ -5,6 +5,10 @@ from pathlib import Path
 
 import architec.integration.hippo_bridge as hippo_bridge
 import pytest
+from architec.integration.internal_dispatch import (
+    INTERNAL_COLLECT_METRICS_COMMAND,
+    INTERNAL_HIPPOS_COMMAND,
+)
 from architec.integration.bundle_loader import compute_bundle_fingerprint
 
 
@@ -98,6 +102,25 @@ def test_hippo_base_command_uses_python_module_when_cli_missing(tmp_path, monkey
     monkeypatch.setattr(hippo_bridge.importlib.util, "find_spec", lambda name: _Spec() if name == "hippocampus.cli" else None)
 
     assert hippo_bridge._hippo_base_command(tmp_path) == [hippo_bridge.sys.executable, "-m", "hippocampus.cli"]
+
+
+def test_hippo_base_command_uses_internal_dispatch_when_frozen(tmp_path, monkeypatch):
+    monkeypatch.setattr(hippo_bridge, "is_frozen_binary", lambda: True)
+    monkeypatch.setattr(hippo_bridge.shutil, "which", lambda name: "/usr/bin/hippos")
+
+    assert hippo_bridge._hippo_base_command(tmp_path) == [
+        hippo_bridge.sys.executable,
+        INTERNAL_HIPPOS_COMMAND,
+    ]
+
+
+def test_collect_metrics_command_uses_internal_dispatch_when_frozen(monkeypatch):
+    monkeypatch.setattr(hippo_bridge, "is_frozen_binary", lambda: True)
+
+    assert hippo_bridge._collect_metrics_command() == [
+        hippo_bridge.sys.executable,
+        INTERNAL_COLLECT_METRICS_COMMAND,
+    ]
 
 
 def test_hippo_base_command_prefers_hippos_cli(tmp_path, monkeypatch):

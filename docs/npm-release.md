@@ -35,6 +35,11 @@ The npm package contains a small Node.js dispatcher. On first run it:
 4. verifies the SHA-256 checksum before caching the binary;
 5. executes the cached binary on later runs.
 
+The npm package intentionally exposes only the `archi` bin. The standalone
+binary must bundle Hippos for internal refresh operations; llmgateway is used as
+a library dependency and is not exposed as a separate npm command. Users who
+need to run the Hippos CLI directly should install `seemseam-hippos` from PyPI.
+
 Default release URL:
 
 ```text

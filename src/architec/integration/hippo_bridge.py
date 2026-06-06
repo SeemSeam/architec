@@ -8,10 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from architec.integration.bundle_loader import inspect_bundle, require_bundle
+from architec.integration.internal_dispatch import (
+    frozen_collect_metrics_command,
+    frozen_hippos_command,
+    is_frozen_binary,
+)
 from architec.integration.resource_paths import resolve_config_file, tool_script_path
 
 
 def _hippo_base_command(project_root: Path) -> list[str]:
+    if is_frozen_binary():
+        return frozen_hippos_command()
     hippos_cmd = shutil.which("hippos")
     if hippos_cmd:
         return [hippos_cmd]
@@ -26,6 +33,12 @@ def _hippo_base_command(project_root: Path) -> list[str]:
         "Hippos CLI not found. Reinstall from the published Architec installer, "
         "or ensure `hippos` / installed `seemseam-hippos` is available in the active Python environment."
     )
+
+
+def _collect_metrics_command() -> list[str]:
+    if is_frozen_binary():
+        return frozen_collect_metrics_command()
+    return [sys.executable, str(tool_script_path("collect_repo_metrics.py"))]
 
 
 def _run(cmd: list[str], *, cwd: Path) -> dict[str, Any]:
@@ -62,8 +75,7 @@ def refresh_bundle_from_hippo(project_root: str | Path) -> dict[str, Any]:
             str(root),
         ],
         [
-            sys.executable,
-            str(tool_script_path("collect_repo_metrics.py")),
+            *_collect_metrics_command(),
             "--root",
             str(root),
             "--rubric",
