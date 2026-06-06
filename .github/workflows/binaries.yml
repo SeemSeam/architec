@@ -94,8 +94,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "v${{ inputs.version }}" >/dev/null
-          gh release upload "v${{ inputs.version }}" \
+          gh release view "v${{ inputs.version }}" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "v${{ inputs.version }}" --repo "$GITHUB_REPOSITORY" \
             release-assets/*/archi-v${{ inputs.version }}-* \
             "archi-v${{ inputs.version }}-checksums.txt" \
             --clobber
