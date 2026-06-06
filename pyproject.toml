@@ -1,19 +1,46 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "architec"
 version = "0.2.10"
 description = "Architecture analysis CLI powered by Hippo bundles and backend LLMs."
+readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "SeemSeam"}]
+maintainers = [{name = "SeemSeam"}]
+keywords = [
+    "architecture",
+    "architecture-review",
+    "cli",
+    "code-analysis",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     "certifi>=2024.0.0",
     "PyYAML>=6.0",
-    "llmgateway @ git+https://github.com/SeemSeam/llmgateway.git",
-    "hippocampus @ git+https://github.com/SeemSeam/hippocampus.git",
+    "llmgateway>=0.1.1",
+    "hippocampus>=0.1.7",
     "cryptography>=43",
 ]
+
+[project.urls]
+Homepage = "https://github.com/SeemSeam/architec"
+Repository = "https://github.com/SeemSeam/architec"
+Issues = "https://github.com/SeemSeam/architec/issues"
 
 [project.scripts]
 archi = "architec.cli:main"
@@ -23,6 +50,11 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+"architec/config" = ["config/*.yaml", "config/*.json"]
+"architec/prompts" = ["prompts/*.md"]
+"architec/tools" = ["tools/*.py", "tools/*.sh"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
