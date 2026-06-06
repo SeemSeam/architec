@@ -149,6 +149,9 @@ The npm package exposes only the `archi` command. Its standalone binary bundles
 Hippos for Architec refreshes and uses llmgateway as a library dependency, so
 normal npm users do not need separate `hippos` or `llmgateway` commands. Install
 `seemseam-hippos` separately only if you want to run the Hippos CLI directly.
+During npm install and on first `archi` startup, the dispatcher creates
+`~/.llmgateway/config.yaml` when it is missing and never overwrites an existing
+provider config.
 
 The historical `@seemseam/architec` npm package is kept only as a compatibility
 shim for existing users.

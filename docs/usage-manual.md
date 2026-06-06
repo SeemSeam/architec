@@ -67,7 +67,7 @@ bash install_prod.sh
 当前发布安装器会先做一次本机环境检查，并下载 GitHub Release 中匹配当前平台的 standalone binary 和 checksum：
 
 - `curl`
-- `python3`
+- `sha256sum` / `shasum` / `openssl` 之一，用于校验 checksum
 
 发布安装完成后，安装器会继续处理用户级配置：
 
@@ -76,6 +76,16 @@ bash install_prod.sh
 - 初始化 `~/.architec/scoring-policy.json`
 - 如果 `~/.llmgateway/config.yaml` 不存在，则创建一个可编辑的 starter template，后续补齐配置即可
 - 如果 `~/.llmgateway/config.yaml` 已存在，安装器永远不会覆盖已有 provider 凭据
+
+如果通过 npm 安装：
+
+```bash
+npm install -g @seemseam/archi
+```
+
+npm package 只安装 `archi` dispatcher，不暴露 `hippos` 或 `llmgateway` 命令。
+dispatcher 会在 npm install/postinstall 期间以及首次 `archi` 启动时检查
+`~/.llmgateway/config.yaml`：缺失才创建 starter template，已有文件保持不变。
 
 关于安装包体积，需要提前说明一点：
 

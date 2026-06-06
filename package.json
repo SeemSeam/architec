@@ -27,6 +27,7 @@
     "bin/",
     "lib/",
     "scripts/check-release-assets.js",
+    "scripts/postinstall.js",
     "docs/npm-release.md",
     "LICENSE"
   ],
@@ -37,6 +38,7 @@
     "access": "public"
   },
   "scripts": {
+    "postinstall": "node scripts/postinstall.js",
     "test": "node --check bin/archi.js && node --check lib/archi-dispatcher.js && node scripts/smoke-dispatcher.js && npm --prefix npm/architec-shim test",
     "pack:dry-run": "npm pack --dry-run --json",
     "pack:shim:dry-run": "npm --prefix npm/architec-shim run pack:dry-run",

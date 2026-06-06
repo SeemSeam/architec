@@ -27,7 +27,10 @@ npm install -g @seemseam/archi
 
 ## Dispatcher Strategy
 
-The npm package contains a small Node.js dispatcher. On first run it:
+The npm package contains a small Node.js dispatcher. During `npm install`
+postinstall and again on first run, it creates `~/.llmgateway/config.yaml` only
+when the file is missing and never overwrites an existing provider config. On
+first run it:
 
 1. maps the current OS/CPU to a release asset name;
 2. downloads `archi-v<version>-checksums.txt` from the matching GitHub Release;
