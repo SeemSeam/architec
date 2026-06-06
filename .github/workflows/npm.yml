@@ -14,7 +14,7 @@ on:
       confirm_version:
         description: "npm package version to publish"
         required: true
-        default: "0.2.13"
+        default: "0.2.14"
 
 permissions:
   contents: read

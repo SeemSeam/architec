@@ -1,6 +1,6 @@
 {
   "name": "@seemseam/archi",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "Binary dispatcher for the Archi architecture-review CLI.",
   "keywords": [
     "architecture",
