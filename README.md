@@ -153,9 +153,6 @@ During npm install and on first `archi` startup, the dispatcher creates
 `~/.llmgateway/config.yaml` when it is missing and never overwrites an existing
 provider config.
 
-The historical `@seemseam/architec` npm package is kept only as a compatibility
-shim for existing users.
-
 ## Output Language
 
 Architec prints English by default, and automatically switches CLI status,

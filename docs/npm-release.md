@@ -7,7 +7,6 @@ Node.js rewrite and it must not bundle the Python source trees for `architec`,
 ## Package Identity
 
 - primary npm package: `@seemseam/archi`
-- compatibility npm package: `@seemseam/architec`
 - CLI command: `archi`
 - npm version: must match the released Architec version on PyPI and the
   GitHub tag, for example `<version>` and `v<version>`
@@ -17,9 +16,6 @@ Node.js rewrite and it must not bundle the Python source trees for `architec`,
 The unscoped npm package `architec` is owned by someone else and is not used.
 The scoped package syntax is `@seemseam/archi`; `seemseam@archi` is not a valid
 npm package name for this project.
-
-`@seemseam/architec` remains available only as a compatibility shim. New users
-should install:
 
 ```bash
 npm install -g @seemseam/archi
@@ -78,7 +74,7 @@ GitHub Release binary assets and checksum file exist.
 
 ## Trusted Publishing
 
-Configure npm Trusted Publishing for the existing package:
+Configure npm Trusted Publishing for `@seemseam/archi`:
 
 ```text
 Provider: GitHub Actions
@@ -88,12 +84,6 @@ Workflow filename: npm.yml
 Environment name: <blank>
 Allowed actions: npm publish
 ```
-
-Configure the same Trusted Publisher fields for both `@seemseam/archi` and
-`@seemseam/architec`. The workflow input selects which package is published:
-
-- `package=archi` publishes the primary root package.
-- `package=architec-shim` publishes `npm/architec-shim`.
 
 The workflow must exist at `.github/workflows/npm.yml`, use a GitHub-hosted
 runner, use Node 24 with npm 11.5.1 or newer, set `permissions:
@@ -107,7 +97,3 @@ id-token: write`, and publish without `NODE_AUTH_TOKEN`.
    Release.
 4. Verify `npm test`, `npm pack --dry-run`, and `release-assets:check`.
 5. Publish `@seemseam/archi@<version>` through npm Trusted Publishing.
-6. Publish `@seemseam/architec@<version>` as a compatibility shim after
-   `@seemseam/archi@<version>` is visible on npm.
-7. Deprecate old `@seemseam/architec` versions with a migration message after
-   the shim is verified.

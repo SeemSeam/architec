@@ -141,8 +141,6 @@ npm install 期间以及首次启动 `archi` 时，dispatcher 会在
 `~/.llmgateway/config.yaml` 缺失时创建 starter config，绝不会覆盖已有
 provider 配置。
 
-历史 npm 包 `@seemseam/architec` 仅作为兼容 shim 保留。
-
 ## 输出语言
 
 Architec 默认输出英文；当系统 locale 是中文时，会自动把 CLI 状态、错误和维护命令输出切换为中文。

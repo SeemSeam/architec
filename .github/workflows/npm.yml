@@ -3,14 +3,6 @@ name: Publish npm
 on:
   workflow_dispatch:
     inputs:
-      package:
-        description: "npm package target to publish"
-        required: true
-        default: "archi"
-        type: choice
-        options:
-          - archi
-          - architec-shim
       confirm_version:
         description: "npm package version to publish"
         required: true
@@ -22,30 +14,10 @@ permissions:
 
 jobs:
   publish:
-    name: Publish selected npm package
+    name: Publish @seemseam/archi
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Select package
-        id: package
-        run: |
-          case "${{ inputs.package }}" in
-            archi)
-              echo "dir=." >> "$GITHUB_OUTPUT"
-              echo "name=@seemseam/archi" >> "$GITHUB_OUTPUT"
-              echo "check_release_assets=true" >> "$GITHUB_OUTPUT"
-              ;;
-            architec-shim)
-              echo "dir=npm/architec-shim" >> "$GITHUB_OUTPUT"
-              echo "name=@seemseam/architec" >> "$GITHUB_OUTPUT"
-              echo "check_release_assets=false" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "Unknown package target: ${{ inputs.package }}" >&2
-              exit 2
-              ;;
-          esac
 
       - uses: actions/setup-node@v6
         with:
@@ -59,20 +31,14 @@ jobs:
           npm --version
 
       - name: Validate requested version
-        working-directory: ${{ steps.package.outputs.dir }}
         run: |
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
           PACKAGE_NAME="$(node -p "require('./package.json').name")"
-          test "${PACKAGE_NAME}" = "${{ steps.package.outputs.name }}"
+          test "${PACKAGE_NAME}" = "@seemseam/archi"
           test "${PACKAGE_VERSION}" = "${{ inputs.confirm_version }}"
           git ls-remote --exit-code --tags origin "refs/tags/v${PACKAGE_VERSION}"
 
-      - name: Verify primary npm package exists for shim
-        if: inputs.package == 'architec-shim'
-        run: npm view "@seemseam/archi@${{ inputs.confirm_version }}" version --registry https://registry.npmjs.org/
-
       - name: Install npm dependencies
-        working-directory: ${{ steps.package.outputs.dir }}
         run: |
           if [ -f package-lock.json ]; then
             npm ci --ignore-scripts
@@ -81,21 +47,17 @@ jobs:
           fi
 
       - name: Test package
-        working-directory: ${{ steps.package.outputs.dir }}
         run: npm test
 
       - name: Verify GitHub Release binary assets
-        if: steps.package.outputs.check_release_assets == 'true'
         run: npm run release-assets:check
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Inspect npm package contents
-        working-directory: ${{ steps.package.outputs.dir }}
         run: npm pack --dry-run --json
 
       - name: Publish to npm with trusted publishing
-        working-directory: ${{ steps.package.outputs.dir }}
         run: |
           npm config delete //registry.npmjs.org/:_authToken --userconfig "$NPM_CONFIG_USERCONFIG" || true
           unset NODE_AUTH_TOKEN
