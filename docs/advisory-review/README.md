@@ -74,6 +74,7 @@
 - incremental-first LLM cost control 将公开心智收敛为 `archi` 增量 LLM 审查和 `archi --full` 全量 LLM 审查；成本控制来自 selected-scope context 和有界 LLM 调用，而不是让用户选择一堆参数。见 [068-incremental-first-cost-control.md](decisions/068-incremental-first-cost-control.md)。
 - incremental snapshot freshness context 会在默认 `archi` 增量审查中报告 Hippo bundle 是否存在、selected files 是否晚于 snapshot，但不触发 full refresh。见 [069-incremental-snapshot-freshness-context.md](decisions/069-incremental-snapshot-freshness-context.md)。
 - command surface documentation cleanup 将 README、commands 和 skills 主入口收敛到 `archi` / `archi --full`，历史 alias 只作为兼容说明。见 [070-command-surface-documentation-cleanup.md](decisions/070-command-surface-documentation-cleanup.md)。
+- llmgateway config preflight hard fail 会把缺 provider/key/base URL/tier 的配置预检错误作为 exit 2 输入错误，不再进入 static degradation；`--allow-static` 仅覆盖预检通过后的运行时 LLM 不可用。见 [071-llmgateway-config-preflight-hard-fail.md](decisions/071-llmgateway-config-preflight-hard-fail.md)。
 
 ## 目录
 

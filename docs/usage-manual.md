@@ -279,7 +279,7 @@ archi uninstall --yes --purge-config
 archi --check .
 ```
 
-普通分析命令默认要求后端 LLM 可用；如果 provider 凭据、`api_key` 或 `base_url` 缺失，命令会失败。只有在明确接受非 LLM 降级结果时，才使用 `--allow-static`：
+普通分析命令默认要求后端 LLM 配置预检通过；如果 provider 凭据、`api_key`、`base_url` 或模型 tier 缺失，命令会失败。`--allow-static` 不会覆盖配置预检失败；只有预检通过后发生运行时 LLM 不可用时，才使用它明确接受非 LLM 降级结果：
 
 ```bash
 archi --allow-static .

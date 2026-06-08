@@ -2,6 +2,10 @@
 
 Date: 2026-05-15
 
+Superseded in part by Decision 071: backend LLM configuration preflight
+failures are input errors and do not enter static degradation. The runtime LLM
+degradation path described here still applies.
+
 ## Context
 
 Post-Decision 065 dogfood against this repository showed that

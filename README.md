@@ -189,9 +189,10 @@ the installed llmgateway schema; current llmgateway supports an ordered
 `providers` chain.
 
 Use `archi --check .` to validate provider credentials before analysis. Regular
-analysis commands now fail when the required backend LLM is unavailable. Pass
-`--allow-static` only when you intentionally want Architec to return static
-code-review signals instead of LLM-backed results.
+analysis commands fail when backend LLM configuration preflight cannot find the
+required provider, key, base URL, or model tier. Pass `--allow-static` only when
+preflight already succeeds and you intentionally want Architec to return static
+code-review signals for a later runtime LLM failure.
 
 Minimal example:
 

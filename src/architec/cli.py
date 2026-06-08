@@ -408,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help=tr(
             "cli.help.allow_static",
-            "allow static fallback when backend LLM is unavailable",
+            "allow static fallback after backend LLM preflight succeeds",
         ),
     )
     _add_argument(
@@ -521,7 +521,7 @@ def build_code_review_parser() -> argparse.ArgumentParser:
         parser,
         '--allow-static',
         action='store_true',
-        help='allow static fallback when backend LLM is unavailable',
+        help='allow static fallback after backend LLM preflight succeeds',
     )
     _add_argument(parser, 'path', nargs='?', default='.', help='project root')
     return parser
@@ -938,22 +938,7 @@ def main() -> int:
             emit_progress(
                 tr("cli.progress.check_llm", "archi [2/3] checking backend LLM configuration")
             )
-            try:
-                preflight_backend_llm(args.path, checks=checks)
-            except ArchitectLLMUnavailableError as exc:
-                if bool(getattr(args, "check", False)) or not _allow_static_fallback(args):
-                    raise
-                result = _static_code_review_result(
-                    args,
-                    _availability_reason(tr("cli.llm_unavailable", "Backend LLM unavailable"), exc),
-                )
-                result = _with_refresh_result(
-                    result,
-                    refresh_result=refresh_result,
-                    check_mode=False,
-                )
-                _emit_json(result, args.out or None)
-                return 0
+            preflight_backend_llm(args.path, checks=checks)
             try:
                 result = _code_review_result(args)
             except ArchitectLLMUnavailableError as exc:
@@ -1009,27 +994,7 @@ def main() -> int:
         emit_progress(
             tr("cli.progress.check_llm", "archi [2/3] checking backend LLM configuration")
         )
-        try:
-            preflight_backend_llm(args.path, checks=checks)
-        except ArchitectLLMUnavailableError as exc:
-            if bool(getattr(args, "check", False)) or not _allow_static_fallback(args):
-                raise
-            result = _static_code_review_result(
-                args,
-                _availability_reason(tr("cli.llm_unavailable", "Backend LLM unavailable"), exc),
-            )
-            result = _with_refresh_result(
-                result,
-                refresh_result=refresh_result,
-                check_mode=False,
-            )
-            _emit(
-                result,
-                args.out or None,
-                output_format=str(args.format or "all"),
-                check_mode=False,
-            )
-            return 0
+        preflight_backend_llm(args.path, checks=checks)
         try:
             result = _run_command(args, checks)
         except ArchitectLLMUnavailableError as exc:

@@ -174,9 +174,10 @@ Architec 的 LLM 调用全部通过 **llmgateway**。请在下面的文件中配
 provider 示例。备用 API 源是否生效取决于已安装的 llmgateway schema；当前
 llmgateway 支持 `providers` 有序链。
 
-请用 `archi --check .` 在分析前验证 provider 凭据。常规分析命令现在会在
-必需的后端 LLM 不可用时失败；只有明确传入 `--allow-static` 时，Architec 才会
-返回静态 code-review 信号作为降级结果。
+请用 `archi --check .` 在分析前验证 provider 凭据。常规分析命令会在后端 LLM
+配置预检找不到必需 provider、key、base URL 或模型 tier 时失败；只有预检已经通过
+且后续运行时 LLM 失败时，明确传入 `--allow-static` 才会让 Architec 返回静态
+code-review 信号作为降级结果。
 
 最小示例：
 

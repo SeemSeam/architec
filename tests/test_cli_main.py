@@ -1279,7 +1279,7 @@ def test_main_code_review_full_passes_advice_feedback_path(monkeypatch, tmp_path
     assert calls[2] == ("review", str(tmp_path), str(feedback), True)
 
 
-def test_main_code_review_full_llm_unavailable_uses_static_review(
+def test_main_code_review_full_runtime_llm_unavailable_uses_static_review(
     monkeypatch,
     tmp_path,
     capsys,
@@ -1295,9 +1295,13 @@ def test_main_code_review_full_llm_unavailable_uses_static_review(
     monkeypatch.setattr(
         cli,
         "preflight_backend_llm",
-        lambda path, *, checks: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+        lambda path, *, checks: calls.append(("llm", path, tuple(checks))),
     )
-    monkeypatch.setattr(cli, "run_code_review_full", lambda *args, **kwargs: pytest.fail("full should not run"))
+    monkeypatch.setattr(
+        cli,
+        "run_code_review_full",
+        lambda *args, **kwargs: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+    )
     monkeypatch.setattr(
         cli,
         "run_code_review_static_full",
@@ -1311,16 +1315,17 @@ def test_main_code_review_full_llm_unavailable_uses_static_review(
     payload = json.loads(capsys.readouterr().out)
     assert payload["summary"]["analysis_mode"] == "static"
     assert calls[0] == ("bundle", str(tmp_path))
-    assert calls[1][0] == "static"
-    assert "provider 403" in calls[1][2]
+    assert calls[1][0] == "llm"
+    assert calls[2][0] == "static"
+    assert "provider 403" in calls[2][2]
 
 
-def test_main_code_review_full_llm_unavailable_fails_without_static_opt_in(
+def test_main_code_review_full_preflight_unavailable_is_input_error(
     monkeypatch,
     tmp_path,
     capsys,
 ):
-    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", str(tmp_path)])
+    monkeypatch.setattr(sys, "argv", ["archi", "code-review", "--full", "--allow-static", str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: None)
     monkeypatch.setattr(
         cli,
@@ -1372,7 +1377,7 @@ def test_main_code_review_full_bundle_error_uses_static_review(
     assert "fail" not in calls[0][2].lower()
 
 
-def test_main_code_review_diff_llm_unavailable_uses_static_review(
+def test_main_code_review_diff_runtime_llm_unavailable_uses_static_review(
     monkeypatch,
     tmp_path,
     capsys,
@@ -1388,7 +1393,12 @@ def test_main_code_review_diff_llm_unavailable_uses_static_review(
     monkeypatch.setattr(
         cli,
         "preflight_backend_llm",
-        lambda path, *, checks: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+        lambda path, *, checks: calls.append(("llm", path, tuple(checks))),
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_code_review_diff",
+        lambda *args, **kwargs: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
     )
     monkeypatch.setattr(cli, "run_code_review_static_full", lambda *args, **kwargs: pytest.fail("static should not run"))
     monkeypatch.setattr(
@@ -1404,16 +1414,42 @@ def test_main_code_review_diff_llm_unavailable_uses_static_review(
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert payload["summary"]["analysis_mode"] == "static"
-    assert calls[0][0] == "static-diff"
-    assert "provider 403" in calls[0][4]
+    assert calls[0][0] == "llm"
+    assert calls[1][0] == "static-diff"
+    assert "provider 403" in calls[1][4]
 
 
-def test_main_top_level_llm_unavailable_fails_without_static_opt_in(
+def test_main_top_level_runtime_llm_unavailable_fails_without_static_opt_in(
     monkeypatch,
     tmp_path,
     capsys,
 ):
     monkeypatch.setattr(sys, "argv", ["archi", str(tmp_path)])
+    monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not refresh"))
+    monkeypatch.setattr(
+        cli,
+        "preflight_backend_llm",
+        lambda path, *, checks: None,
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_code_review_incremental_llm",
+        lambda *args, **kwargs: (_ for _ in ()).throw(cli.ArchitectLLMUnavailableError("provider 403")),
+    )
+    monkeypatch.setattr(cli, "run_code_review_static_diff", lambda *args, **kwargs: pytest.fail("static should not run"))
+
+    assert cli.main() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "provider 403" in captured.err
+
+
+def test_main_top_level_preflight_unavailable_is_input_error_even_with_static_opt_in(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    monkeypatch.setattr(sys, "argv", ["archi", "--allow-static", str(tmp_path)])
     monkeypatch.setattr(cli, "_ensure_bundle", lambda args: pytest.fail("bundle should not refresh"))
     monkeypatch.setattr(
         cli,

@@ -2,6 +2,10 @@
 
 Date: 2026-05-15
 
+Superseded in part by Decision 071: backend LLM configuration preflight
+failures are input errors and do not enter static degradation. The runtime LLM
+and Hippo bundle degradation paths described here still apply.
+
 ## Context
 
 Multi-repo dogfood showed that `code-review --full` can stop before returning a
