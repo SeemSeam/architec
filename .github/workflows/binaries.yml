@@ -44,6 +44,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller
           python -m pip install "architec==${{ inputs.version }}"
+          python -m pip install --force-reinstall "cryptography>=44.0.3,<45"
 
       - name: Smoke test GitHub installer script
         if: matrix.triplet == 'linux-x64'
